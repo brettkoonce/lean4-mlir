@@ -1,0 +1,26 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227985.085143 3633463 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227985.889171 3633463 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+W1028 22:53:14.275594 3633652 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:53:14.601613 3633652 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:53:15.612062 3633645 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:53:15.772016 3633648 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:53:17.033442 3633647 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+=== convnext_tiny_imagenet_full.state.npz ===
+eval dtype: f32 forward (EVAL_DTYPE=f32); the module's DT=bfloat16 CONV_DT=bfloat16
+backend=gpu devices=4
+gen=.lake/build/generated_convnext_tiny_imagenet_full.py
+state=/home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full.state.npz
+eval protocol: 224px, crop_pct=0.875000 (timm resize-then-crop, antialiased)
+state tuple (from the module): (params, opt_state, ema_params)
+  params=182 bn=0 opt=365 leaves -> 729 total (file has 729) ✓
+loaded step=93600
+scoring the live weights + no BN (BN-free net)
+
+── scoring at 224px, crop_pct 0.875 — train (the module's own)
+   per-image top-1 bitmap -> /home/skoonce/lean/proof_verify_demo/verify-v2/runs/2026-10-21-cnx-full-jax-bf16-300ep/bitmaps/jax_e300_live.bin (50000 bytes, 40961 set) — pair with scripts/demos/mcnemar.py
+   top-1: 40961/50000 = 81.92%   top-5: 47871/50000 = 95.74%
+
+=== FULL VAL (f32 forward (EVAL_DTYPE=f32)) ===
+224px crop 0.875  top-1  81.92%  top-5  95.74%  (50000 images)  train (the module's own)

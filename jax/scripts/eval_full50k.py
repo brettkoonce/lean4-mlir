@@ -116,7 +116,9 @@ names = [s.strip() for s in mo.group(1).split(",")]
 print(f"state tuple (from the module): ({', '.join(names)})")
 
 _p  = m.init_params(jax.random.PRNGKey(0))
-_bn = m.init_bn_state()
+# A BN-free net (ConvNeXt, ViT) has no `init_bn_state` and no BN slot in its state tuple; an empty
+# tree stands in, so B = 0 and the per-image path calls `forward(params, x)`.
+_bn = m.init_bn_state() if hasattr(m, "init_bn_state") else ()
 P, B = len(jax.tree.leaves(_p)), len(jax.tree.leaves(_bn))
 N = len([k for k in np.load(STATE).files if k.startswith("l")])
 
@@ -162,9 +164,10 @@ use_ema = "ema_params" in got and REGION != "live"
 if REGION == "ema" and "ema_params" not in got:
     sys.exit(f"REGION=ema but this checkpoint has no EMA slot: {names}")
 params = got["ema_params"] if use_ema else got["params"]
-bn     = got.get("ema_bn", got["bn_state"]) if use_ema else got["bn_state"]
+bn     = got.get("ema_bn", got.get("bn_state", ())) if use_ema else got.get("bn_state", ())
 print(f"scoring the {'EMA shadow' if use_ema else 'live weights'} + "
-      f"{'EMA-lagged' if use_ema and 'ema_bn' in got else 'running'} BN buffers")
+      + ("no BN (BN-free net)" if not B else
+         f"{'EMA-lagged' if use_ema and 'ema_bn' in got else 'running'} BN buffers"))
 
 params = jax.device_put(params, m.replicated_sharding)
 bn     = jax.device_put(bn, m.replicated_sharding)

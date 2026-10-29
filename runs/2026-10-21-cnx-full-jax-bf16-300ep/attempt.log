@@ -1,0 +1,2459 @@
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792590777.662773  336913 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792590778.478076  336913 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ConvNeXt-T (ImageNet, bf16) · Lean 4 → JAX
+  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt9(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=300  params=28589128
+steps_per_epoch=312  total_steps=93600
+grad-accum=16x  micro_batch=256 (4 devices x 64)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+  step 100/93600  loss=6.8643  lr=6e-05  (2962.0ms/step avg)
+  step 200/93600  loss=6.8417  lr=0.00013  (2865.0ms/step avg)
+  step 300/93600  loss=6.8668  lr=0.00019  (2832.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+W1021 14:07:51.691815  337096 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1021 14:07:53.375436  337106 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1021 14:07:53.538041  337100 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1021 14:07:54.684260  337103 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1021 14:08:32.117468  337117 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[Epoch 1] lr=0.0002 loss(train_avg)=6.8926 val_top1=52/50000 (0.001) val_top5=0.0047 val_loss=7.0459  [882.5s train, 44.2s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e1.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e1.state.npz (729 arrays, step=312)
+  step 400/93600  loss=6.8475  lr=0.00026  (2926.0ms/step avg)
+  step 500/93600  loss=6.8739  lr=0.00032  (2894.0ms/step avg)
+  step 600/93600  loss=6.795  lr=0.00038  (2872.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 2] lr=0.0004 loss(train_avg)=6.7989 val_top1=56/50000 (0.0011) val_top5=0.005 val_loss=7.0228  [861.8s train, 27.2s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e2.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e2.state.npz (729 arrays, step=624)
+  step 700/93600  loss=6.5985  lr=0.00045  (2895.0ms/step avg)
+  step 800/93600  loss=6.5817  lr=0.00051  (2879.0ms/step avg)
+  step 900/93600  loss=6.697  lr=0.00058  (2866.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 3] lr=0.0006 loss(train_avg)=6.6462 val_top1=65/50000 (0.0013) val_top5=0.0053 val_loss=6.9937  [861.8s train, 27.2s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e3.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e3.state.npz (729 arrays, step=936)
+  step 1000/93600  loss=6.5892  lr=0.00064  (2884.0ms/step avg)
+  step 1100/93600  loss=6.6476  lr=0.00071  (2873.0ms/step avg)
+  step 1200/93600  loss=6.467  lr=0.00077  (2864.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 4] lr=0.0008 loss(train_avg)=6.5141 val_top1=69/50000 (0.0014) val_top5=0.0065 val_loss=6.959  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e4.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e4.state.npz (729 arrays, step=1248)
+  step 1300/93600  loss=6.5205  lr=0.00083  (2877.0ms/step avg)
+  step 1400/93600  loss=6.5776  lr=0.0009  (2869.0ms/step avg)
+  step 1500/93600  loss=6.182  lr=0.00096  (2862.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 5] lr=0.001 loss(train_avg)=6.3388 val_top1=85/50000 (0.0017) val_top5=0.0082 val_loss=6.9204  [861.4s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e5.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e5.state.npz (729 arrays, step=1560)
+  step 1600/93600  loss=6.2807  lr=0.00103  (2872.0ms/step avg)
+  step 1700/93600  loss=6.0618  lr=0.00109  (2866.0ms/step avg)
+  step 1800/93600  loss=6.148  lr=0.00115  (2860.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 6] lr=0.0012 loss(train_avg)=6.1386 val_top1=110/50000 (0.0022) val_top5=0.0107 val_loss=6.8797  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e6.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e6.state.npz (729 arrays, step=1872)
+  step 1900/93600  loss=6.3752  lr=0.00122  (2869.0ms/step avg)
+  step 2000/93600  loss=6.1648  lr=0.00128  (2864.0ms/step avg)
+  step 2100/93600  loss=5.7386  lr=0.00135  (2859.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 7] lr=0.0014 loss(train_avg)=5.9578 val_top1=145/50000 (0.0029) val_top5=0.0134 val_loss=6.8385  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e7.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e7.state.npz (729 arrays, step=2184)
+  step 2200/93600  loss=5.4008  lr=0.00141  (2867.0ms/step avg)
+  step 2300/93600  loss=5.6089  lr=0.00147  (2862.0ms/step avg)
+  step 2400/93600  loss=5.5205  lr=0.00154  (2858.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 8] lr=0.0016 loss(train_avg)=5.734 val_top1=164/50000 (0.0033) val_top5=0.0168 val_loss=6.7992  [861.6s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e8.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e8.state.npz (729 arrays, step=2496)
+  step 2500/93600  loss=5.9461  lr=0.0016  (2865.0ms/step avg)
+  step 2600/93600  loss=4.8681  lr=0.00167  (2861.0ms/step avg)
+  step 2700/93600  loss=5.2524  lr=0.00173  (2858.0ms/step avg)
+  step 2800/93600  loss=4.6096  lr=0.00179  (2854.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 9] lr=0.0018 loss(train_avg)=5.5454 val_top1=211/50000 (0.0042) val_top5=0.0201 val_loss=6.763  [861.6s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e9.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e9.state.npz (729 arrays, step=2808)
+  step 2900/93600  loss=5.6899  lr=0.00186  (2861.0ms/step avg)
+  step 3000/93600  loss=4.9594  lr=0.00192  (2858.0ms/step avg)
+  step 3100/93600  loss=4.6415  lr=0.00199  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 10] lr=0.002 loss(train_avg)=5.3653 val_top1=271/50000 (0.0054) val_top5=0.0222 val_loss=6.7316  [862.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e10.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e10.state.npz (729 arrays, step=3120)
+  step 3200/93600  loss=4.9633  lr=0.00205  (2861.0ms/step avg)
+  step 3300/93600  loss=5.5687  lr=0.00212  (2858.0ms/step avg)
+  step 3400/93600  loss=5.2823  lr=0.00218  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 11] lr=0.0022 loss(train_avg)=5.2869 val_top1=282/50000 (0.0056) val_top5=0.0243 val_loss=6.7065  [862.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e11.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e11.state.npz (729 arrays, step=3432)
+  step 3500/93600  loss=5.1895  lr=0.00224  (2860.0ms/step avg)
+  step 3600/93600  loss=5.3412  lr=0.00231  (2858.0ms/step avg)
+  step 3700/93600  loss=5.4496  lr=0.00237  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 12] lr=0.0024 loss(train_avg)=5.0949 val_top1=306/50000 (0.0061) val_top5=0.0254 val_loss=6.6891  [862.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e12.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e12.state.npz (729 arrays, step=3744)
+  step 3800/93600  loss=5.016  lr=0.00244  (2860.0ms/step avg)
+  step 3900/93600  loss=5.0797  lr=0.0025  (2858.0ms/step avg)
+  step 4000/93600  loss=5.1126  lr=0.00256  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 13] lr=0.0026 loss(train_avg)=4.9699 val_top1=320/50000 (0.0064) val_top5=0.0261 val_loss=6.6789  [862.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e13.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e13.state.npz (729 arrays, step=4056)
+  step 4100/93600  loss=3.8569  lr=0.00263  (2860.0ms/step avg)
+  step 4200/93600  loss=3.7141  lr=0.00269  (2858.0ms/step avg)
+  step 4300/93600  loss=5.2345  lr=0.00276  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 14] lr=0.0028 loss(train_avg)=4.8484 val_top1=312/50000 (0.0062) val_top5=0.0274 val_loss=6.6762  [862.6s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e14.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e14.state.npz (729 arrays, step=4368)
+  step 4400/93600  loss=5.5388  lr=0.00282  (2860.0ms/step avg)
+  step 4500/93600  loss=4.8647  lr=0.00288  (2857.0ms/step avg)
+  step 4600/93600  loss=4.5654  lr=0.00295  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 15] lr=0.003 loss(train_avg)=4.794 val_top1=314/50000 (0.0063) val_top5=0.0264 val_loss=6.6791  [861.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e15.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e15.state.npz (729 arrays, step=4680)
+  step 4700/93600  loss=5.0571  lr=0.00301  (2859.0ms/step avg)
+  step 4800/93600  loss=4.9723  lr=0.00308  (2857.0ms/step avg)
+  step 4900/93600  loss=4.2316  lr=0.00314  (2855.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 16] lr=0.0032 loss(train_avg)=4.6634 val_top1=314/50000 (0.0063) val_top5=0.0266 val_loss=6.6873  [861.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e16.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e16.state.npz (729 arrays, step=4992)
+  step 5000/93600  loss=4.8205  lr=0.00321  (2859.0ms/step avg)
+  step 5100/93600  loss=4.9998  lr=0.00327  (2857.0ms/step avg)
+  step 5200/93600  loss=4.3522  lr=0.00333  (2855.0ms/step avg)
+  step 5300/93600  loss=5.0564  lr=0.0034  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 17] lr=0.0034 loss(train_avg)=4.6573 val_top1=324/50000 (0.0065) val_top5=0.0271 val_loss=6.7007  [861.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e17.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e17.state.npz (729 arrays, step=5304)
+  step 5400/93600  loss=4.91  lr=0.00346  (2857.0ms/step avg)
+  step 5500/93600  loss=5.1701  lr=0.00353  (2855.0ms/step avg)
+  step 5600/93600  loss=4.4083  lr=0.00359  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 18] lr=0.0036 loss(train_avg)=4.5835 val_top1=342/50000 (0.0068) val_top5=0.0268 val_loss=6.718  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e18.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e18.state.npz (729 arrays, step=5616)
+  step 5700/93600  loss=4.8826  lr=0.00365  (2856.0ms/step avg)
+  step 5800/93600  loss=3.8186  lr=0.00372  (2855.0ms/step avg)
+  step 5900/93600  loss=3.431  lr=0.00378  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 19] lr=0.0038 loss(train_avg)=4.4764 val_top1=350/50000 (0.007) val_top5=0.0273 val_loss=6.739  [861.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e19.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e19.state.npz (729 arrays, step=5928)
+  step 6000/93600  loss=4.896  lr=0.00385  (2856.0ms/step avg)
+  step 6100/93600  loss=4.2036  lr=0.00391  (2855.0ms/step avg)
+  step 6200/93600  loss=4.87  lr=0.00397  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 20] lr=0.004 loss(train_avg)=4.4623 val_top1=349/50000 (0.007) val_top5=0.0278 val_loss=6.7611  [861.4s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e20.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e20.state.npz (729 arrays, step=6240)
+  step 6300/93600  loss=3.3779  lr=0.004  (2856.0ms/step avg)
+  step 6400/93600  loss=5.2691  lr=0.004  (2855.0ms/step avg)
+  step 6500/93600  loss=3.7315  lr=0.004  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 21] lr=0.004 loss(train_avg)=4.4466 val_top1=358/50000 (0.0072) val_top5=0.028 val_loss=6.7858  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e21.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e21.state.npz (729 arrays, step=6552)
+  step 6600/93600  loss=3.8197  lr=0.004  (2856.0ms/step avg)
+  step 6700/93600  loss=4.4109  lr=0.004  (2855.0ms/step avg)
+  step 6800/93600  loss=4.1197  lr=0.004  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 22] lr=0.003999 loss(train_avg)=4.4084 val_top1=372/50000 (0.0074) val_top5=0.0282 val_loss=6.8128  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e22.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e22.state.npz (729 arrays, step=6864)
+  step 6900/93600  loss=4.9229  lr=0.004  (2856.0ms/step avg)
+  step 7000/93600  loss=4.4444  lr=0.004  (2855.0ms/step avg)
+  step 7100/93600  loss=4.9435  lr=0.004  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 23] lr=0.003999 loss(train_avg)=4.3787 val_top1=375/50000 (0.0075) val_top5=0.0273 val_loss=6.8427  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e23.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e23.state.npz (729 arrays, step=7176)
+  step 7200/93600  loss=4.7414  lr=0.004  (2856.0ms/step avg)
+  step 7300/93600  loss=5.1658  lr=0.004  (2854.0ms/step avg)
+  step 7400/93600  loss=4.3202  lr=0.004  (2853.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 24] lr=0.003998 loss(train_avg)=4.378 val_top1=376/50000 (0.0075) val_top5=0.0275 val_loss=6.8732  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e24.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e24.state.npz (729 arrays, step=7488)
+  step 7500/93600  loss=5.2408  lr=0.004  (2855.0ms/step avg)
+  step 7600/93600  loss=5.0694  lr=0.004  (2854.0ms/step avg)
+  step 7700/93600  loss=3.6582  lr=0.004  (2853.0ms/step avg)
+  step 7800/93600  loss=4.5496  lr=0.004  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 25] lr=0.003997 loss(train_avg)=4.2976 val_top1=365/50000 (0.0073) val_top5=0.0281 val_loss=6.9098  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e25.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e25.state.npz (729 arrays, step=7800)
+  step 7900/93600  loss=4.548  lr=0.004  (2854.0ms/step avg)
+  step 8000/93600  loss=4.3219  lr=0.004  (2853.0ms/step avg)
+  step 8100/93600  loss=4.822  lr=0.004  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 26] lr=0.003995 loss(train_avg)=4.2928 val_top1=359/50000 (0.0072) val_top5=0.0282 val_loss=6.9494  [861.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e26.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e26.state.npz (729 arrays, step=8112)
+  step 8200/93600  loss=4.6327  lr=0.004  (2854.0ms/step avg)
+  step 8300/93600  loss=3.5106  lr=0.00399  (2853.0ms/step avg)
+  step 8400/93600  loss=4.4098  lr=0.00399  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 27] lr=0.003994 loss(train_avg)=4.2113 val_top1=356/50000 (0.0071) val_top5=0.0285 val_loss=6.9928  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e27.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e27.state.npz (729 arrays, step=8424)
+  step 8500/93600  loss=4.6775  lr=0.00399  (2854.0ms/step avg)
+  step 8600/93600  loss=5.0394  lr=0.00399  (2853.0ms/step avg)
+  step 8700/93600  loss=3.6777  lr=0.00399  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 28] lr=0.003992 loss(train_avg)=4.1513 val_top1=345/50000 (0.0069) val_top5=0.0282 val_loss=7.0474  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e28.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e28.state.npz (729 arrays, step=8736)
+  step 8800/93600  loss=3.9313  lr=0.00399  (2854.0ms/step avg)
+  step 8900/93600  loss=3.2211  lr=0.00399  (2853.0ms/step avg)
+  step 9000/93600  loss=3.6967  lr=0.00399  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 29] lr=0.00399 loss(train_avg)=4.1926 val_top1=347/50000 (0.0069) val_top5=0.0287 val_loss=7.115  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e29.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e29.state.npz (729 arrays, step=9048)
+  step 9100/93600  loss=4.0909  lr=0.00399  (2854.0ms/step avg)
+  step 9200/93600  loss=4.251  lr=0.00399  (2853.0ms/step avg)
+  step 9300/93600  loss=4.6348  lr=0.00399  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 30] lr=0.003987 loss(train_avg)=4.1507 val_top1=352/50000 (0.007) val_top5=0.0297 val_loss=7.1816  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e30.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e30.state.npz (729 arrays, step=9360)
+  step 9400/93600  loss=3.6758  lr=0.00399  (2854.0ms/step avg)
+  step 9500/93600  loss=2.9872  lr=0.00399  (2853.0ms/step avg)
+  step 9600/93600  loss=4.176  lr=0.00399  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 31] lr=0.003985 loss(train_avg)=4.0795 val_top1=344/50000 (0.0069) val_top5=0.0315 val_loss=7.2659  [861.2s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e31.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e31.state.npz (729 arrays, step=9672)
+  step 9700/93600  loss=4.7256  lr=0.00398  (2854.0ms/step avg)
+  step 9800/93600  loss=4.638  lr=0.00398  (2853.0ms/step avg)
+  step 9900/93600  loss=4.9422  lr=0.00398  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 32] lr=0.003982 loss(train_avg)=4.1724 val_top1=342/50000 (0.0068) val_top5=0.0331 val_loss=7.3883  [861.1s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e32.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e32.state.npz (729 arrays, step=9984)
+  step 10000/93600  loss=4.1442  lr=0.00398  (2854.0ms/step avg)
+  step 10100/93600  loss=4.3159  lr=0.00398  (2853.0ms/step avg)
+  step 10200/93600  loss=4.9528  lr=0.00398  (2852.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 33] lr=0.003979 loss(train_avg)=4.105 val_top1=350/50000 (0.007) val_top5=0.0348 val_loss=7.5347  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e33.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e33.state.npz (729 arrays, step=10296)
+  step 10300/93600  loss=4.5501  lr=0.00398  (2854.0ms/step avg)
+  step 10400/93600  loss=3.7292  lr=0.00398  (2853.0ms/step avg)
+  step 10500/93600  loss=4.4934  lr=0.00398  (2852.0ms/step avg)
+  step 10600/93600  loss=2.795  lr=0.00398  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 34] lr=0.003975 loss(train_avg)=4.0653 val_top1=356/50000 (0.0071) val_top5=0.0369 val_loss=7.7158  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e34.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e34.state.npz (729 arrays, step=10608)
+  step 10700/93600  loss=4.4466  lr=0.00397  (2853.0ms/step avg)
+  step 10800/93600  loss=4.0636  lr=0.00397  (2852.0ms/step avg)
+  step 10900/93600  loss=3.9159  lr=0.00397  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 35] lr=0.003972 loss(train_avg)=4.0417 val_top1=365/50000 (0.0073) val_top5=0.0401 val_loss=7.8965  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e35.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e35.state.npz (729 arrays, step=10920)
+  step 11000/93600  loss=2.7671  lr=0.00397  (2853.0ms/step avg)
+  step 11100/93600  loss=4.7455  lr=0.00397  (2852.0ms/step avg)
+  step 11200/93600  loss=4.4321  lr=0.00397  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 36] lr=0.003968 loss(train_avg)=4.1122 val_top1=380/50000 (0.0076) val_top5=0.0436 val_loss=8.0621  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e36.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e36.state.npz (729 arrays, step=11232)
+  step 11300/93600  loss=4.3138  lr=0.00397  (2853.0ms/step avg)
+  step 11400/93600  loss=3.04  lr=0.00397  (2852.0ms/step avg)
+  step 11500/93600  loss=4.3252  lr=0.00396  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 37] lr=0.003964 loss(train_avg)=4.014 val_top1=411/50000 (0.0082) val_top5=0.0476 val_loss=8.2088  [860.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e37.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e37.state.npz (729 arrays, step=11544)
+  step 11600/93600  loss=4.556  lr=0.00396  (2853.0ms/step avg)
+  step 11700/93600  loss=4.1777  lr=0.00396  (2852.0ms/step avg)
+  step 11800/93600  loss=4.3234  lr=0.00396  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 38] lr=0.003959 loss(train_avg)=4.0102 val_top1=438/50000 (0.0088) val_top5=0.0536 val_loss=8.357  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e38.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e38.state.npz (729 arrays, step=11856)
+  step 11900/93600  loss=4.1734  lr=0.00396  (2853.0ms/step avg)
+  step 12000/93600  loss=4.1963  lr=0.00396  (2852.0ms/step avg)
+  step 12100/93600  loss=4.6617  lr=0.00396  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 39] lr=0.003955 loss(train_avg)=4.0081 val_top1=473/50000 (0.0095) val_top5=0.0597 val_loss=8.4943  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e39.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e39.state.npz (729 arrays, step=12168)
+  step 12200/93600  loss=4.7132  lr=0.00395  (2852.0ms/step avg)
+  step 12300/93600  loss=4.2908  lr=0.00395  (2852.0ms/step avg)
+  step 12400/93600  loss=4.2464  lr=0.00395  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 40] lr=0.00395 loss(train_avg)=4.0639 val_top1=536/50000 (0.0107) val_top5=0.0675 val_loss=8.602  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e40.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e40.state.npz (729 arrays, step=12480)
+  step 12500/93600  loss=4.3484  lr=0.00395  (2852.0ms/step avg)
+  step 12600/93600  loss=3.3629  lr=0.00395  (2852.0ms/step avg)
+  step 12700/93600  loss=3.2024  lr=0.00395  (2851.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 41] lr=0.003945 loss(train_avg)=3.9609 val_top1=614/50000 (0.0123) val_top5=0.0775 val_loss=8.695  [860.9s train, 26.3s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e41.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e41.state.npz (729 arrays, step=12792)
+  step 12800/93600  loss=4.4138  lr=0.00394  (2852.0ms/step avg)
+  step 12900/93600  loss=2.6658  lr=0.00394  (2852.0ms/step avg)
+  step 13000/93600  loss=4.3696  lr=0.00394  (2851.0ms/step avg)
+  step 13100/93600  loss=4.6956  lr=0.00394  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 42] lr=0.003939 loss(train_avg)=3.9695 val_top1=702/50000 (0.014) val_top5=0.0891 val_loss=8.7557  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e42.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e42.state.npz (729 arrays, step=13104)
+  step 13200/93600  loss=4.8479  lr=0.00394  (2852.0ms/step avg)
+  step 13300/93600  loss=3.8206  lr=0.00394  (2851.0ms/step avg)
+  step 13400/93600  loss=4.1731  lr=0.00393  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 43] lr=0.003934 loss(train_avg)=4.0177 val_top1=802/50000 (0.016) val_top5=0.1013 val_loss=8.7728  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e43.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e43.state.npz (729 arrays, step=13416)
+  step 13500/93600  loss=4.6387  lr=0.00393  (2852.0ms/step avg)
+  step 13600/93600  loss=4.2606  lr=0.00393  (2851.0ms/step avg)
+  step 13700/93600  loss=4.0993  lr=0.00393  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 44] lr=0.003928 loss(train_avg)=3.9511 val_top1=946/50000 (0.0189) val_top5=0.1141 val_loss=8.7479  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e44.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e44.state.npz (729 arrays, step=13728)
+  step 13800/93600  loss=4.5739  lr=0.00393  (2852.0ms/step avg)
+  step 13900/93600  loss=4.7953  lr=0.00392  (2851.0ms/step avg)
+  step 14000/93600  loss=4.4612  lr=0.00392  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 45] lr=0.003922 loss(train_avg)=3.921 val_top1=1149/50000 (0.023) val_top5=0.1294 val_loss=8.6638  [860.8s train, 26.2s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e45.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e45.state.npz (729 arrays, step=14040)
+  step 14100/93600  loss=4.3269  lr=0.00392  (2852.0ms/step avg)
+  step 14200/93600  loss=4.3013  lr=0.00392  (2851.0ms/step avg)
+  step 14300/93600  loss=3.959  lr=0.00392  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 46] lr=0.003916 loss(train_avg)=3.8781 val_top1=1423/50000 (0.0285) val_top5=0.1461 val_loss=8.4983  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e46.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e46.state.npz (729 arrays, step=14352)
+  step 14400/93600  loss=4.3131  lr=0.00391  (2851.0ms/step avg)
+  step 14500/93600  loss=4.243  lr=0.00391  (2851.0ms/step avg)
+  step 14600/93600  loss=4.269  lr=0.00391  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 47] lr=0.003909 loss(train_avg)=3.855 val_top1=1776/50000 (0.0355) val_top5=0.1655 val_loss=8.2897  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e47.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e47.state.npz (729 arrays, step=14664)
+  step 14700/93600  loss=3.2946  lr=0.00391  (2851.0ms/step avg)
+  step 14800/93600  loss=4.2875  lr=0.00391  (2851.0ms/step avg)
+  step 14900/93600  loss=3.5083  lr=0.0039  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 48] lr=0.003902 loss(train_avg)=3.8507 val_top1=2195/50000 (0.0439) val_top5=0.1876 val_loss=8.081  [860.9s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e48.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e48.state.npz (729 arrays, step=14976)
+  step 15000/93600  loss=4.3272  lr=0.0039  (2852.0ms/step avg)
+  step 15100/93600  loss=3.4642  lr=0.0039  (2851.0ms/step avg)
+  step 15200/93600  loss=4.4255  lr=0.0039  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 49] lr=0.003895 loss(train_avg)=3.9229 val_top1=2659/50000 (0.0532) val_top5=0.2094 val_loss=7.8223  [860.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e49.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e49.state.npz (729 arrays, step=15288)
+  step 15300/93600  loss=3.3151  lr=0.00389  (2852.0ms/step avg)
+  step 15400/93600  loss=4.6474  lr=0.00389  (2851.0ms/step avg)
+  step 15500/93600  loss=2.5734  lr=0.00389  (2850.0ms/step avg)
+  step 15600/93600  loss=3.8389  lr=0.00389  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 50] lr=0.003888 loss(train_avg)=3.848 val_top1=3183/50000 (0.0637) val_top5=0.2332 val_loss=7.5364  [860.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e50.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e50.state.npz (729 arrays, step=15600)
+  step 15700/93600  loss=2.7441  lr=0.00389  (2851.0ms/step avg)
+  step 15800/93600  loss=3.0199  lr=0.00388  (2850.0ms/step avg)
+  step 15900/93600  loss=4.3627  lr=0.00388  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 51] lr=0.00388 loss(train_avg)=3.8383 val_top1=3781/50000 (0.0756) val_top5=0.2584 val_loss=7.2396  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e51.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e51.state.npz (729 arrays, step=15912)
+  step 16000/93600  loss=2.741  lr=0.00388  (2851.0ms/step avg)
+  step 16100/93600  loss=3.685  lr=0.00388  (2850.0ms/step avg)
+  step 16200/93600  loss=3.9746  lr=0.00387  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 52] lr=0.003873 loss(train_avg)=3.9002 val_top1=4480/50000 (0.0896) val_top5=0.2844 val_loss=6.9318  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e52.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e52.state.npz (729 arrays, step=16224)
+  step 16300/93600  loss=3.8362  lr=0.00387  (2851.0ms/step avg)
+  step 16400/93600  loss=4.7171  lr=0.00387  (2850.0ms/step avg)
+  step 16500/93600  loss=3.5764  lr=0.00387  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 53] lr=0.003865 loss(train_avg)=3.8541 val_top1=5307/50000 (0.1061) val_top5=0.3129 val_loss=6.5874  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e53.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e53.state.npz (729 arrays, step=16536)
+  step 16600/93600  loss=3.6809  lr=0.00386  (2851.0ms/step avg)
+  step 16700/93600  loss=3.7807  lr=0.00386  (2850.0ms/step avg)
+  step 16800/93600  loss=3.7763  lr=0.00386  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 54] lr=0.003856 loss(train_avg)=3.881 val_top1=6227/50000 (0.1245) val_top5=0.3416 val_loss=6.2408  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e54.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e54.state.npz (729 arrays, step=16848)
+  step 16900/93600  loss=3.534  lr=0.00385  (2851.0ms/step avg)
+  step 17000/93600  loss=3.5479  lr=0.00385  (2850.0ms/step avg)
+  step 17100/93600  loss=4.6963  lr=0.00385  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 55] lr=0.003848 loss(train_avg)=3.87 val_top1=7235/50000 (0.1447) val_top5=0.3714 val_loss=5.8832  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e55.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e55.state.npz (729 arrays, step=17160)
+  step 17200/93600  loss=4.1244  lr=0.00385  (2851.0ms/step avg)
+  step 17300/93600  loss=3.6249  lr=0.00384  (2851.0ms/step avg)
+  step 17400/93600  loss=4.2804  lr=0.00384  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 56] lr=0.003839 loss(train_avg)=3.8258 val_top1=8265/50000 (0.1653) val_top5=0.4026 val_loss=5.5424  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e56.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e56.state.npz (729 arrays, step=17472)
+  step 17500/93600  loss=4.5939  lr=0.00384  (2851.0ms/step avg)
+  step 17600/93600  loss=2.9223  lr=0.00384  (2851.0ms/step avg)
+  step 17700/93600  loss=4.0334  lr=0.00383  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 57] lr=0.00383 loss(train_avg)=3.7844 val_top1=9442/50000 (0.1888) val_top5=0.4315 val_loss=5.2129  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e57.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e57.state.npz (729 arrays, step=17784)
+  step 17800/93600  loss=3.7638  lr=0.00383  (2851.0ms/step avg)
+  step 17900/93600  loss=3.9032  lr=0.00383  (2851.0ms/step avg)
+  step 18000/93600  loss=4.7049  lr=0.00382  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 58] lr=0.003821 loss(train_avg)=3.845 val_top1=10788/50000 (0.2158) val_top5=0.4625 val_loss=4.8656  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e58.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e58.state.npz (729 arrays, step=18096)
+  step 18100/93600  loss=4.7097  lr=0.00382  (2851.0ms/step avg)
+  step 18200/93600  loss=3.2203  lr=0.00382  (2851.0ms/step avg)
+  step 18300/93600  loss=2.7296  lr=0.00381  (2850.0ms/step avg)
+  step 18400/93600  loss=4.0673  lr=0.00381  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 59] lr=0.003812 loss(train_avg)=3.8152 val_top1=12117/50000 (0.2423) val_top5=0.492 val_loss=4.5517  [860.9s train, 25.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e59.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e59.state.npz (729 arrays, step=18408)
+  step 18500/93600  loss=2.5446  lr=0.00381  (2850.0ms/step avg)
+  step 18600/93600  loss=4.0256  lr=0.00381  (2850.0ms/step avg)
+  step 18700/93600  loss=4.3574  lr=0.0038  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 60] lr=0.003802 loss(train_avg)=3.8059 val_top1=13493/50000 (0.2699) val_top5=0.5231 val_loss=4.2449  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e60.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e60.state.npz (729 arrays, step=18720)
+  step 18800/93600  loss=3.8383  lr=0.0038  (2850.0ms/step avg)
+  step 18900/93600  loss=3.882  lr=0.0038  (2850.0ms/step avg)
+  step 19000/93600  loss=3.1968  lr=0.00379  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 61] lr=0.003792 loss(train_avg)=3.7671 val_top1=14797/50000 (0.2959) val_top5=0.5517 val_loss=3.9711  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e61.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e61.state.npz (729 arrays, step=19032)
+  step 19100/93600  loss=3.8954  lr=0.00379  (2850.0ms/step avg)
+  step 19200/93600  loss=4.5975  lr=0.00379  (2850.0ms/step avg)
+  step 19300/93600  loss=4.0106  lr=0.00378  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 62] lr=0.003782 loss(train_avg)=3.8188 val_top1=16090/50000 (0.3218) val_top5=0.5792 val_loss=3.7189  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e62.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e62.state.npz (729 arrays, step=19344)
+  step 19400/93600  loss=3.6895  lr=0.00378  (2850.0ms/step avg)
+  step 19500/93600  loss=4.2673  lr=0.00378  (2850.0ms/step avg)
+  step 19600/93600  loss=3.6131  lr=0.00377  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 63] lr=0.003772 loss(train_avg)=3.7711 val_top1=17340/50000 (0.3468) val_top5=0.6053 val_loss=3.4997  [860.8s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e63.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e63.state.npz (729 arrays, step=19656)
+  step 19700/93600  loss=3.9547  lr=0.00377  (2850.0ms/step avg)
+  step 19800/93600  loss=2.8161  lr=0.00377  (2850.0ms/step avg)
+  step 19900/93600  loss=4.2069  lr=0.00376  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 64] lr=0.003761 loss(train_avg)=3.7849 val_top1=18568/50000 (0.3714) val_top5=0.6305 val_loss=3.2949  [860.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e64.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e64.state.npz (729 arrays, step=19968)
+  step 20000/93600  loss=4.6216  lr=0.00376  (2850.0ms/step avg)
+  step 20100/93600  loss=2.5305  lr=0.00376  (2850.0ms/step avg)
+  step 20200/93600  loss=4.2318  lr=0.00375  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 65] lr=0.003751 loss(train_avg)=3.7385 val_top1=19821/50000 (0.3964) val_top5=0.6538 val_loss=3.099  [860.8s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e65.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e65.state.npz (729 arrays, step=20280)
+  step 20300/93600  loss=3.9712  lr=0.00375  (2850.0ms/step avg)
+  step 20400/93600  loss=4.1084  lr=0.00375  (2850.0ms/step avg)
+  step 20500/93600  loss=3.6672  lr=0.00374  (2850.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 66] lr=0.00374 loss(train_avg)=3.7885 val_top1=20967/50000 (0.4193) val_top5=0.6749 val_loss=2.9264  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e66.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e66.state.npz (729 arrays, step=20592)
+  step 20600/93600  loss=2.7745  lr=0.00374  (2850.0ms/step avg)
+  step 20700/93600  loss=3.5194  lr=0.00374  (2850.0ms/step avg)
+  step 20800/93600  loss=3.7102  lr=0.00373  (2850.0ms/step avg)
+  step 20900/93600  loss=4.5502  lr=0.00373  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 67] lr=0.003728 loss(train_avg)=3.7321 val_top1=22033/50000 (0.4407) val_top5=0.6953 val_loss=2.77  [860.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e67.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e67.state.npz (729 arrays, step=20904)
+  step 21000/93600  loss=3.3649  lr=0.00372  (2850.0ms/step avg)
+  step 21100/93600  loss=4.1086  lr=0.00372  (2850.0ms/step avg)
+  step 21200/93600  loss=4.5548  lr=0.00372  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 68] lr=0.003717 loss(train_avg)=3.7709 val_top1=23066/50000 (0.4613) val_top5=0.7141 val_loss=2.6258  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e68.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e68.state.npz (729 arrays, step=21216)
+  step 21300/93600  loss=4.5641  lr=0.00371  (2850.0ms/step avg)
+  step 21400/93600  loss=3.9885  lr=0.00371  (2850.0ms/step avg)
+  step 21500/93600  loss=4.2196  lr=0.00371  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 69] lr=0.003705 loss(train_avg)=3.8078 val_top1=24073/50000 (0.4815) val_top5=0.7311 val_loss=2.4936  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e69.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e69.state.npz (729 arrays, step=21528)
+  step 21600/93600  loss=2.7885  lr=0.0037  (2850.0ms/step avg)
+  step 21700/93600  loss=3.6512  lr=0.0037  (2850.0ms/step avg)
+  step 21800/93600  loss=4.0131  lr=0.0037  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 70] lr=0.003694 loss(train_avg)=3.708 val_top1=24992/50000 (0.4998) val_top5=0.7477 val_loss=2.3723  [860.7s train, 25.3s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e70.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e70.state.npz (729 arrays, step=21840)
+  step 21900/93600  loss=3.1603  lr=0.00369  (2850.0ms/step avg)
+  step 22000/93600  loss=3.3215  lr=0.00369  (2850.0ms/step avg)
+  step 22100/93600  loss=3.6895  lr=0.00368  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 71] lr=0.003682 loss(train_avg)=3.756 val_top1=25854/50000 (0.5171) val_top5=0.7618 val_loss=2.2601  [860.6s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e71.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e71.state.npz (729 arrays, step=22152)
+  step 22200/93600  loss=3.9365  lr=0.00368  (2850.0ms/step avg)
+  step 22300/93600  loss=3.6978  lr=0.00368  (2850.0ms/step avg)
+  step 22400/93600  loss=4.1292  lr=0.00367  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 72] lr=0.003669 loss(train_avg)=3.7718 val_top1=26589/50000 (0.5318) val_top5=0.7751 val_loss=2.1592  [860.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e72.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e72.state.npz (729 arrays, step=22464)
+  step 22500/93600  loss=4.648  lr=0.00367  (2850.0ms/step avg)
+  step 22600/93600  loss=4.128  lr=0.00366  (2850.0ms/step avg)
+  step 22700/93600  loss=4.0354  lr=0.00366  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 73] lr=0.003657 loss(train_avg)=3.7346 val_top1=27316/50000 (0.5463) val_top5=0.7874 val_loss=2.0683  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e73.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e73.state.npz (729 arrays, step=22776)
+  step 22800/93600  loss=4.1079  lr=0.00366  (2850.0ms/step avg)
+  step 22900/93600  loss=2.9293  lr=0.00365  (2850.0ms/step avg)
+  step 23000/93600  loss=3.8552  lr=0.00365  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 74] lr=0.003644 loss(train_avg)=3.7667 val_top1=28020/50000 (0.5604) val_top5=0.7985 val_loss=1.9835  [860.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e74.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e74.state.npz (729 arrays, step=23088)
+  step 23100/93600  loss=4.2016  lr=0.00364  (2850.0ms/step avg)
+  step 23200/93600  loss=4.035  lr=0.00364  (2850.0ms/step avg)
+  step 23300/93600  loss=3.2416  lr=0.00364  (2849.0ms/step avg)
+  step 23400/93600  loss=3.8248  lr=0.00363  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 75] lr=0.003631 loss(train_avg)=3.7368 val_top1=28708/50000 (0.5742) val_top5=0.809 val_loss=1.9032  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e75.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e75.state.npz (729 arrays, step=23400)
+  step 23500/93600  loss=3.6489  lr=0.00363  (2850.0ms/step avg)
+  step 23600/93600  loss=3.7014  lr=0.00362  (2849.0ms/step avg)
+  step 23700/93600  loss=3.0927  lr=0.00362  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 76] lr=0.003618 loss(train_avg)=3.7078 val_top1=29348/50000 (0.587) val_top5=0.8185 val_loss=1.8296  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e76.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e76.state.npz (729 arrays, step=23712)
+  step 23800/93600  loss=3.0151  lr=0.00361  (2850.0ms/step avg)
+  step 23900/93600  loss=3.7073  lr=0.00361  (2849.0ms/step avg)
+  step 24000/93600  loss=3.7581  lr=0.00361  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 77] lr=0.003605 loss(train_avg)=3.7379 val_top1=29965/50000 (0.5993) val_top5=0.8276 val_loss=1.7625  [860.4s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e77.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e77.state.npz (729 arrays, step=24024)
+  step 24100/93600  loss=4.1295  lr=0.0036  (2850.0ms/step avg)
+  step 24200/93600  loss=3.7085  lr=0.0036  (2849.0ms/step avg)
+  step 24300/93600  loss=4.1706  lr=0.00359  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 78] lr=0.003591 loss(train_avg)=3.7038 val_top1=30450/50000 (0.609) val_top5=0.8354 val_loss=1.7005  [860.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e78.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e78.state.npz (729 arrays, step=24336)
+  step 24400/93600  loss=3.3792  lr=0.00359  (2850.0ms/step avg)
+  step 24500/93600  loss=4.4575  lr=0.00358  (2849.0ms/step avg)
+  step 24600/93600  loss=4.5999  lr=0.00358  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 79] lr=0.003578 loss(train_avg)=3.7383 val_top1=30991/50000 (0.6198) val_top5=0.8427 val_loss=1.6438  [860.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e79.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e79.state.npz (729 arrays, step=24648)
+  step 24700/93600  loss=3.2414  lr=0.00358  (2850.0ms/step avg)
+  step 24800/93600  loss=4.1038  lr=0.00357  (2849.0ms/step avg)
+  step 24900/93600  loss=3.9627  lr=0.00357  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 80] lr=0.003564 loss(train_avg)=3.729 val_top1=31474/50000 (0.6295) val_top5=0.8491 val_loss=1.5919  [860.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e80.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e80.state.npz (729 arrays, step=24960)
+  step 25000/93600  loss=3.9683  lr=0.00356  (2849.0ms/step avg)
+  step 25100/93600  loss=2.7805  lr=0.00356  (2849.0ms/step avg)
+  step 25200/93600  loss=3.9278  lr=0.00355  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 81] lr=0.00355 loss(train_avg)=3.6653 val_top1=31945/50000 (0.6389) val_top5=0.8563 val_loss=1.5432  [860.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e81.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e81.state.npz (729 arrays, step=25272)
+  step 25300/93600  loss=3.3157  lr=0.00355  (2849.0ms/step avg)
+  step 25400/93600  loss=3.0535  lr=0.00354  (2849.0ms/step avg)
+  step 25500/93600  loss=4.15  lr=0.00354  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 82] lr=0.003535 loss(train_avg)=3.7205 val_top1=32365/50000 (0.6473) val_top5=0.8621 val_loss=1.4989  [860.1s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e82.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e82.state.npz (729 arrays, step=25584)
+  step 25600/93600  loss=3.1015  lr=0.00353  (2849.0ms/step avg)
+  step 25700/93600  loss=4.5668  lr=0.00353  (2849.0ms/step avg)
+  step 25800/93600  loss=2.909  lr=0.00353  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 83] lr=0.003521 loss(train_avg)=3.6616 val_top1=32746/50000 (0.6549) val_top5=0.8677 val_loss=1.4579  [860.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e83.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e83.state.npz (729 arrays, step=25896)
+  step 25900/93600  loss=3.9541  lr=0.00352  (2849.0ms/step avg)
+  step 26000/93600  loss=4.1672  lr=0.00352  (2849.0ms/step avg)
+  step 26100/93600  loss=4.4698  lr=0.00351  (2849.0ms/step avg)
+  step 26200/93600  loss=2.5122  lr=0.00351  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 84] lr=0.003506 loss(train_avg)=3.7122 val_top1=33101/50000 (0.662) val_top5=0.872 val_loss=1.4194  [860.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e84.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e84.state.npz (729 arrays, step=26208)
+  step 26300/93600  loss=3.5582  lr=0.0035  (2849.0ms/step avg)
+  step 26400/93600  loss=3.6238  lr=0.0035  (2849.0ms/step avg)
+  step 26500/93600  loss=3.3302  lr=0.00349  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 85] lr=0.003491 loss(train_avg)=3.7226 val_top1=33446/50000 (0.6689) val_top5=0.8758 val_loss=1.3839  [860.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e85.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e85.state.npz (729 arrays, step=26520)
+  step 26600/93600  loss=3.3384  lr=0.00349  (2849.0ms/step avg)
+  step 26700/93600  loss=4.2893  lr=0.00348  (2849.0ms/step avg)
+  step 26800/93600  loss=3.8161  lr=0.00348  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 86] lr=0.003476 loss(train_avg)=3.6658 val_top1=33745/50000 (0.6749) val_top5=0.8802 val_loss=1.3516  [860.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e86.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e86.state.npz (729 arrays, step=26832)
+  step 26900/93600  loss=4.3573  lr=0.00347  (2849.0ms/step avg)
+  step 27000/93600  loss=3.6521  lr=0.00347  (2849.0ms/step avg)
+  step 27100/93600  loss=3.3961  lr=0.00346  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 87] lr=0.003461 loss(train_avg)=3.6768 val_top1=34041/50000 (0.6808) val_top5=0.8843 val_loss=1.3212  [860.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e87.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e87.state.npz (729 arrays, step=27144)
+  step 27200/93600  loss=4.4236  lr=0.00346  (2849.0ms/step avg)
+  step 27300/93600  loss=2.8838  lr=0.00345  (2849.0ms/step avg)
+  step 27400/93600  loss=4.0364  lr=0.00345  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 88] lr=0.003446 loss(train_avg)=3.6468 val_top1=34291/50000 (0.6858) val_top5=0.8875 val_loss=1.2939  [860.2s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e88.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e88.state.npz (729 arrays, step=27456)
+  step 27500/93600  loss=3.9773  lr=0.00344  (2849.0ms/step avg)
+  step 27600/93600  loss=3.5385  lr=0.00344  (2849.0ms/step avg)
+  step 27700/93600  loss=2.9114  lr=0.00343  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 89] lr=0.00343 loss(train_avg)=3.6944 val_top1=34534/50000 (0.6907) val_top5=0.8906 val_loss=1.2684  [860.5s train, 26.0s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e89.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e89.state.npz (729 arrays, step=27768)
+  step 27800/93600  loss=3.7174  lr=0.00343  (2849.0ms/step avg)
+  step 27900/93600  loss=2.9195  lr=0.00342  (2849.0ms/step avg)
+  step 28000/93600  loss=3.9689  lr=0.00342  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 90] lr=0.003414 loss(train_avg)=3.6766 val_top1=34794/50000 (0.6959) val_top5=0.8938 val_loss=1.2456  [860.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e90.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e90.state.npz (729 arrays, step=28080)
+  step 28100/93600  loss=4.5638  lr=0.00341  (2849.0ms/step avg)
+  step 28200/93600  loss=2.9373  lr=0.00341  (2849.0ms/step avg)
+  step 28300/93600  loss=2.5951  lr=0.0034  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 91] lr=0.003398 loss(train_avg)=3.6881 val_top1=34985/50000 (0.6997) val_top5=0.8967 val_loss=1.2232  [860.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e91.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e91.state.npz (729 arrays, step=28392)
+  step 28400/93600  loss=4.4405  lr=0.0034  (2849.0ms/step avg)
+  step 28500/93600  loss=3.8874  lr=0.00339  (2849.0ms/step avg)
+  step 28600/93600  loss=3.4081  lr=0.00339  (2848.0ms/step avg)
+  step 28700/93600  loss=4.2153  lr=0.00338  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 92] lr=0.003382 loss(train_avg)=3.7198 val_top1=35180/50000 (0.7036) val_top5=0.9001 val_loss=1.2028  [860.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e92.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e92.state.npz (729 arrays, step=28704)
+  step 28800/93600  loss=3.9862  lr=0.00338  (2849.0ms/step avg)
+  step 28900/93600  loss=3.767  lr=0.00337  (2848.0ms/step avg)
+  step 29000/93600  loss=2.6136  lr=0.00337  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 93] lr=0.003366 loss(train_avg)=3.6661 val_top1=35382/50000 (0.7076) val_top5=0.9023 val_loss=1.1838  [860.2s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e93.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e93.state.npz (729 arrays, step=29016)
+  step 29100/93600  loss=3.8389  lr=0.00336  (2849.0ms/step avg)
+  step 29200/93600  loss=2.5741  lr=0.00336  (2848.0ms/step avg)
+  step 29300/93600  loss=3.8888  lr=0.00335  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 94] lr=0.00335 loss(train_avg)=3.6255 val_top1=35596/50000 (0.7119) val_top5=0.9044 val_loss=1.1656  [860.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e94.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e94.state.npz (729 arrays, step=29328)
+  step 29400/93600  loss=3.14  lr=0.00335  (2849.0ms/step avg)
+  step 29500/93600  loss=2.9774  lr=0.00334  (2848.0ms/step avg)
+  step 29600/93600  loss=2.3763  lr=0.00334  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 95] lr=0.003333 loss(train_avg)=3.6995 val_top1=35771/50000 (0.7154) val_top5=0.907 val_loss=1.1482  [860.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e95.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e95.state.npz (729 arrays, step=29640)
+  step 29700/93600  loss=4.5243  lr=0.00333  (2849.0ms/step avg)
+  step 29800/93600  loss=3.4994  lr=0.00332  (2848.0ms/step avg)
+  step 29900/93600  loss=4.1515  lr=0.00332  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 96] lr=0.003316 loss(train_avg)=3.6345 val_top1=35915/50000 (0.7183) val_top5=0.9086 val_loss=1.1325  [860.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e96.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e96.state.npz (729 arrays, step=29952)
+  step 30000/93600  loss=4.3766  lr=0.00331  (2849.0ms/step avg)
+  step 30100/93600  loss=2.4473  lr=0.00331  (2848.0ms/step avg)
+  step 30200/93600  loss=4.0507  lr=0.0033  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 97] lr=0.003299 loss(train_avg)=3.5898 val_top1=36111/50000 (0.7222) val_top5=0.9106 val_loss=1.1178  [859.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e97.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e97.state.npz (729 arrays, step=30264)
+  step 30300/93600  loss=2.8131  lr=0.0033  (2849.0ms/step avg)
+  step 30400/93600  loss=3.0756  lr=0.00329  (2848.0ms/step avg)
+  step 30500/93600  loss=3.8288  lr=0.00329  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 98] lr=0.003282 loss(train_avg)=3.6203 val_top1=36262/50000 (0.7252) val_top5=0.912 val_loss=1.1041  [859.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e98.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e98.state.npz (729 arrays, step=30576)
+  step 30600/93600  loss=3.8829  lr=0.00328  (2849.0ms/step avg)
+  step 30700/93600  loss=3.8479  lr=0.00328  (2848.0ms/step avg)
+  step 30800/93600  loss=4.1634  lr=0.00327  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 99] lr=0.003265 loss(train_avg)=3.6741 val_top1=36400/50000 (0.728) val_top5=0.9135 val_loss=1.0912  [860.3s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e99.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e99.state.npz (729 arrays, step=30888)
+  step 30900/93600  loss=2.9686  lr=0.00326  (2849.0ms/step avg)
+  step 31000/93600  loss=3.7035  lr=0.00326  (2848.0ms/step avg)
+  step 31100/93600  loss=3.6944  lr=0.00325  (2848.0ms/step avg)
+  step 31200/93600  loss=4.532  lr=0.00325  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 100] lr=0.003247 loss(train_avg)=3.638 val_top1=36514/50000 (0.7303) val_top5=0.915 val_loss=1.0795  [860.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e100.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e100.state.npz (729 arrays, step=31200)
+  step 31300/93600  loss=3.6948  lr=0.00324  (2848.0ms/step avg)
+  step 31400/93600  loss=2.9781  lr=0.00324  (2848.0ms/step avg)
+  step 31500/93600  loss=4.3889  lr=0.00323  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 101] lr=0.00323 loss(train_avg)=3.6447 val_top1=36648/50000 (0.733) val_top5=0.9166 val_loss=1.0681  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e101.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e101.state.npz (729 arrays, step=31512)
+  step 31600/93600  loss=4.4596  lr=0.00322  (2848.0ms/step avg)
+  step 31700/93600  loss=3.9678  lr=0.00322  (2848.0ms/step avg)
+  step 31800/93600  loss=3.5392  lr=0.00321  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 102] lr=0.003212 loss(train_avg)=3.6405 val_top1=36786/50000 (0.7357) val_top5=0.9183 val_loss=1.0575  [860.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e102.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e102.state.npz (729 arrays, step=31824)
+  step 31900/93600  loss=3.881  lr=0.00321  (2848.0ms/step avg)
+  step 32000/93600  loss=3.0691  lr=0.0032  (2848.0ms/step avg)
+  step 32100/93600  loss=3.8129  lr=0.0032  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 103] lr=0.003194 loss(train_avg)=3.6375 val_top1=36891/50000 (0.7378) val_top5=0.9193 val_loss=1.0479  [860.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e103.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e103.state.npz (729 arrays, step=32136)
+  step 32200/93600  loss=3.8299  lr=0.00319  (2848.0ms/step avg)
+  step 32300/93600  loss=3.6792  lr=0.00318  (2848.0ms/step avg)
+  step 32400/93600  loss=3.2773  lr=0.00318  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 104] lr=0.003176 loss(train_avg)=3.5958 val_top1=37001/50000 (0.74) val_top5=0.9204 val_loss=1.0387  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e104.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e104.state.npz (729 arrays, step=32448)
+  step 32500/93600  loss=2.7014  lr=0.00317  (2848.0ms/step avg)
+  step 32600/93600  loss=2.8648  lr=0.00317  (2848.0ms/step avg)
+  step 32700/93600  loss=4.3299  lr=0.00316  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 105] lr=0.003158 loss(train_avg)=3.5558 val_top1=37111/50000 (0.7422) val_top5=0.9213 val_loss=1.0301  [860.5s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e105.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e105.state.npz (729 arrays, step=32760)
+  step 32800/93600  loss=4.0082  lr=0.00316  (2848.0ms/step avg)
+  step 32900/93600  loss=2.9782  lr=0.00315  (2848.0ms/step avg)
+  step 33000/93600  loss=3.8465  lr=0.00314  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 106] lr=0.003139 loss(train_avg)=3.6181 val_top1=37182/50000 (0.7436) val_top5=0.9224 val_loss=1.0219  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e106.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e106.state.npz (729 arrays, step=33072)
+  step 33100/93600  loss=3.9389  lr=0.00314  (2849.0ms/step avg)
+  step 33200/93600  loss=3.9223  lr=0.00313  (2848.0ms/step avg)
+  step 33300/93600  loss=3.9785  lr=0.00313  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 107] lr=0.003121 loss(train_avg)=3.6072 val_top1=37286/50000 (0.7457) val_top5=0.923 val_loss=1.0143  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e107.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e107.state.npz (729 arrays, step=33384)
+  step 33400/93600  loss=3.8514  lr=0.00312  (2849.0ms/step avg)
+  step 33500/93600  loss=3.9512  lr=0.00311  (2848.0ms/step avg)
+  step 33600/93600  loss=3.9645  lr=0.00311  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 108] lr=0.003102 loss(train_avg)=3.6328 val_top1=37386/50000 (0.7477) val_top5=0.9243 val_loss=1.0071  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e108.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e108.state.npz (729 arrays, step=33696)
+  step 33700/93600  loss=3.5979  lr=0.0031  (2849.0ms/step avg)
+  step 33800/93600  loss=3.6842  lr=0.0031  (2848.0ms/step avg)
+  step 33900/93600  loss=3.8543  lr=0.00309  (2848.0ms/step avg)
+  step 34000/93600  loss=4.4434  lr=0.00308  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 109] lr=0.003083 loss(train_avg)=3.6264 val_top1=37469/50000 (0.7494) val_top5=0.9252 val_loss=1.0003  [860.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e109.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e109.state.npz (729 arrays, step=34008)
+  step 34100/93600  loss=3.8602  lr=0.00308  (2848.0ms/step avg)
+  step 34200/93600  loss=3.3734  lr=0.00307  (2848.0ms/step avg)
+  step 34300/93600  loss=3.3488  lr=0.00307  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 110] lr=0.003064 loss(train_avg)=3.5652 val_top1=37546/50000 (0.7509) val_top5=0.9261 val_loss=0.9939  [861.0s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e110.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e110.state.npz (729 arrays, step=34320)
+  step 34400/93600  loss=4.3519  lr=0.00306  (2848.0ms/step avg)
+  step 34500/93600  loss=3.9824  lr=0.00305  (2848.0ms/step avg)
+  step 34600/93600  loss=3.658  lr=0.00305  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 111] lr=0.003045 loss(train_avg)=3.6279 val_top1=37645/50000 (0.7529) val_top5=0.9267 val_loss=0.9877  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e111.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e111.state.npz (729 arrays, step=34632)
+  step 34700/93600  loss=2.3769  lr=0.00304  (2848.0ms/step avg)
+  step 34800/93600  loss=3.2325  lr=0.00303  (2848.0ms/step avg)
+  step 34900/93600  loss=2.9012  lr=0.00303  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 112] lr=0.003026 loss(train_avg)=3.5534 val_top1=37709/50000 (0.7542) val_top5=0.9273 val_loss=0.982  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e112.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e112.state.npz (729 arrays, step=34944)
+  step 35000/93600  loss=3.854  lr=0.00302  (2848.0ms/step avg)
+  step 35100/93600  loss=3.7923  lr=0.00302  (2848.0ms/step avg)
+  step 35200/93600  loss=3.8296  lr=0.00301  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 113] lr=0.003007 loss(train_avg)=3.5735 val_top1=37790/50000 (0.7558) val_top5=0.928 val_loss=0.9767  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e113.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e113.state.npz (729 arrays, step=35256)
+  step 35300/93600  loss=3.766  lr=0.003  (2848.0ms/step avg)
+  step 35400/93600  loss=3.7154  lr=0.003  (2848.0ms/step avg)
+  step 35500/93600  loss=3.8345  lr=0.00299  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 114] lr=0.002987 loss(train_avg)=3.558 val_top1=37862/50000 (0.7572) val_top5=0.9288 val_loss=0.9717  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e114.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e114.state.npz (729 arrays, step=35568)
+  step 35600/93600  loss=3.5955  lr=0.00299  (2848.0ms/step avg)
+  step 35700/93600  loss=3.8171  lr=0.00298  (2848.0ms/step avg)
+  step 35800/93600  loss=3.7356  lr=0.00297  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 115] lr=0.002968 loss(train_avg)=3.6018 val_top1=37908/50000 (0.7582) val_top5=0.9295 val_loss=0.967  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e115.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e115.state.npz (729 arrays, step=35880)
+  step 35900/93600  loss=3.8416  lr=0.00297  (2848.0ms/step avg)
+  step 36000/93600  loss=3.762  lr=0.00296  (2848.0ms/step avg)
+  step 36100/93600  loss=2.8746  lr=0.00295  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 116] lr=0.002948 loss(train_avg)=3.5695 val_top1=37963/50000 (0.7593) val_top5=0.9304 val_loss=0.9626  [861.1s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e116.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e116.state.npz (729 arrays, step=36192)
+  step 36200/93600  loss=2.5045  lr=0.00295  (2848.0ms/step avg)
+  step 36300/93600  loss=2.9741  lr=0.00294  (2848.0ms/step avg)
+  step 36400/93600  loss=3.932  lr=0.00293  (2848.0ms/step avg)
+  step 36500/93600  loss=3.9543  lr=0.00293  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 117] lr=0.002928 loss(train_avg)=3.5531 val_top1=38035/50000 (0.7607) val_top5=0.931 val_loss=0.9584  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e117.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e117.state.npz (729 arrays, step=36504)
+  step 36600/93600  loss=3.8228  lr=0.00292  (2848.0ms/step avg)
+  step 36700/93600  loss=3.2712  lr=0.00292  (2848.0ms/step avg)
+  step 36800/93600  loss=3.6661  lr=0.00291  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 118] lr=0.002908 loss(train_avg)=3.5545 val_top1=38093/50000 (0.7619) val_top5=0.9317 val_loss=0.9544  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e118.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e118.state.npz (729 arrays, step=36816)
+  step 36900/93600  loss=3.1709  lr=0.0029  (2848.0ms/step avg)
+  step 37000/93600  loss=4.0609  lr=0.0029  (2848.0ms/step avg)
+  step 37100/93600  loss=3.7235  lr=0.00289  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 119] lr=0.002888 loss(train_avg)=3.5593 val_top1=38163/50000 (0.7633) val_top5=0.9323 val_loss=0.9505  [861.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e119.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e119.state.npz (729 arrays, step=37128)
+  step 37200/93600  loss=3.2934  lr=0.00288  (2848.0ms/step avg)
+  step 37300/93600  loss=4.1147  lr=0.00288  (2848.0ms/step avg)
+  step 37400/93600  loss=4.1068  lr=0.00287  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 120] lr=0.002868 loss(train_avg)=3.5587 val_top1=38214/50000 (0.7643) val_top5=0.9328 val_loss=0.947  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e120.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e120.state.npz (729 arrays, step=37440)
+  step 37500/93600  loss=3.3148  lr=0.00286  (2848.0ms/step avg)
+  step 37600/93600  loss=2.8907  lr=0.00286  (2848.0ms/step avg)
+  step 37700/93600  loss=2.76  lr=0.00285  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 121] lr=0.002848 loss(train_avg)=3.5177 val_top1=38295/50000 (0.7659) val_top5=0.9331 val_loss=0.9436  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e121.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e121.state.npz (729 arrays, step=37752)
+  step 37800/93600  loss=3.3308  lr=0.00284  (2848.0ms/step avg)
+  step 37900/93600  loss=3.4455  lr=0.00284  (2848.0ms/step avg)
+  step 38000/93600  loss=3.9044  lr=0.00283  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 122] lr=0.002827 loss(train_avg)=3.5759 val_top1=38354/50000 (0.7671) val_top5=0.9337 val_loss=0.9403  [861.1s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e122.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e122.state.npz (729 arrays, step=38064)
+  step 38100/93600  loss=3.7005  lr=0.00283  (2848.0ms/step avg)
+  step 38200/93600  loss=3.9784  lr=0.00282  (2848.0ms/step avg)
+  step 38300/93600  loss=3.8888  lr=0.00281  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 123] lr=0.002807 loss(train_avg)=3.5569 val_top1=38401/50000 (0.768) val_top5=0.9344 val_loss=0.9372  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e123.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e123.state.npz (729 arrays, step=38376)
+  step 38400/93600  loss=3.7088  lr=0.00281  (2848.0ms/step avg)
+  step 38500/93600  loss=4.3181  lr=0.0028  (2848.0ms/step avg)
+  step 38600/93600  loss=3.1724  lr=0.00279  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 124] lr=0.002786 loss(train_avg)=3.5828 val_top1=38451/50000 (0.769) val_top5=0.9349 val_loss=0.9344  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e124.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e124.state.npz (729 arrays, step=38688)
+  step 38700/93600  loss=3.3222  lr=0.00279  (2848.0ms/step avg)
+  step 38800/93600  loss=3.7142  lr=0.00278  (2848.0ms/step avg)
+  step 38900/93600  loss=4.1706  lr=0.00277  (2848.0ms/step avg)
+  step 39000/93600  loss=4.0476  lr=0.00277  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 125] lr=0.002766 loss(train_avg)=3.568 val_top1=38498/50000 (0.77) val_top5=0.9353 val_loss=0.9317  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e125.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e125.state.npz (729 arrays, step=39000)
+  step 39100/93600  loss=2.3121  lr=0.00276  (2848.0ms/step avg)
+  step 39200/93600  loss=4.0694  lr=0.00275  (2848.0ms/step avg)
+  step 39300/93600  loss=3.0969  lr=0.00275  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 126] lr=0.002745 loss(train_avg)=3.5523 val_top1=38533/50000 (0.7707) val_top5=0.9359 val_loss=0.9292  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e126.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e126.state.npz (729 arrays, step=39312)
+  step 39400/93600  loss=3.8292  lr=0.00274  (2848.0ms/step avg)
+  step 39500/93600  loss=2.8445  lr=0.00273  (2848.0ms/step avg)
+  step 39600/93600  loss=3.9163  lr=0.00273  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 127] lr=0.002724 loss(train_avg)=3.5318 val_top1=38580/50000 (0.7716) val_top5=0.9365 val_loss=0.9267  [861.2s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e127.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e127.state.npz (729 arrays, step=39624)
+  step 39700/93600  loss=3.1523  lr=0.00272  (2848.0ms/step avg)
+  step 39800/93600  loss=3.9306  lr=0.00271  (2848.0ms/step avg)
+  step 39900/93600  loss=3.9088  lr=0.00271  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 128] lr=0.002703 loss(train_avg)=3.5191 val_top1=38608/50000 (0.7722) val_top5=0.9368 val_loss=0.9242  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e128.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e128.state.npz (729 arrays, step=39936)
+  step 40000/93600  loss=3.362  lr=0.0027  (2848.0ms/step avg)
+  step 40100/93600  loss=3.8782  lr=0.00269  (2848.0ms/step avg)
+  step 40200/93600  loss=3.7086  lr=0.00269  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 129] lr=0.002682 loss(train_avg)=3.5402 val_top1=38649/50000 (0.773) val_top5=0.9376 val_loss=0.9218  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e129.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e129.state.npz (729 arrays, step=40248)
+  step 40300/93600  loss=4.2271  lr=0.00268  (2848.0ms/step avg)
+  step 40400/93600  loss=3.8997  lr=0.00267  (2848.0ms/step avg)
+  step 40500/93600  loss=4.4358  lr=0.00267  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 130] lr=0.002661 loss(train_avg)=3.4913 val_top1=38697/50000 (0.7739) val_top5=0.938 val_loss=0.9195  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e130.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e130.state.npz (729 arrays, step=40560)
+  step 40600/93600  loss=2.3107  lr=0.00266  (2848.0ms/step avg)
+  step 40700/93600  loss=3.7338  lr=0.00265  (2848.0ms/step avg)
+  step 40800/93600  loss=4.2173  lr=0.00264  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 131] lr=0.00264 loss(train_avg)=3.5158 val_top1=38746/50000 (0.7749) val_top5=0.9383 val_loss=0.9173  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e131.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e131.state.npz (729 arrays, step=40872)
+  step 40900/93600  loss=3.7021  lr=0.00264  (2848.0ms/step avg)
+  step 41000/93600  loss=4.269  lr=0.00263  (2848.0ms/step avg)
+  step 41100/93600  loss=3.8444  lr=0.00262  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 132] lr=0.002618 loss(train_avg)=3.5402 val_top1=38781/50000 (0.7756) val_top5=0.9387 val_loss=0.9152  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e132.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e132.state.npz (729 arrays, step=41184)
+  step 41200/93600  loss=2.8051  lr=0.00262  (2848.0ms/step avg)
+  step 41300/93600  loss=3.4128  lr=0.00261  (2848.0ms/step avg)
+  step 41400/93600  loss=4.2155  lr=0.0026  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 133] lr=0.002597 loss(train_avg)=3.4825 val_top1=38827/50000 (0.7765) val_top5=0.939 val_loss=0.9132  [861.2s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e133.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e133.state.npz (729 arrays, step=41496)
+  step 41500/93600  loss=3.8906  lr=0.0026  (2848.0ms/step avg)
+  step 41600/93600  loss=3.8004  lr=0.00259  (2848.0ms/step avg)
+  step 41700/93600  loss=3.1211  lr=0.00258  (2848.0ms/step avg)
+  step 41800/93600  loss=3.9475  lr=0.00258  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 134] lr=0.002576 loss(train_avg)=3.4549 val_top1=38886/50000 (0.7777) val_top5=0.9394 val_loss=0.9113  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e134.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e134.state.npz (729 arrays, step=41808)
+  step 41900/93600  loss=3.8625  lr=0.00257  (2848.0ms/step avg)
+  step 42000/93600  loss=3.7596  lr=0.00256  (2848.0ms/step avg)
+  step 42100/93600  loss=3.7299  lr=0.00256  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 135] lr=0.002554 loss(train_avg)=3.4817 val_top1=38922/50000 (0.7784) val_top5=0.9398 val_loss=0.9094  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e135.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e135.state.npz (729 arrays, step=42120)
+  step 42200/93600  loss=3.4738  lr=0.00255  (2848.0ms/step avg)
+  step 42300/93600  loss=2.4988  lr=0.00254  (2848.0ms/step avg)
+  step 42400/93600  loss=2.6707  lr=0.00253  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 136] lr=0.002533 loss(train_avg)=3.5147 val_top1=38963/50000 (0.7793) val_top5=0.9401 val_loss=0.9077  [861.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e136.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e136.state.npz (729 arrays, step=42432)
+  step 42500/93600  loss=3.5746  lr=0.00253  (2848.0ms/step avg)
+  step 42600/93600  loss=2.4134  lr=0.00252  (2848.0ms/step avg)
+  step 42700/93600  loss=3.8119  lr=0.00251  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 137] lr=0.002511 loss(train_avg)=3.5541 val_top1=38987/50000 (0.7797) val_top5=0.9406 val_loss=0.9061  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e137.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e137.state.npz (729 arrays, step=42744)
+  step 42800/93600  loss=2.5085  lr=0.00251  (2848.0ms/step avg)
+  step 42900/93600  loss=3.2612  lr=0.0025  (2848.0ms/step avg)
+  step 43000/93600  loss=4.277  lr=0.00249  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 138] lr=0.002489 loss(train_avg)=3.485 val_top1=39013/50000 (0.7803) val_top5=0.9409 val_loss=0.9045  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e138.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e138.state.npz (729 arrays, step=43056)
+  step 43100/93600  loss=3.7188  lr=0.00249  (2848.0ms/step avg)
+  step 43200/93600  loss=3.9212  lr=0.00248  (2848.0ms/step avg)
+  step 43300/93600  loss=3.6289  lr=0.00247  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 139] lr=0.002467 loss(train_avg)=3.446 val_top1=39046/50000 (0.7809) val_top5=0.9413 val_loss=0.9028  [860.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e139.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e139.state.npz (729 arrays, step=43368)
+  step 43400/93600  loss=3.6895  lr=0.00247  (2848.0ms/step avg)
+  step 43500/93600  loss=4.0469  lr=0.00246  (2848.0ms/step avg)
+  step 43600/93600  loss=3.738  lr=0.00245  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 140] lr=0.002446 loss(train_avg)=3.4726 val_top1=39080/50000 (0.7816) val_top5=0.9416 val_loss=0.9013  [861.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e140.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e140.state.npz (729 arrays, step=43680)
+  step 43700/93600  loss=3.794  lr=0.00244  (2848.0ms/step avg)
+  step 43800/93600  loss=3.665  lr=0.00244  (2848.0ms/step avg)
+  step 43900/93600  loss=3.8219  lr=0.00243  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 141] lr=0.002424 loss(train_avg)=3.4954 val_top1=39105/50000 (0.7821) val_top5=0.9419 val_loss=0.8996  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e141.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e141.state.npz (729 arrays, step=43992)
+  step 44000/93600  loss=3.4877  lr=0.00242  (2848.0ms/step avg)
+  step 44100/93600  loss=2.7895  lr=0.00242  (2848.0ms/step avg)
+  step 44200/93600  loss=3.1152  lr=0.00241  (2848.0ms/step avg)
+  step 44300/93600  loss=3.7933  lr=0.0024  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 142] lr=0.002402 loss(train_avg)=3.4884 val_top1=39126/50000 (0.7825) val_top5=0.9423 val_loss=0.8981  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e142.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e142.state.npz (729 arrays, step=44304)
+  step 44400/93600  loss=3.4174  lr=0.00239  (2848.0ms/step avg)
+  step 44500/93600  loss=2.5347  lr=0.00239  (2848.0ms/step avg)
+  step 44600/93600  loss=3.4706  lr=0.00238  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 143] lr=0.00238 loss(train_avg)=3.4419 val_top1=39147/50000 (0.7829) val_top5=0.9427 val_loss=0.8965  [861.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e143.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e143.state.npz (729 arrays, step=44616)
+  step 44700/93600  loss=2.5608  lr=0.00237  (2848.0ms/step avg)
+  step 44800/93600  loss=3.0902  lr=0.00237  (2848.0ms/step avg)
+  step 44900/93600  loss=3.7673  lr=0.00236  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 144] lr=0.002358 loss(train_avg)=3.3749 val_top1=39175/50000 (0.7835) val_top5=0.9428 val_loss=0.8951  [861.3s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e144.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e144.state.npz (729 arrays, step=44928)
+  step 45000/93600  loss=3.5812  lr=0.00235  (2848.0ms/step avg)
+  step 45100/93600  loss=4.1126  lr=0.00235  (2848.0ms/step avg)
+  step 45200/93600  loss=3.5733  lr=0.00234  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 145] lr=0.002335 loss(train_avg)=3.4469 val_top1=39202/50000 (0.784) val_top5=0.9432 val_loss=0.8935  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e145.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e145.state.npz (729 arrays, step=45240)
+  step 45300/93600  loss=3.8146  lr=0.00233  (2848.0ms/step avg)
+  step 45400/93600  loss=2.3862  lr=0.00232  (2848.0ms/step avg)
+  step 45500/93600  loss=3.7916  lr=0.00232  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 146] lr=0.002313 loss(train_avg)=3.443 val_top1=39220/50000 (0.7844) val_top5=0.9435 val_loss=0.8919  [860.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e146.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e146.state.npz (729 arrays, step=45552)
+  step 45600/93600  loss=3.3126  lr=0.00231  (2848.0ms/step avg)
+  step 45700/93600  loss=3.8166  lr=0.0023  (2848.0ms/step avg)
+  step 45800/93600  loss=2.6717  lr=0.0023  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 147] lr=0.002291 loss(train_avg)=3.4584 val_top1=39263/50000 (0.7853) val_top5=0.9435 val_loss=0.8906  [860.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e147.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e147.state.npz (729 arrays, step=45864)
+  step 45900/93600  loss=3.363  lr=0.00229  (2848.0ms/step avg)
+  step 46000/93600  loss=2.9805  lr=0.00228  (2848.0ms/step avg)
+  step 46100/93600  loss=2.9823  lr=0.00227  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 148] lr=0.002269 loss(train_avg)=3.4525 val_top1=39258/50000 (0.7852) val_top5=0.9439 val_loss=0.8894  [860.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e148.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e148.state.npz (729 arrays, step=46176)
+  step 46200/93600  loss=3.5095  lr=0.00227  (2848.0ms/step avg)
+  step 46300/93600  loss=3.8508  lr=0.00226  (2848.0ms/step avg)
+  step 46400/93600  loss=2.2041  lr=0.00225  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 149] lr=0.002247 loss(train_avg)=3.4009 val_top1=39295/50000 (0.7859) val_top5=0.9443 val_loss=0.888  [860.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e149.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e149.state.npz (729 arrays, step=46488)
+  step 46500/93600  loss=3.8052  lr=0.00225  (2848.0ms/step avg)
+  step 46600/93600  loss=3.5196  lr=0.00224  (2848.0ms/step avg)
+  step 46700/93600  loss=4.3175  lr=0.00223  (2848.0ms/step avg)
+  step 46800/93600  loss=3.5702  lr=0.00222  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 150] lr=0.002224 loss(train_avg)=3.4353 val_top1=39317/50000 (0.7863) val_top5=0.9446 val_loss=0.8867  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e150.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e150.state.npz (729 arrays, step=46800)
+  step 46900/93600  loss=2.9435  lr=0.00222  (2848.0ms/step avg)
+  step 47000/93600  loss=3.656  lr=0.00221  (2848.0ms/step avg)
+  step 47100/93600  loss=3.781  lr=0.0022  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 151] lr=0.002202 loss(train_avg)=3.4439 val_top1=39349/50000 (0.787) val_top5=0.9447 val_loss=0.8856  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e151.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e151.state.npz (729 arrays, step=47112)
+  step 47200/93600  loss=2.6745  lr=0.0022  (2848.0ms/step avg)
+  step 47300/93600  loss=2.3173  lr=0.00219  (2848.0ms/step avg)
+  step 47400/93600  loss=3.2363  lr=0.00218  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 152] lr=0.00218 loss(train_avg)=3.4002 val_top1=39381/50000 (0.7876) val_top5=0.9449 val_loss=0.8842  [860.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e152.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e152.state.npz (729 arrays, step=47424)
+  step 47500/93600  loss=3.8549  lr=0.00217  (2848.0ms/step avg)
+  step 47600/93600  loss=3.7512  lr=0.00217  (2848.0ms/step avg)
+  step 47700/93600  loss=4.2632  lr=0.00216  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 153] lr=0.002157 loss(train_avg)=3.4085 val_top1=39406/50000 (0.7881) val_top5=0.945 val_loss=0.8829  [861.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e153.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e153.state.npz (729 arrays, step=47736)
+  step 47800/93600  loss=4.2348  lr=0.00215  (2848.0ms/step avg)
+  step 47900/93600  loss=4.1678  lr=0.00215  (2848.0ms/step avg)
+  step 48000/93600  loss=3.7112  lr=0.00214  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 154] lr=0.002135 loss(train_avg)=3.4422 val_top1=39442/50000 (0.7888) val_top5=0.9452 val_loss=0.8818  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e154.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e154.state.npz (729 arrays, step=48048)
+  step 48100/93600  loss=3.2782  lr=0.00213  (2848.0ms/step avg)
+  step 48200/93600  loss=3.845  lr=0.00212  (2848.0ms/step avg)
+  step 48300/93600  loss=3.1925  lr=0.00212  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 155] lr=0.002113 loss(train_avg)=3.4184 val_top1=39474/50000 (0.7895) val_top5=0.9456 val_loss=0.8806  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e155.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e155.state.npz (729 arrays, step=48360)
+  step 48400/93600  loss=3.1642  lr=0.00211  (2848.0ms/step avg)
+  step 48500/93600  loss=3.0314  lr=0.0021  (2848.0ms/step avg)
+  step 48600/93600  loss=2.6115  lr=0.0021  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 156] lr=0.00209 loss(train_avg)=3.3772 val_top1=39497/50000 (0.7899) val_top5=0.946 val_loss=0.8793  [861.2s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e156.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e156.state.npz (729 arrays, step=48672)
+  step 48700/93600  loss=3.6931  lr=0.00209  (2848.0ms/step avg)
+  step 48800/93600  loss=3.5245  lr=0.00208  (2848.0ms/step avg)
+  step 48900/93600  loss=4.0137  lr=0.00207  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 157] lr=0.002068 loss(train_avg)=3.377 val_top1=39523/50000 (0.7905) val_top5=0.9463 val_loss=0.8779  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e157.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e157.state.npz (729 arrays, step=48984)
+  step 49000/93600  loss=4.2475  lr=0.00207  (2848.0ms/step avg)
+  step 49100/93600  loss=2.6625  lr=0.00206  (2848.0ms/step avg)
+  step 49200/93600  loss=3.7328  lr=0.00205  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 158] lr=0.002045 loss(train_avg)=3.3795 val_top1=39560/50000 (0.7912) val_top5=0.9467 val_loss=0.8766  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e158.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e158.state.npz (729 arrays, step=49296)
+  step 49300/93600  loss=4.2003  lr=0.00205  (2848.0ms/step avg)
+  step 49400/93600  loss=3.6589  lr=0.00204  (2848.0ms/step avg)
+  step 49500/93600  loss=3.2715  lr=0.00203  (2848.0ms/step avg)
+  step 49600/93600  loss=3.4887  lr=0.00202  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 159] lr=0.002023 loss(train_avg)=3.44 val_top1=39576/50000 (0.7915) val_top5=0.9468 val_loss=0.8755  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e159.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e159.state.npz (729 arrays, step=49608)
+  step 49700/93600  loss=2.6632  lr=0.00202  (2848.0ms/step avg)
+  step 49800/93600  loss=2.986  lr=0.00201  (2848.0ms/step avg)
+  step 49900/93600  loss=2.2587  lr=0.002  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 160] lr=0.002001 loss(train_avg)=3.3821 val_top1=39597/50000 (0.7919) val_top5=0.9472 val_loss=0.8742  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e160.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e160.state.npz (729 arrays, step=49920)
+  step 50000/93600  loss=2.9045  lr=0.00199  (2848.0ms/step avg)
+  step 50100/93600  loss=4.2456  lr=0.00199  (2848.0ms/step avg)
+  step 50200/93600  loss=3.4683  lr=0.00198  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 161] lr=0.001978 loss(train_avg)=3.425 val_top1=39628/50000 (0.7926) val_top5=0.9473 val_loss=0.8729  [861.2s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e161.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e161.state.npz (729 arrays, step=50232)
+  step 50300/93600  loss=3.201  lr=0.00197  (2848.0ms/step avg)
+  step 50400/93600  loss=3.5062  lr=0.00197  (2848.0ms/step avg)
+  step 50500/93600  loss=2.8894  lr=0.00196  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 162] lr=0.001956 loss(train_avg)=3.3331 val_top1=39658/50000 (0.7932) val_top5=0.9475 val_loss=0.8715  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e162.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e162.state.npz (729 arrays, step=50544)
+  step 50600/93600  loss=2.8013  lr=0.00195  (2848.0ms/step avg)
+  step 50700/93600  loss=3.0637  lr=0.00194  (2848.0ms/step avg)
+  step 50800/93600  loss=3.2784  lr=0.00194  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 163] lr=0.001933 loss(train_avg)=3.4126 val_top1=39679/50000 (0.7936) val_top5=0.9478 val_loss=0.8703  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e163.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e163.state.npz (729 arrays, step=50856)
+  step 50900/93600  loss=4.0231  lr=0.00193  (2848.0ms/step avg)
+  step 51000/93600  loss=3.5749  lr=0.00192  (2848.0ms/step avg)
+  step 51100/93600  loss=3.4407  lr=0.00192  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 164] lr=0.001911 loss(train_avg)=3.3705 val_top1=39699/50000 (0.794) val_top5=0.9479 val_loss=0.869  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e164.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e164.state.npz (729 arrays, step=51168)
+  step 51200/93600  loss=3.4963  lr=0.00191  (2848.0ms/step avg)
+  step 51300/93600  loss=4.1945  lr=0.0019  (2848.0ms/step avg)
+  step 51400/93600  loss=3.6233  lr=0.00189  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 165] lr=0.001888 loss(train_avg)=3.3235 val_top1=39713/50000 (0.7943) val_top5=0.9479 val_loss=0.8675  [861.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e165.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e165.state.npz (729 arrays, step=51480)
+  step 51500/93600  loss=2.3582  lr=0.00189  (2848.0ms/step avg)
+  step 51600/93600  loss=4.2963  lr=0.00188  (2848.0ms/step avg)
+  step 51700/93600  loss=3.4158  lr=0.00187  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 166] lr=0.001866 loss(train_avg)=3.4415 val_top1=39732/50000 (0.7946) val_top5=0.9481 val_loss=0.8662  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e166.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e166.state.npz (729 arrays, step=51792)
+  step 51800/93600  loss=2.3543  lr=0.00187  (2848.0ms/step avg)
+  step 51900/93600  loss=2.6346  lr=0.00186  (2848.0ms/step avg)
+  step 52000/93600  loss=3.5503  lr=0.00185  (2848.0ms/step avg)
+  step 52100/93600  loss=4.2016  lr=0.00184  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 167] lr=0.001844 loss(train_avg)=3.3021 val_top1=39769/50000 (0.7954) val_top5=0.948 val_loss=0.8646  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e167.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e167.state.npz (729 arrays, step=52104)
+  step 52200/93600  loss=3.4796  lr=0.00184  (2848.0ms/step avg)
+  step 52300/93600  loss=4.0965  lr=0.00183  (2848.0ms/step avg)
+  step 52400/93600  loss=2.9972  lr=0.00182  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 168] lr=0.001821 loss(train_avg)=3.3892 val_top1=39778/50000 (0.7956) val_top5=0.9481 val_loss=0.8634  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e168.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e168.state.npz (729 arrays, step=52416)
+  step 52500/93600  loss=2.4535  lr=0.00182  (2848.0ms/step avg)
+  step 52600/93600  loss=3.7962  lr=0.00181  (2848.0ms/step avg)
+  step 52700/93600  loss=2.2287  lr=0.0018  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 169] lr=0.001799 loss(train_avg)=3.3523 val_top1=39805/50000 (0.7961) val_top5=0.9485 val_loss=0.8621  [861.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e169.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e169.state.npz (729 arrays, step=52728)
+  step 52800/93600  loss=2.985  lr=0.00179  (2848.0ms/step avg)
+  step 52900/93600  loss=2.7363  lr=0.00179  (2848.0ms/step avg)
+  step 53000/93600  loss=3.8319  lr=0.00178  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 170] lr=0.001777 loss(train_avg)=3.3506 val_top1=39829/50000 (0.7966) val_top5=0.9488 val_loss=0.8608  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e170.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e170.state.npz (729 arrays, step=53040)
+  step 53100/93600  loss=4.0186  lr=0.00177  (2848.0ms/step avg)
+  step 53200/93600  loss=2.8626  lr=0.00177  (2848.0ms/step avg)
+  step 53300/93600  loss=2.9366  lr=0.00176  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 171] lr=0.001754 loss(train_avg)=3.3281 val_top1=39835/50000 (0.7967) val_top5=0.9492 val_loss=0.8595  [861.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e171.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e171.state.npz (729 arrays, step=53352)
+  step 53400/93600  loss=3.5683  lr=0.00175  (2848.0ms/step avg)
+  step 53500/93600  loss=3.6656  lr=0.00174  (2848.0ms/step avg)
+  step 53600/93600  loss=3.6357  lr=0.00174  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 172] lr=0.001732 loss(train_avg)=3.3598 val_top1=39841/50000 (0.7968) val_top5=0.9496 val_loss=0.8582  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e172.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e172.state.npz (729 arrays, step=53664)
+  step 53700/93600  loss=4.0682  lr=0.00173  (2848.0ms/step avg)
+  step 53800/93600  loss=4.1051  lr=0.00172  (2848.0ms/step avg)
+  step 53900/93600  loss=3.3467  lr=0.00172  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 173] lr=0.00171 loss(train_avg)=3.335 val_top1=39844/50000 (0.7969) val_top5=0.9498 val_loss=0.8568  [861.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e173.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e173.state.npz (729 arrays, step=53976)
+  step 54000/93600  loss=4.1301  lr=0.00171  (2848.0ms/step avg)
+  step 54100/93600  loss=3.6471  lr=0.0017  (2848.0ms/step avg)
+  step 54200/93600  loss=3.4283  lr=0.00169  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 174] lr=0.001688 loss(train_avg)=3.3078 val_top1=39854/50000 (0.7971) val_top5=0.9499 val_loss=0.8554  [861.2s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e174.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e174.state.npz (729 arrays, step=54288)
+  step 54300/93600  loss=3.339  lr=0.00169  (2848.0ms/step avg)
+  step 54400/93600  loss=3.2559  lr=0.00168  (2848.0ms/step avg)
+  step 54500/93600  loss=3.293  lr=0.00167  (2848.0ms/step avg)
+  step 54600/93600  loss=2.7814  lr=0.00167  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 175] lr=0.001666 loss(train_avg)=3.2985 val_top1=39877/50000 (0.7975) val_top5=0.9502 val_loss=0.854  [861.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e175.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e175.state.npz (729 arrays, step=54600)
+  step 54700/93600  loss=3.9091  lr=0.00166  (2848.0ms/step avg)
+  step 54800/93600  loss=4.1764  lr=0.00165  (2848.0ms/step avg)
+  step 54900/93600  loss=3.7041  lr=0.00164  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 176] lr=0.001644 loss(train_avg)=3.3177 val_top1=39895/50000 (0.7979) val_top5=0.9506 val_loss=0.8526  [861.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e176.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e176.state.npz (729 arrays, step=54912)
+  step 55000/93600  loss=3.6818  lr=0.00164  (2848.0ms/step avg)
+  step 55100/93600  loss=4.109  lr=0.00163  (2848.0ms/step avg)
+  step 55200/93600  loss=2.2142  lr=0.00162  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 177] lr=0.001621 loss(train_avg)=3.3549 val_top1=39926/50000 (0.7985) val_top5=0.9509 val_loss=0.8514  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e177.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e177.state.npz (729 arrays, step=55224)
+  step 55300/93600  loss=3.6126  lr=0.00162  (2848.0ms/step avg)
+  step 55400/93600  loss=3.5763  lr=0.00161  (2848.0ms/step avg)
+  step 55500/93600  loss=3.2012  lr=0.0016  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 178] lr=0.001599 loss(train_avg)=3.2793 val_top1=39952/50000 (0.799) val_top5=0.9512 val_loss=0.8501  [861.1s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e178.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e178.state.npz (729 arrays, step=55536)
+  step 55600/93600  loss=3.2943  lr=0.00159  (2848.0ms/step avg)
+  step 55700/93600  loss=3.0442  lr=0.00159  (2848.0ms/step avg)
+  step 55800/93600  loss=2.2162  lr=0.00158  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 179] lr=0.001578 loss(train_avg)=3.3551 val_top1=39956/50000 (0.7991) val_top5=0.9513 val_loss=0.8488  [860.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e179.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e179.state.npz (729 arrays, step=55848)
+  step 55900/93600  loss=3.6615  lr=0.00157  (2848.0ms/step avg)
+  step 56000/93600  loss=3.637  lr=0.00157  (2848.0ms/step avg)
+  step 56100/93600  loss=4.1304  lr=0.00156  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 180] lr=0.001556 loss(train_avg)=3.299 val_top1=39985/50000 (0.7997) val_top5=0.9513 val_loss=0.8475  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e180.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e180.state.npz (729 arrays, step=56160)
+  step 56200/93600  loss=2.4435  lr=0.00155  (2848.0ms/step avg)
+  step 56300/93600  loss=3.6337  lr=0.00155  (2848.0ms/step avg)
+  step 56400/93600  loss=4.0747  lr=0.00154  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 181] lr=0.001534 loss(train_avg)=3.3109 val_top1=39988/50000 (0.7998) val_top5=0.9515 val_loss=0.8461  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e181.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e181.state.npz (729 arrays, step=56472)
+  step 56500/93600  loss=3.2999  lr=0.00153  (2848.0ms/step avg)
+  step 56600/93600  loss=3.9177  lr=0.00152  (2848.0ms/step avg)
+  step 56700/93600  loss=3.131  lr=0.00152  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 182] lr=0.001512 loss(train_avg)=3.3372 val_top1=40017/50000 (0.8003) val_top5=0.9516 val_loss=0.8448  [861.0s train, 26.3s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e182.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e182.state.npz (729 arrays, step=56784)
+  step 56800/93600  loss=3.294  lr=0.00151  (2848.0ms/step avg)
+  step 56900/93600  loss=2.2121  lr=0.0015  (2848.0ms/step avg)
+  step 57000/93600  loss=2.3538  lr=0.0015  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 183] lr=0.00149 loss(train_avg)=3.2755 val_top1=40036/50000 (0.8007) val_top5=0.9518 val_loss=0.8434  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e183.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e183.state.npz (729 arrays, step=57096)
+  step 57100/93600  loss=2.2609  lr=0.00149  (2848.0ms/step avg)
+  step 57200/93600  loss=4.1229  lr=0.00148  (2848.0ms/step avg)
+  step 57300/93600  loss=2.5657  lr=0.00148  (2848.0ms/step avg)
+  step 57400/93600  loss=3.6281  lr=0.00147  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 184] lr=0.001469 loss(train_avg)=3.2979 val_top1=40060/50000 (0.8012) val_top5=0.9518 val_loss=0.8421  [860.7s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e184.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e184.state.npz (729 arrays, step=57408)
+  step 57500/93600  loss=3.6027  lr=0.00146  (2848.0ms/step avg)
+  step 57600/93600  loss=3.7539  lr=0.00146  (2848.0ms/step avg)
+  step 57700/93600  loss=4.0719  lr=0.00145  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 185] lr=0.001447 loss(train_avg)=3.3104 val_top1=40064/50000 (0.8013) val_top5=0.952 val_loss=0.8408  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e185.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e185.state.npz (729 arrays, step=57720)
+  step 57800/93600  loss=2.4126  lr=0.00144  (2848.0ms/step avg)
+  step 57900/93600  loss=3.2748  lr=0.00143  (2848.0ms/step avg)
+  step 58000/93600  loss=2.2579  lr=0.00143  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 186] lr=0.001426 loss(train_avg)=3.3378 val_top1=40076/50000 (0.8015) val_top5=0.9521 val_loss=0.8396  [860.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e186.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e186.state.npz (729 arrays, step=58032)
+  step 58100/93600  loss=4.0665  lr=0.00142  (2848.0ms/step avg)
+  step 58200/93600  loss=3.6707  lr=0.00141  (2848.0ms/step avg)
+  step 58300/93600  loss=3.684  lr=0.00141  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 187] lr=0.001404 loss(train_avg)=3.2909 val_top1=40089/50000 (0.8018) val_top5=0.9521 val_loss=0.8384  [860.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e187.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e187.state.npz (729 arrays, step=58344)
+  step 58400/93600  loss=3.4966  lr=0.0014  (2848.0ms/step avg)
+  step 58500/93600  loss=4.0092  lr=0.00139  (2848.0ms/step avg)
+  step 58600/93600  loss=2.5894  lr=0.00139  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 188] lr=0.001383 loss(train_avg)=3.284 val_top1=40102/50000 (0.802) val_top5=0.9521 val_loss=0.837  [860.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e188.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e188.state.npz (729 arrays, step=58656)
+  step 58700/93600  loss=3.1208  lr=0.00138  (2848.0ms/step avg)
+  step 58800/93600  loss=2.8303  lr=0.00137  (2848.0ms/step avg)
+  step 58900/93600  loss=2.7558  lr=0.00137  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 189] lr=0.001361 loss(train_avg)=3.2891 val_top1=40128/50000 (0.8026) val_top5=0.9524 val_loss=0.8359  [860.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e189.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e189.state.npz (729 arrays, step=58968)
+  step 59000/93600  loss=3.1986  lr=0.00136  (2848.0ms/step avg)
+  step 59100/93600  loss=3.449  lr=0.00135  (2848.0ms/step avg)
+  step 59200/93600  loss=2.6403  lr=0.00135  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 190] lr=0.00134 loss(train_avg)=3.2468 val_top1=40153/50000 (0.8031) val_top5=0.9527 val_loss=0.8346  [860.6s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e190.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e190.state.npz (729 arrays, step=59280)
+  step 59300/93600  loss=2.9787  lr=0.00134  (2848.0ms/step avg)
+  step 59400/93600  loss=2.3204  lr=0.00133  (2848.0ms/step avg)
+  step 59500/93600  loss=4.1266  lr=0.00133  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 191] lr=0.001319 loss(train_avg)=3.2401 val_top1=40167/50000 (0.8033) val_top5=0.9529 val_loss=0.8332  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e191.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e191.state.npz (729 arrays, step=59592)
+  step 59600/93600  loss=3.3714  lr=0.00132  (2848.0ms/step avg)
+  step 59700/93600  loss=3.6667  lr=0.00131  (2848.0ms/step avg)
+  step 59800/93600  loss=3.3511  lr=0.0013  (2848.0ms/step avg)
+  step 59900/93600  loss=2.1902  lr=0.0013  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 192] lr=0.001298 loss(train_avg)=3.2473 val_top1=40184/50000 (0.8037) val_top5=0.9531 val_loss=0.8319  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e192.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e192.state.npz (729 arrays, step=59904)
+  step 60000/93600  loss=3.5698  lr=0.00129  (2848.0ms/step avg)
+  step 60100/93600  loss=2.6976  lr=0.00128  (2848.0ms/step avg)
+  step 60200/93600  loss=3.646  lr=0.00128  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 193] lr=0.001277 loss(train_avg)=3.2587 val_top1=40208/50000 (0.8042) val_top5=0.9532 val_loss=0.8305  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e193.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e193.state.npz (729 arrays, step=60216)
+  step 60300/93600  loss=2.5294  lr=0.00127  (2848.0ms/step avg)
+  step 60400/93600  loss=3.506  lr=0.00126  (2848.0ms/step avg)
+  step 60500/93600  loss=3.9111  lr=0.00126  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 194] lr=0.001256 loss(train_avg)=3.2501 val_top1=40217/50000 (0.8043) val_top5=0.9535 val_loss=0.8292  [861.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e194.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e194.state.npz (729 arrays, step=60528)
+  step 60600/93600  loss=2.4863  lr=0.00125  (2848.0ms/step avg)
+  step 60700/93600  loss=4.0415  lr=0.00124  (2848.0ms/step avg)
+  step 60800/93600  loss=2.1954  lr=0.00124  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 195] lr=0.001235 loss(train_avg)=3.1796 val_top1=40228/50000 (0.8046) val_top5=0.9536 val_loss=0.8277  [860.8s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e195.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e195.state.npz (729 arrays, step=60840)
+  step 60900/93600  loss=3.5575  lr=0.00123  (2848.0ms/step avg)
+  step 61000/93600  loss=3.1104  lr=0.00122  (2848.0ms/step avg)
+  step 61100/93600  loss=2.1765  lr=0.00122  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 196] lr=0.001215 loss(train_avg)=3.221 val_top1=40246/50000 (0.8049) val_top5=0.9535 val_loss=0.8265  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e196.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e196.state.npz (729 arrays, step=61152)
+  step 61200/93600  loss=2.5076  lr=0.00121  (2848.0ms/step avg)
+  step 61300/93600  loss=3.4913  lr=0.0012  (2848.0ms/step avg)
+  step 61400/93600  loss=2.7054  lr=0.0012  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 197] lr=0.001194 loss(train_avg)=3.2577 val_top1=40254/50000 (0.8051) val_top5=0.9537 val_loss=0.8253  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e197.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e197.state.npz (729 arrays, step=61464)
+  step 61500/93600  loss=3.0222  lr=0.00119  (2848.0ms/step avg)
+  step 61600/93600  loss=3.984  lr=0.00119  (2848.0ms/step avg)
+  step 61700/93600  loss=2.0447  lr=0.00118  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 198] lr=0.001174 loss(train_avg)=3.2027 val_top1=40263/50000 (0.8053) val_top5=0.9537 val_loss=0.8241  [860.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e198.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e198.state.npz (729 arrays, step=61776)
+  step 61800/93600  loss=3.1221  lr=0.00117  (2848.0ms/step avg)
+  step 61900/93600  loss=3.4779  lr=0.00117  (2848.0ms/step avg)
+  step 62000/93600  loss=3.0311  lr=0.00116  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 199] lr=0.001153 loss(train_avg)=3.2294 val_top1=40261/50000 (0.8052) val_top5=0.9539 val_loss=0.8228  [860.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e199.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e199.state.npz (729 arrays, step=62088)
+  step 62100/93600  loss=3.5736  lr=0.00115  (2848.0ms/step avg)
+  step 62200/93600  loss=3.1619  lr=0.00115  (2848.0ms/step avg)
+  step 62300/93600  loss=3.5689  lr=0.00114  (2848.0ms/step avg)
+  step 62400/93600  loss=3.5127  lr=0.00113  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 200] lr=0.001133 loss(train_avg)=3.1785 val_top1=40273/50000 (0.8055) val_top5=0.954 val_loss=0.8215  [861.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e200.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e200.state.npz (729 arrays, step=62400)
+  step 62500/93600  loss=2.0618  lr=0.00113  (2848.0ms/step avg)
+  step 62600/93600  loss=3.3332  lr=0.00112  (2848.0ms/step avg)
+  step 62700/93600  loss=3.7263  lr=0.00111  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 201] lr=0.001113 loss(train_avg)=3.2374 val_top1=40293/50000 (0.8059) val_top5=0.9543 val_loss=0.8203  [861.2s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e201.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e201.state.npz (729 arrays, step=62712)
+  step 62800/93600  loss=2.4979  lr=0.00111  (2848.0ms/step avg)
+  step 62900/93600  loss=3.2198  lr=0.0011  (2848.0ms/step avg)
+  step 63000/93600  loss=3.2572  lr=0.00109  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 202] lr=0.001093 loss(train_avg)=3.1933 val_top1=40304/50000 (0.8061) val_top5=0.9545 val_loss=0.819  [861.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e202.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e202.state.npz (729 arrays, step=63024)
+  step 63100/93600  loss=2.7568  lr=0.00109  (2848.0ms/step avg)
+  step 63200/93600  loss=3.874  lr=0.00108  (2848.0ms/step avg)
+  step 63300/93600  loss=3.127  lr=0.00108  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 203] lr=0.001073 loss(train_avg)=3.2257 val_top1=40324/50000 (0.8065) val_top5=0.9546 val_loss=0.8178  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e203.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e203.state.npz (729 arrays, step=63336)
+  step 63400/93600  loss=3.3673  lr=0.00107  (2848.0ms/step avg)
+  step 63500/93600  loss=3.2015  lr=0.00106  (2848.0ms/step avg)
+  step 63600/93600  loss=3.5533  lr=0.00106  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 204] lr=0.001053 loss(train_avg)=3.2323 val_top1=40334/50000 (0.8067) val_top5=0.9549 val_loss=0.8167  [861.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e204.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e204.state.npz (729 arrays, step=63648)
+  step 63700/93600  loss=3.3614  lr=0.00105  (2848.0ms/step avg)
+  step 63800/93600  loss=2.2918  lr=0.00104  (2848.0ms/step avg)
+  step 63900/93600  loss=3.4756  lr=0.00104  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 205] lr=0.001033 loss(train_avg)=3.1815 val_top1=40332/50000 (0.8066) val_top5=0.955 val_loss=0.8155  [861.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e205.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e205.state.npz (729 arrays, step=63960)
+  step 64000/93600  loss=3.2503  lr=0.00103  (2848.0ms/step avg)
+  step 64100/93600  loss=2.4136  lr=0.00102  (2848.0ms/step avg)
+  step 64200/93600  loss=3.4556  lr=0.00102  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 206] lr=0.001014 loss(train_avg)=3.1697 val_top1=40337/50000 (0.8067) val_top5=0.9551 val_loss=0.8144  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e206.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e206.state.npz (729 arrays, step=64272)
+  step 64300/93600  loss=4.0014  lr=0.00101  (2848.0ms/step avg)
+  step 64400/93600  loss=2.5622  lr=0.00101  (2848.0ms/step avg)
+  step 64500/93600  loss=3.1991  lr=0.001  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 207] lr=0.000994 loss(train_avg)=3.2321 val_top1=40345/50000 (0.8069) val_top5=0.9551 val_loss=0.8133  [861.7s train, 26.8s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e207.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e207.state.npz (729 arrays, step=64584)
+  step 64600/93600  loss=3.036  lr=0.00099  (2848.0ms/step avg)
+  step 64700/93600  loss=3.5738  lr=0.00099  (2848.0ms/step avg)
+  step 64800/93600  loss=3.3637  lr=0.00098  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 208] lr=0.000975 loss(train_avg)=3.1664 val_top1=40355/50000 (0.8071) val_top5=0.9554 val_loss=0.8121  [861.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e208.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e208.state.npz (729 arrays, step=64896)
+  step 64900/93600  loss=3.4772  lr=0.00097  (2848.0ms/step avg)
+  step 65000/93600  loss=3.6995  lr=0.00097  (2848.0ms/step avg)
+  step 65100/93600  loss=3.9892  lr=0.00096  (2848.0ms/step avg)
+  step 65200/93600  loss=3.7666  lr=0.00096  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 209] lr=0.000956 loss(train_avg)=3.1528 val_top1=40373/50000 (0.8075) val_top5=0.9556 val_loss=0.8111  [861.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e209.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e209.state.npz (729 arrays, step=65208)
+  step 65300/93600  loss=3.2846  lr=0.00095  (2848.0ms/step avg)
+  step 65400/93600  loss=3.2247  lr=0.00094  (2848.0ms/step avg)
+  step 65500/93600  loss=2.9005  lr=0.00094  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 210] lr=0.000937 loss(train_avg)=3.1854 val_top1=40396/50000 (0.8079) val_top5=0.9557 val_loss=0.8099  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e210.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e210.state.npz (729 arrays, step=65520)
+  step 65600/93600  loss=3.1151  lr=0.00093  (2848.0ms/step avg)
+  step 65700/93600  loss=3.3561  lr=0.00093  (2848.0ms/step avg)
+  step 65800/93600  loss=3.3651  lr=0.00092  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 211] lr=0.000918 loss(train_avg)=3.1362 val_top1=40411/50000 (0.8082) val_top5=0.9559 val_loss=0.8089  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e211.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e211.state.npz (729 arrays, step=65832)
+  step 65900/93600  loss=3.3943  lr=0.00091  (2848.0ms/step avg)
+  step 66000/93600  loss=3.1067  lr=0.00091  (2848.0ms/step avg)
+  step 66100/93600  loss=3.9603  lr=0.0009  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 212] lr=0.000899 loss(train_avg)=3.1879 val_top1=40432/50000 (0.8086) val_top5=0.956 val_loss=0.8078  [861.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e212.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e212.state.npz (729 arrays, step=66144)
+  step 66200/93600  loss=3.1759  lr=0.0009  (2848.0ms/step avg)
+  step 66300/93600  loss=3.293  lr=0.00089  (2848.0ms/step avg)
+  step 66400/93600  loss=3.4506  lr=0.00088  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 213] lr=0.00088 loss(train_avg)=3.1419 val_top1=40453/50000 (0.8091) val_top5=0.956 val_loss=0.8067  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e213.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e213.state.npz (729 arrays, step=66456)
+  step 66500/93600  loss=3.4458  lr=0.00088  (2848.0ms/step avg)
+  step 66600/93600  loss=3.1191  lr=0.00087  (2848.0ms/step avg)
+  step 66700/93600  loss=2.3088  lr=0.00087  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 214] lr=0.000862 loss(train_avg)=3.188 val_top1=40456/50000 (0.8091) val_top5=0.956 val_loss=0.8057  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e214.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e214.state.npz (729 arrays, step=66768)
+  step 66800/93600  loss=3.1717  lr=0.00086  (2848.0ms/step avg)
+  step 66900/93600  loss=3.3213  lr=0.00085  (2848.0ms/step avg)
+  step 67000/93600  loss=2.5173  lr=0.00085  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 215] lr=0.000844 loss(train_avg)=3.1661 val_top1=40460/50000 (0.8092) val_top5=0.9563 val_loss=0.8049  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e215.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e215.state.npz (729 arrays, step=67080)
+  step 67100/93600  loss=3.7335  lr=0.00084  (2848.0ms/step avg)
+  step 67200/93600  loss=2.0013  lr=0.00084  (2848.0ms/step avg)
+  step 67300/93600  loss=3.1266  lr=0.00083  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 216] lr=0.000825 loss(train_avg)=3.155 val_top1=40477/50000 (0.8095) val_top5=0.9563 val_loss=0.8039  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e216.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e216.state.npz (729 arrays, step=67392)
+  step 67400/93600  loss=3.1779  lr=0.00082  (2848.0ms/step avg)
+  step 67500/93600  loss=3.2032  lr=0.00082  (2848.0ms/step avg)
+  step 67600/93600  loss=3.6316  lr=0.00081  (2848.0ms/step avg)
+  step 67700/93600  loss=3.2514  lr=0.00081  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 217] lr=0.000807 loss(train_avg)=3.149 val_top1=40481/50000 (0.8096) val_top5=0.9565 val_loss=0.8029  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e217.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e217.state.npz (729 arrays, step=67704)
+  step 67800/93600  loss=2.773  lr=0.0008  (2848.0ms/step avg)
+  step 67900/93600  loss=2.7924  lr=0.0008  (2848.0ms/step avg)
+  step 68000/93600  loss=3.4934  lr=0.00079  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 218] lr=0.000789 loss(train_avg)=3.1173 val_top1=40498/50000 (0.81) val_top5=0.9566 val_loss=0.8018  [862.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e218.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e218.state.npz (729 arrays, step=68016)
+  step 68100/93600  loss=3.4083  lr=0.00078  (2848.0ms/step avg)
+  step 68200/93600  loss=3.5132  lr=0.00078  (2848.0ms/step avg)
+  step 68300/93600  loss=3.6251  lr=0.00077  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 219] lr=0.000772 loss(train_avg)=3.1659 val_top1=40519/50000 (0.8104) val_top5=0.9568 val_loss=0.8008  [862.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e219.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e219.state.npz (729 arrays, step=68328)
+  step 68400/93600  loss=3.4745  lr=0.00077  (2848.0ms/step avg)
+  step 68500/93600  loss=2.9178  lr=0.00076  (2848.0ms/step avg)
+  step 68600/93600  loss=3.7111  lr=0.00076  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 220] lr=0.000754 loss(train_avg)=3.1006 val_top1=40540/50000 (0.8108) val_top5=0.9571 val_loss=0.7997  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e220.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e220.state.npz (729 arrays, step=68640)
+  step 68700/93600  loss=1.9383  lr=0.00075  (2848.0ms/step avg)
+  step 68800/93600  loss=2.9165  lr=0.00074  (2848.0ms/step avg)
+  step 68900/93600  loss=3.2761  lr=0.00074  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 221] lr=0.000736 loss(train_avg)=3.0753 val_top1=40542/50000 (0.8108) val_top5=0.9573 val_loss=0.7987  [862.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e221.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e221.state.npz (729 arrays, step=68952)
+  step 69000/93600  loss=3.4357  lr=0.00073  (2848.0ms/step avg)
+  step 69100/93600  loss=2.4624  lr=0.00073  (2848.0ms/step avg)
+  step 69200/93600  loss=3.6899  lr=0.00072  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 222] lr=0.000719 loss(train_avg)=3.0779 val_top1=40566/50000 (0.8113) val_top5=0.9574 val_loss=0.7977  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e222.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e222.state.npz (729 arrays, step=69264)
+  step 69300/93600  loss=3.4076  lr=0.00072  (2848.0ms/step avg)
+  step 69400/93600  loss=3.8195  lr=0.00071  (2848.0ms/step avg)
+  step 69500/93600  loss=2.8257  lr=0.00071  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 223] lr=0.000702 loss(train_avg)=3.1161 val_top1=40581/50000 (0.8116) val_top5=0.9573 val_loss=0.7968  [861.9s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e223.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e223.state.npz (729 arrays, step=69576)
+  step 69600/93600  loss=2.7519  lr=0.0007  (2848.0ms/step avg)
+  step 69700/93600  loss=3.2337  lr=0.0007  (2848.0ms/step avg)
+  step 69800/93600  loss=3.8054  lr=0.00069  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 224] lr=0.000685 loss(train_avg)=3.0766 val_top1=40595/50000 (0.8119) val_top5=0.9576 val_loss=0.7959  [862.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e224.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e224.state.npz (729 arrays, step=69888)
+  step 69900/93600  loss=3.3557  lr=0.00068  (2848.0ms/step avg)
+  step 70000/93600  loss=3.8537  lr=0.00068  (2848.0ms/step avg)
+  step 70100/93600  loss=3.1358  lr=0.00067  (2848.0ms/step avg)
+  step 70200/93600  loss=3.391  lr=0.00067  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 225] lr=0.000668 loss(train_avg)=3.1509 val_top1=40603/50000 (0.8121) val_top5=0.9575 val_loss=0.7951  [862.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e225.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e225.state.npz (729 arrays, step=70200)
+  step 70300/93600  loss=3.3567  lr=0.00066  (2848.0ms/step avg)
+  step 70400/93600  loss=2.7101  lr=0.00066  (2848.0ms/step avg)
+  step 70500/93600  loss=3.8785  lr=0.00065  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 226] lr=0.000652 loss(train_avg)=3.0643 val_top1=40621/50000 (0.8124) val_top5=0.9578 val_loss=0.7942  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e226.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e226.state.npz (729 arrays, step=70512)
+  step 70600/93600  loss=2.1295  lr=0.00065  (2848.0ms/step avg)
+  step 70700/93600  loss=3.1559  lr=0.00064  (2848.0ms/step avg)
+  step 70800/93600  loss=3.0512  lr=0.00064  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 227] lr=0.000635 loss(train_avg)=3.0702 val_top1=40618/50000 (0.8124) val_top5=0.958 val_loss=0.7932  [862.1s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e227.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e227.state.npz (729 arrays, step=70824)
+  step 70900/93600  loss=3.365  lr=0.00063  (2848.0ms/step avg)
+  step 71000/93600  loss=2.5823  lr=0.00063  (2848.0ms/step avg)
+  step 71100/93600  loss=3.3711  lr=0.00062  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 228] lr=0.000619 loss(train_avg)=3.0652 val_top1=40631/50000 (0.8126) val_top5=0.9582 val_loss=0.7922  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e228.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e228.state.npz (729 arrays, step=71136)
+  step 71200/93600  loss=3.3925  lr=0.00062  (2848.0ms/step avg)
+  step 71300/93600  loss=1.9742  lr=0.00061  (2848.0ms/step avg)
+  step 71400/93600  loss=3.4889  lr=0.00061  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 229] lr=0.000603 loss(train_avg)=3.0745 val_top1=40632/50000 (0.8126) val_top5=0.9582 val_loss=0.7912  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e229.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e229.state.npz (729 arrays, step=71448)
+  step 71500/93600  loss=3.138  lr=0.0006  (2848.0ms/step avg)
+  step 71600/93600  loss=3.2794  lr=0.00059  (2848.0ms/step avg)
+  step 71700/93600  loss=3.1055  lr=0.00059  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 230] lr=0.000587 loss(train_avg)=3.0674 val_top1=40629/50000 (0.8126) val_top5=0.9581 val_loss=0.7904  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e230.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e230.state.npz (729 arrays, step=71760)
+  step 71800/93600  loss=3.1604  lr=0.00058  (2848.0ms/step avg)
+  step 71900/93600  loss=2.6648  lr=0.00058  (2848.0ms/step avg)
+  step 72000/93600  loss=3.784  lr=0.00057  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 231] lr=0.000571 loss(train_avg)=3.0513 val_top1=40650/50000 (0.813) val_top5=0.9581 val_loss=0.7895  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e231.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e231.state.npz (729 arrays, step=72072)
+  step 72100/93600  loss=2.6645  lr=0.00057  (2848.0ms/step avg)
+  step 72200/93600  loss=3.5482  lr=0.00056  (2848.0ms/step avg)
+  step 72300/93600  loss=3.3708  lr=0.00056  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 232] lr=0.000555 loss(train_avg)=3.0554 val_top1=40667/50000 (0.8133) val_top5=0.9584 val_loss=0.7886  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e232.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e232.state.npz (729 arrays, step=72384)
+  step 72400/93600  loss=3.2534  lr=0.00055  (2849.0ms/step avg)
+  step 72500/93600  loss=2.2192  lr=0.00055  (2848.0ms/step avg)
+  step 72600/93600  loss=3.164  lr=0.00054  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 233] lr=0.00054 loss(train_avg)=3.0818 val_top1=40678/50000 (0.8136) val_top5=0.9584 val_loss=0.7877  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e233.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e233.state.npz (729 arrays, step=72696)
+  step 72700/93600  loss=3.7643  lr=0.00054  (2849.0ms/step avg)
+  step 72800/93600  loss=2.595  lr=0.00053  (2848.0ms/step avg)
+  step 72900/93600  loss=2.6402  lr=0.00053  (2848.0ms/step avg)
+  step 73000/93600  loss=2.3566  lr=0.00053  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 234] lr=0.000525 loss(train_avg)=2.9887 val_top1=40694/50000 (0.8139) val_top5=0.9586 val_loss=0.7868  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e234.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e234.state.npz (729 arrays, step=73008)
+  step 73100/93600  loss=2.9167  lr=0.00052  (2848.0ms/step avg)
+  step 73200/93600  loss=2.8374  lr=0.00052  (2848.0ms/step avg)
+  step 73300/93600  loss=3.7259  lr=0.00051  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 235] lr=0.00051 loss(train_avg)=3.072 val_top1=40691/50000 (0.8138) val_top5=0.9586 val_loss=0.786  [861.8s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e235.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e235.state.npz (729 arrays, step=73320)
+  step 73400/93600  loss=2.6077  lr=0.00051  (2848.0ms/step avg)
+  step 73500/93600  loss=1.9199  lr=0.0005  (2848.0ms/step avg)
+  step 73600/93600  loss=3.5629  lr=0.0005  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 236] lr=0.000495 loss(train_avg)=2.9927 val_top1=40706/50000 (0.8141) val_top5=0.9587 val_loss=0.7853  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e236.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e236.state.npz (729 arrays, step=73632)
+  step 73700/93600  loss=2.7606  lr=0.00049  (2848.0ms/step avg)
+  step 73800/93600  loss=2.9352  lr=0.00049  (2848.0ms/step avg)
+  step 73900/93600  loss=3.6164  lr=0.00048  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 237] lr=0.00048 loss(train_avg)=3.0138 val_top1=40723/50000 (0.8145) val_top5=0.9587 val_loss=0.7845  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e237.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e237.state.npz (729 arrays, step=73944)
+  step 74000/93600  loss=2.6858  lr=0.00048  (2848.0ms/step avg)
+  step 74100/93600  loss=2.3518  lr=0.00047  (2848.0ms/step avg)
+  step 74200/93600  loss=3.6357  lr=0.00047  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 238] lr=0.000466 loss(train_avg)=3.0148 val_top1=40725/50000 (0.8145) val_top5=0.9586 val_loss=0.7839  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e238.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e238.state.npz (729 arrays, step=74256)
+  step 74300/93600  loss=2.8113  lr=0.00046  (2849.0ms/step avg)
+  step 74400/93600  loss=2.6656  lr=0.00046  (2848.0ms/step avg)
+  step 74500/93600  loss=3.2937  lr=0.00045  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 239] lr=0.000451 loss(train_avg)=3.0272 val_top1=40725/50000 (0.8145) val_top5=0.9585 val_loss=0.7832  [861.6s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e239.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e239.state.npz (729 arrays, step=74568)
+  step 74600/93600  loss=3.1788  lr=0.00045  (2849.0ms/step avg)
+  step 74700/93600  loss=2.9842  lr=0.00045  (2848.0ms/step avg)
+  step 74800/93600  loss=3.3183  lr=0.00044  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 240] lr=0.000437 loss(train_avg)=3.0629 val_top1=40725/50000 (0.8145) val_top5=0.9585 val_loss=0.7827  [861.6s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e240.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e240.state.npz (729 arrays, step=74880)
+  step 74900/93600  loss=3.0352  lr=0.00044  (2849.0ms/step avg)
+  step 75000/93600  loss=3.3605  lr=0.00043  (2848.0ms/step avg)
+  step 75100/93600  loss=2.2161  lr=0.00043  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 241] lr=0.000423 loss(train_avg)=2.9987 val_top1=40734/50000 (0.8147) val_top5=0.9585 val_loss=0.782  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e241.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e241.state.npz (729 arrays, step=75192)
+  step 75200/93600  loss=2.7129  lr=0.00042  (2849.0ms/step avg)
+  step 75300/93600  loss=3.0225  lr=0.00042  (2848.0ms/step avg)
+  step 75400/93600  loss=2.0386  lr=0.00041  (2848.0ms/step avg)
+  step 75500/93600  loss=2.6633  lr=0.00041  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 242] lr=0.00041 loss(train_avg)=3.013 val_top1=40739/50000 (0.8148) val_top5=0.9585 val_loss=0.7814  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e242.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e242.state.npz (729 arrays, step=75504)
+  step 75600/93600  loss=3.701  lr=0.00041  (2848.0ms/step avg)
+  step 75700/93600  loss=3.2979  lr=0.0004  (2848.0ms/step avg)
+  step 75800/93600  loss=3.2543  lr=0.0004  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 243] lr=0.000396 loss(train_avg)=2.974 val_top1=40754/50000 (0.8151) val_top5=0.9585 val_loss=0.7808  [861.8s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e243.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e243.state.npz (729 arrays, step=75816)
+  step 75900/93600  loss=2.182  lr=0.00039  (2848.0ms/step avg)
+  step 76000/93600  loss=3.1587  lr=0.00039  (2848.0ms/step avg)
+  step 76100/93600  loss=3.1074  lr=0.00038  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 244] lr=0.000383 loss(train_avg)=2.9779 val_top1=40762/50000 (0.8152) val_top5=0.9585 val_loss=0.7801  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e244.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e244.state.npz (729 arrays, step=76128)
+  step 76200/93600  loss=2.5294  lr=0.00038  (2849.0ms/step avg)
+  step 76300/93600  loss=3.0342  lr=0.00038  (2848.0ms/step avg)
+  step 76400/93600  loss=3.2186  lr=0.00037  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 245] lr=0.00037 loss(train_avg)=2.9445 val_top1=40772/50000 (0.8154) val_top5=0.9585 val_loss=0.7796  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e245.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e245.state.npz (729 arrays, step=76440)
+  step 76500/93600  loss=2.4723  lr=0.00037  (2849.0ms/step avg)
+  step 76600/93600  loss=3.1087  lr=0.00036  (2848.0ms/step avg)
+  step 76700/93600  loss=2.7169  lr=0.00036  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 246] lr=0.000357 loss(train_avg)=2.9829 val_top1=40783/50000 (0.8157) val_top5=0.9587 val_loss=0.779  [862.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e246.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e246.state.npz (729 arrays, step=76752)
+  step 76800/93600  loss=2.3453  lr=0.00035  (2849.0ms/step avg)
+  step 76900/93600  loss=3.2269  lr=0.00035  (2848.0ms/step avg)
+  step 77000/93600  loss=2.0145  lr=0.00035  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 247] lr=0.000344 loss(train_avg)=3.0209 val_top1=40785/50000 (0.8157) val_top5=0.9589 val_loss=0.7785  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e247.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e247.state.npz (729 arrays, step=77064)
+  step 77100/93600  loss=3.0982  lr=0.00034  (2849.0ms/step avg)
+  step 77200/93600  loss=2.7678  lr=0.00034  (2848.0ms/step avg)
+  step 77300/93600  loss=3.5556  lr=0.00033  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 248] lr=0.000332 loss(train_avg)=2.9476 val_top1=40789/50000 (0.8158) val_top5=0.9589 val_loss=0.7779  [861.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e248.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e248.state.npz (729 arrays, step=77376)
+  step 77400/93600  loss=3.204  lr=0.00033  (2849.0ms/step avg)
+  step 77500/93600  loss=2.9511  lr=0.00033  (2848.0ms/step avg)
+  step 77600/93600  loss=2.8075  lr=0.00032  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 249] lr=0.00032 loss(train_avg)=2.9117 val_top1=40792/50000 (0.8158) val_top5=0.959 val_loss=0.7774  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e249.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e249.state.npz (729 arrays, step=77688)
+  step 77700/93600  loss=2.7928  lr=0.00032  (2849.0ms/step avg)
+  step 77800/93600  loss=2.7878  lr=0.00032  (2849.0ms/step avg)
+  step 77900/93600  loss=3.3529  lr=0.00031  (2848.0ms/step avg)
+  step 78000/93600  loss=2.8448  lr=0.00031  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 250] lr=0.000308 loss(train_avg)=3.0205 val_top1=40794/50000 (0.8159) val_top5=0.959 val_loss=0.777  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e250.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e250.state.npz (729 arrays, step=78000)
+  step 78100/93600  loss=2.4532  lr=0.0003  (2849.0ms/step avg)
+  step 78200/93600  loss=3.7302  lr=0.0003  (2848.0ms/step avg)
+  step 78300/93600  loss=3.6814  lr=0.0003  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 251] lr=0.000296 loss(train_avg)=2.9612 val_top1=40801/50000 (0.816) val_top5=0.9589 val_loss=0.7766  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e251.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e251.state.npz (729 arrays, step=78312)
+  step 78400/93600  loss=3.0455  lr=0.00029  (2849.0ms/step avg)
+  step 78500/93600  loss=3.4839  lr=0.00029  (2848.0ms/step avg)
+  step 78600/93600  loss=3.0186  lr=0.00028  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 252] lr=0.000284 loss(train_avg)=2.9773 val_top1=40812/50000 (0.8162) val_top5=0.959 val_loss=0.7762  [861.7s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e252.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e252.state.npz (729 arrays, step=78624)
+  step 78700/93600  loss=1.875  lr=0.00028  (2849.0ms/step avg)
+  step 78800/93600  loss=3.6201  lr=0.00028  (2848.0ms/step avg)
+  step 78900/93600  loss=2.6066  lr=0.00027  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 253] lr=0.000273 loss(train_avg)=2.9723 val_top1=40818/50000 (0.8164) val_top5=0.9589 val_loss=0.7758  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e253.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e253.state.npz (729 arrays, step=78936)
+  step 79000/93600  loss=2.4969  lr=0.00027  (2849.0ms/step avg)
+  step 79100/93600  loss=3.2136  lr=0.00027  (2849.0ms/step avg)
+  step 79200/93600  loss=3.515  lr=0.00026  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 254] lr=0.000261 loss(train_avg)=2.923 val_top1=40822/50000 (0.8164) val_top5=0.959 val_loss=0.7754  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e254.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e254.state.npz (729 arrays, step=79248)
+  step 79300/93600  loss=3.6849  lr=0.00026  (2849.0ms/step avg)
+  step 79400/93600  loss=3.3175  lr=0.00026  (2849.0ms/step avg)
+  step 79500/93600  loss=3.5449  lr=0.00025  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 255] lr=0.000251 loss(train_avg)=2.8914 val_top1=40826/50000 (0.8165) val_top5=0.959 val_loss=0.775  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e255.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e255.state.npz (729 arrays, step=79560)
+  step 79600/93600  loss=2.7853  lr=0.00025  (2849.0ms/step avg)
+  step 79700/93600  loss=2.4771  lr=0.00025  (2849.0ms/step avg)
+  step 79800/93600  loss=2.4729  lr=0.00024  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 256] lr=0.00024 loss(train_avg)=2.9231 val_top1=40833/50000 (0.8167) val_top5=0.959 val_loss=0.7748  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e256.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e256.state.npz (729 arrays, step=79872)
+  step 79900/93600  loss=3.6671  lr=0.00024  (2849.0ms/step avg)
+  step 80000/93600  loss=3.2506  lr=0.00024  (2849.0ms/step avg)
+  step 80100/93600  loss=1.852  lr=0.00023  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 257] lr=0.000229 loss(train_avg)=2.9601 val_top1=40841/50000 (0.8168) val_top5=0.9592 val_loss=0.7745  [861.8s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e257.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e257.state.npz (729 arrays, step=80184)
+  step 80200/93600  loss=2.8565  lr=0.00023  (2849.0ms/step avg)
+  step 80300/93600  loss=3.3227  lr=0.00023  (2849.0ms/step avg)
+  step 80400/93600  loss=3.6363  lr=0.00022  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 258] lr=0.000219 loss(train_avg)=2.9157 val_top1=40847/50000 (0.8169) val_top5=0.9592 val_loss=0.7742  [861.5s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e258.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e258.state.npz (729 arrays, step=80496)
+  step 80500/93600  loss=3.2792  lr=0.00022  (2849.0ms/step avg)
+  step 80600/93600  loss=3.6945  lr=0.00022  (2849.0ms/step avg)
+  step 80700/93600  loss=3.0843  lr=0.00021  (2848.0ms/step avg)
+  step 80800/93600  loss=3.2202  lr=0.00021  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 259] lr=0.000209 loss(train_avg)=2.905 val_top1=40863/50000 (0.8173) val_top5=0.9592 val_loss=0.7739  [861.3s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e259.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e259.state.npz (729 arrays, step=80808)
+  step 80900/93600  loss=3.1246  lr=0.00021  (2849.0ms/step avg)
+  step 81000/93600  loss=2.9818  lr=0.0002  (2848.0ms/step avg)
+  step 81100/93600  loss=3.0712  lr=0.0002  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 260] lr=0.000199 loss(train_avg)=2.9371 val_top1=40871/50000 (0.8174) val_top5=0.9593 val_loss=0.7737  [861.3s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e260.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e260.state.npz (729 arrays, step=81120)
+  step 81200/93600  loss=2.8409  lr=0.0002  (2849.0ms/step avg)
+  step 81300/93600  loss=3.5236  lr=0.00019  (2849.0ms/step avg)
+  step 81400/93600  loss=3.6452  lr=0.00019  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 261] lr=0.000189 loss(train_avg)=2.9059 val_top1=40871/50000 (0.8174) val_top5=0.959 val_loss=0.7735  [861.2s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e261.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e261.state.npz (729 arrays, step=81432)
+  step 81500/93600  loss=3.2989  lr=0.00019  (2849.0ms/step avg)
+  step 81600/93600  loss=2.8968  lr=0.00018  (2849.0ms/step avg)
+  step 81700/93600  loss=3.5228  lr=0.00018  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 262] lr=0.00018 loss(train_avg)=2.9335 val_top1=40885/50000 (0.8177) val_top5=0.959 val_loss=0.7733  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e262.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e262.state.npz (729 arrays, step=81744)
+  step 81800/93600  loss=3.1611  lr=0.00018  (2849.0ms/step avg)
+  step 81900/93600  loss=2.0785  lr=0.00018  (2849.0ms/step avg)
+  step 82000/93600  loss=3.0881  lr=0.00017  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 263] lr=0.000171 loss(train_avg)=2.9383 val_top1=40892/50000 (0.8178) val_top5=0.959 val_loss=0.7732  [861.2s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e263.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e263.state.npz (729 arrays, step=82056)
+  step 82100/93600  loss=2.5487  lr=0.00017  (2849.0ms/step avg)
+  step 82200/93600  loss=2.8969  lr=0.00017  (2849.0ms/step avg)
+  step 82300/93600  loss=2.7489  lr=0.00016  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 264] lr=0.000162 loss(train_avg)=2.8691 val_top1=40889/50000 (0.8178) val_top5=0.9589 val_loss=0.773  [861.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e264.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e264.state.npz (729 arrays, step=82368)
+  step 82400/93600  loss=2.9955  lr=0.00016  (2849.0ms/step avg)
+  step 82500/93600  loss=3.1212  lr=0.00016  (2849.0ms/step avg)
+  step 82600/93600  loss=2.8096  lr=0.00016  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 265] lr=0.000153 loss(train_avg)=2.8931 val_top1=40893/50000 (0.8179) val_top5=0.9589 val_loss=0.7729  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e265.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e265.state.npz (729 arrays, step=82680)
+  step 82700/93600  loss=3.2108  lr=0.00015  (2849.0ms/step avg)
+  step 82800/93600  loss=2.3596  lr=0.00015  (2849.0ms/step avg)
+  step 82900/93600  loss=1.8697  lr=0.00015  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 266] lr=0.000145 loss(train_avg)=2.9336 val_top1=40899/50000 (0.818) val_top5=0.959 val_loss=0.7728  [861.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e266.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e266.state.npz (729 arrays, step=82992)
+  step 83000/93600  loss=3.0449  lr=0.00014  (2849.0ms/step avg)
+  step 83100/93600  loss=3.2203  lr=0.00014  (2849.0ms/step avg)
+  step 83200/93600  loss=3.548  lr=0.00014  (2848.0ms/step avg)
+  step 83300/93600  loss=3.1059  lr=0.00014  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 267] lr=0.000137 loss(train_avg)=2.8937 val_top1=40900/50000 (0.818) val_top5=0.959 val_loss=0.7728  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e267.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e267.state.npz (729 arrays, step=83304)
+  step 83400/93600  loss=2.8888  lr=0.00013  (2849.0ms/step avg)
+  step 83500/93600  loss=2.7718  lr=0.00013  (2849.0ms/step avg)
+  step 83600/93600  loss=2.8311  lr=0.00013  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 268] lr=0.000129 loss(train_avg)=2.8708 val_top1=40910/50000 (0.8182) val_top5=0.959 val_loss=0.7727  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e268.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e268.state.npz (729 arrays, step=83616)
+  step 83700/93600  loss=3.5149  lr=0.00013  (2849.0ms/step avg)
+  step 83800/93600  loss=3.386  lr=0.00012  (2849.0ms/step avg)
+  step 83900/93600  loss=2.7781  lr=0.00012  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 269] lr=0.000121 loss(train_avg)=2.8908 val_top1=40909/50000 (0.8182) val_top5=0.959 val_loss=0.7727  [861.7s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e269.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e269.state.npz (729 arrays, step=83928)
+  step 84000/93600  loss=2.8232  lr=0.00012  (2849.0ms/step avg)
+  step 84100/93600  loss=2.8436  lr=0.00012  (2849.0ms/step avg)
+  step 84200/93600  loss=3.2008  lr=0.00011  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 270] lr=0.000113 loss(train_avg)=2.8809 val_top1=40921/50000 (0.8184) val_top5=0.9591 val_loss=0.7727  [862.0s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e270.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e270.state.npz (729 arrays, step=84240)
+  step 84300/93600  loss=2.8619  lr=0.00011  (2849.0ms/step avg)
+  step 84400/93600  loss=2.6976  lr=0.00011  (2849.0ms/step avg)
+  step 84500/93600  loss=3.6245  lr=0.00011  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 271] lr=0.000106 loss(train_avg)=2.9004 val_top1=40930/50000 (0.8186) val_top5=0.959 val_loss=0.7728  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e271.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e271.state.npz (729 arrays, step=84552)
+  step 84600/93600  loss=2.9008  lr=0.0001  (2849.0ms/step avg)
+  step 84700/93600  loss=3.0988  lr=0.0001  (2849.0ms/step avg)
+  step 84800/93600  loss=2.6319  lr=0.0001  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 272] lr=9.9e-05 loss(train_avg)=2.9143 val_top1=40932/50000 (0.8186) val_top5=0.959 val_loss=0.7729  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e272.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e272.state.npz (729 arrays, step=84864)
+  step 84900/93600  loss=2.3363  lr=0.0001  (2849.0ms/step avg)
+  step 85000/93600  loss=2.081  lr=0.0001  (2849.0ms/step avg)
+  step 85100/93600  loss=2.7127  lr=9e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 273] lr=9.2e-05 loss(train_avg)=2.8537 val_top1=40933/50000 (0.8187) val_top5=0.959 val_loss=0.773  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e273.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e273.state.npz (729 arrays, step=85176)
+  step 85200/93600  loss=2.5165  lr=9e-05  (2849.0ms/step avg)
+  step 85300/93600  loss=1.9106  lr=9e-05  (2849.0ms/step avg)
+  step 85400/93600  loss=3.2437  lr=9e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 274] lr=8.5e-05 loss(train_avg)=2.9213 val_top1=40930/50000 (0.8186) val_top5=0.959 val_loss=0.7732  [862.0s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e274.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e274.state.npz (729 arrays, step=85488)
+  step 85500/93600  loss=3.5404  lr=9e-05  (2849.0ms/step avg)
+  step 85600/93600  loss=2.7205  lr=8e-05  (2849.0ms/step avg)
+  step 85700/93600  loss=1.9408  lr=8e-05  (2849.0ms/step avg)
+  step 85800/93600  loss=3.1531  lr=8e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 275] lr=7.9e-05 loss(train_avg)=2.8642 val_top1=40929/50000 (0.8186) val_top5=0.9589 val_loss=0.7734  [862.1s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e275.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e275.state.npz (729 arrays, step=85800)
+  step 85900/93600  loss=2.7475  lr=8e-05  (2849.0ms/step avg)
+  step 86000/93600  loss=2.1258  lr=8e-05  (2849.0ms/step avg)
+  step 86100/93600  loss=3.1979  lr=7e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 276] lr=7.3e-05 loss(train_avg)=2.8958 val_top1=40939/50000 (0.8188) val_top5=0.959 val_loss=0.7736  [861.9s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e276.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e276.state.npz (729 arrays, step=86112)
+  step 86200/93600  loss=2.8591  lr=7e-05  (2849.0ms/step avg)
+  step 86300/93600  loss=3.104  lr=7e-05  (2849.0ms/step avg)
+  step 86400/93600  loss=3.3403  lr=7e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 277] lr=6.7e-05 loss(train_avg)=2.8751 val_top1=40945/50000 (0.8189) val_top5=0.9589 val_loss=0.7738  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e277.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e277.state.npz (729 arrays, step=86424)
+  step 86500/93600  loss=3.244  lr=7e-05  (2849.0ms/step avg)
+  step 86600/93600  loss=3.4268  lr=6e-05  (2849.0ms/step avg)
+  step 86700/93600  loss=2.5762  lr=6e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 278] lr=6.2e-05 loss(train_avg)=2.9126 val_top1=40951/50000 (0.819) val_top5=0.959 val_loss=0.774  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e278.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e278.state.npz (729 arrays, step=86736)
+  step 86800/93600  loss=3.5213  lr=6e-05  (2849.0ms/step avg)
+  step 86900/93600  loss=2.7705  lr=6e-05  (2849.0ms/step avg)
+  step 87000/93600  loss=3.5078  lr=6e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 279] lr=5.6e-05 loss(train_avg)=2.8875 val_top1=40944/50000 (0.8189) val_top5=0.959 val_loss=0.7743  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e279.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e279.state.npz (729 arrays, step=87048)
+  step 87100/93600  loss=3.1785  lr=6e-05  (2849.0ms/step avg)
+  step 87200/93600  loss=1.8474  lr=5e-05  (2849.0ms/step avg)
+  step 87300/93600  loss=2.9727  lr=5e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 280] lr=5.1e-05 loss(train_avg)=2.9037 val_top1=40936/50000 (0.8187) val_top5=0.9589 val_loss=0.7745  [861.8s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e280.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e280.state.npz (729 arrays, step=87360)
+  step 87400/93600  loss=2.1324  lr=5e-05  (2849.0ms/step avg)
+  step 87500/93600  loss=2.9972  lr=5e-05  (2849.0ms/step avg)
+  step 87600/93600  loss=3.6057  lr=5e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 281] lr=4.6e-05 loss(train_avg)=2.8671 val_top1=40940/50000 (0.8188) val_top5=0.959 val_loss=0.7748  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e281.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e281.state.npz (729 arrays, step=87672)
+  step 87700/93600  loss=2.947  lr=5e-05  (2849.0ms/step avg)
+  step 87800/93600  loss=3.069  lr=4e-05  (2849.0ms/step avg)
+  step 87900/93600  loss=3.128  lr=4e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 282] lr=4.2e-05 loss(train_avg)=2.9058 val_top1=40949/50000 (0.819) val_top5=0.959 val_loss=0.775  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e282.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e282.state.npz (729 arrays, step=87984)
+  step 88000/93600  loss=2.4663  lr=4e-05  (2849.0ms/step avg)
+  step 88100/93600  loss=2.8822  lr=4e-05  (2849.0ms/step avg)
+  step 88200/93600  loss=1.8435  lr=4e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 283] lr=3.7e-05 loss(train_avg)=2.8743 val_top1=40955/50000 (0.8191) val_top5=0.959 val_loss=0.7753  [861.7s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e283.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e283.state.npz (729 arrays, step=88296)
+  step 88300/93600  loss=2.3433  lr=4e-05  (2849.0ms/step avg)
+  step 88400/93600  loss=2.6593  lr=4e-05  (2849.0ms/step avg)
+  step 88500/93600  loss=2.8512  lr=3e-05  (2849.0ms/step avg)
+  step 88600/93600  loss=3.125  lr=3e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 284] lr=3.3e-05 loss(train_avg)=2.8709 val_top1=40959/50000 (0.8192) val_top5=0.959 val_loss=0.7757  [861.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e284.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e284.state.npz (729 arrays, step=88608)
+  step 88700/93600  loss=2.235  lr=3e-05  (2849.0ms/step avg)
+  step 88800/93600  loss=2.3647  lr=3e-05  (2849.0ms/step avg)
+  step 88900/93600  loss=2.8907  lr=3e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 285] lr=2.9e-05 loss(train_avg)=2.8388 val_top1=40962/50000 (0.8192) val_top5=0.959 val_loss=0.776  [861.6s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e285.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e285.state.npz (729 arrays, step=88920)
+  step 89000/93600  loss=1.808  lr=3e-05  (2849.0ms/step avg)
+  step 89100/93600  loss=3.173  lr=3e-05  (2849.0ms/step avg)
+  step 89200/93600  loss=3.2047  lr=3e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 286] lr=2.6e-05 loss(train_avg)=2.8302 val_top1=40961/50000 (0.8192) val_top5=0.959 val_loss=0.7763  [861.3s train, 26.7s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e286.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e286.state.npz (729 arrays, step=89232)
+  step 89300/93600  loss=2.4045  lr=2e-05  (2849.0ms/step avg)
+  step 89400/93600  loss=3.535  lr=2e-05  (2849.0ms/step avg)
+  step 89500/93600  loss=2.4864  lr=2e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 287] lr=2.2e-05 loss(train_avg)=2.9137 val_top1=40963/50000 (0.8193) val_top5=0.9589 val_loss=0.7767  [861.8s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e287.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e287.state.npz (729 arrays, step=89544)
+  step 89600/93600  loss=2.2182  lr=2e-05  (2849.0ms/step avg)
+  step 89700/93600  loss=2.5031  lr=2e-05  (2849.0ms/step avg)
+  step 89800/93600  loss=3.0555  lr=2e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 288] lr=1.9e-05 loss(train_avg)=2.8796 val_top1=40963/50000 (0.8193) val_top5=0.9589 val_loss=0.7771  [861.9s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e288.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e288.state.npz (729 arrays, step=89856)
+  step 89900/93600  loss=2.4019  lr=2e-05  (2849.0ms/step avg)
+  step 90000/93600  loss=2.9164  lr=2e-05  (2849.0ms/step avg)
+  step 90100/93600  loss=2.6579  lr=2e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 289] lr=1.6e-05 loss(train_avg)=2.8423 val_top1=40964/50000 (0.8193) val_top5=0.9588 val_loss=0.7775  [862.0s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e289.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e289.state.npz (729 arrays, step=90168)
+  step 90200/93600  loss=2.1252  lr=2e-05  (2849.0ms/step avg)
+  step 90300/93600  loss=3.0141  lr=2e-05  (2849.0ms/step avg)
+  step 90400/93600  loss=2.1861  lr=1e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 290] lr=1.4e-05 loss(train_avg)=2.8424 val_top1=40972/50000 (0.8194) val_top5=0.9589 val_loss=0.7779  [861.8s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e290.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e290.state.npz (729 arrays, step=90480)
+  step 90500/93600  loss=3.0256  lr=1e-05  (2849.0ms/step avg)
+  step 90600/93600  loss=2.5992  lr=1e-05  (2849.0ms/step avg)
+  step 90700/93600  loss=2.8251  lr=1e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 291] lr=1.1e-05 loss(train_avg)=2.8971 val_top1=40965/50000 (0.8193) val_top5=0.9589 val_loss=0.7784  [861.7s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e291.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e291.state.npz (729 arrays, step=90792)
+  step 90800/93600  loss=3.1637  lr=1e-05  (2849.0ms/step avg)
+  step 90900/93600  loss=2.9442  lr=1e-05  (2849.0ms/step avg)
+  step 91000/93600  loss=3.0053  lr=1e-05  (2849.0ms/step avg)
+  step 91100/93600  loss=2.1124  lr=1e-05  (2848.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 292] lr=9e-06 loss(train_avg)=2.8198 val_top1=40973/50000 (0.8195) val_top5=0.959 val_loss=0.7788  [861.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e292.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e292.state.npz (729 arrays, step=91104)
+  step 91200/93600  loss=3.1527  lr=1e-05  (2849.0ms/step avg)
+  step 91300/93600  loss=3.0685  lr=1e-05  (2849.0ms/step avg)
+  step 91400/93600  loss=2.4533  lr=1e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 293] lr=7e-06 loss(train_avg)=2.8875 val_top1=40978/50000 (0.8196) val_top5=0.959 val_loss=0.7793  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e293.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e293.state.npz (729 arrays, step=91416)
+  step 91500/93600  loss=2.849  lr=1e-05  (2849.0ms/step avg)
+  step 91600/93600  loss=2.7131  lr=1e-05  (2849.0ms/step avg)
+  step 91700/93600  loss=2.7405  lr=1e-05  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 294] lr=6e-06 loss(train_avg)=2.8837 val_top1=40987/50000 (0.8197) val_top5=0.9589 val_loss=0.7797  [861.4s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e294.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e294.state.npz (729 arrays, step=91728)
+  step 91800/93600  loss=3.5272  lr=1e-05  (2849.0ms/step avg)
+  step 91900/93600  loss=1.856  lr=0.0  (2849.0ms/step avg)
+  step 92000/93600  loss=3.4361  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 295] lr=4e-06 loss(train_avg)=2.8567 val_top1=40992/50000 (0.8198) val_top5=0.9589 val_loss=0.7802  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e295.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e295.state.npz (729 arrays, step=92040)
+  step 92100/93600  loss=2.7514  lr=0.0  (2849.0ms/step avg)
+  step 92200/93600  loss=3.457  lr=0.0  (2849.0ms/step avg)
+  step 92300/93600  loss=3.3447  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 296] lr=3e-06 loss(train_avg)=2.9274 val_top1=40989/50000 (0.8198) val_top5=0.9589 val_loss=0.7807  [861.5s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e296.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e296.state.npz (729 arrays, step=92352)
+  step 92400/93600  loss=1.7769  lr=0.0  (2849.0ms/step avg)
+  step 92500/93600  loss=1.9715  lr=0.0  (2849.0ms/step avg)
+  step 92600/93600  loss=3.0183  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 297] lr=2e-06 loss(train_avg)=2.8369 val_top1=40996/50000 (0.8199) val_top5=0.9588 val_loss=0.7812  [861.6s train, 26.6s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e297.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e297.state.npz (729 arrays, step=92664)
+  step 92700/93600  loss=3.1357  lr=0.0  (2849.0ms/step avg)
+  step 92800/93600  loss=3.1365  lr=0.0  (2849.0ms/step avg)
+  step 92900/93600  loss=3.0543  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 298] lr=2e-06 loss(train_avg)=2.827 val_top1=40995/50000 (0.8199) val_top5=0.9588 val_loss=0.7816  [861.3s train, 26.5s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e298.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e298.state.npz (729 arrays, step=92976)
+  step 93000/93600  loss=3.1055  lr=0.0  (2849.0ms/step avg)
+  step 93100/93600  loss=3.0304  lr=0.0  (2849.0ms/step avg)
+  step 93200/93600  loss=3.1222  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 299] lr=1e-06 loss(train_avg)=2.8013 val_top1=40995/50000 (0.8199) val_top5=0.9588 val_loss=0.7821  [861.4s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e299.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e299.state.npz (729 arrays, step=93288)
+  step 93300/93600  loss=1.9073  lr=0.0  (2849.0ms/step avg)
+  step 93400/93600  loss=3.4872  lr=0.0  (2849.0ms/step avg)
+  step 93500/93600  loss=3.1594  lr=0.0  (2849.0ms/step avg)
+  step 93600/93600  loss=2.5287  lr=0.0  (2849.0ms/step avg)
+  Running validation ...
+  eval: f32 forward (evalF32)
+[Epoch 300] lr=1e-06 loss(train_avg)=2.8692 val_top1=40995/50000 (0.8199) val_top5=0.9587 val_loss=0.7826  [861.7s train, 26.4s val]
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e300.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full_e300.state.npz (729 arrays, step=93600)
+saved 100 param-groups to /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full.bin (114356512 bytes)
+  saved full train state -> /home/skoonce/cnx_t_jax_2611/convnext_tiny_imagenet_full.state.npz (729 arrays, step=93600)
+
+Done. Total time: 266648.2s

@@ -1,0 +1,14 @@
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589674.188257  331130 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589675.339624  331130 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ConvNeXt-T (ImageNet, bf16) · Lean 4 → JAX
+  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt9(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=300  params=28589128
+steps_per_epoch=312  total_steps=93600
+grad-accum=16x  micro_batch=256 (4 devices x 64)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...

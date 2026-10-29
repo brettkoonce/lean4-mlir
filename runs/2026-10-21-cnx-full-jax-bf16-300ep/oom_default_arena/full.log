@@ -1,0 +1,111 @@
+===== 2026-10-21 13:23:19 attempt 1 (from epoch 0) =====
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792588999.586270  323605 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589000.420861  323605 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ConvNeXt-T (ImageNet, bf16) · Lean 4 → JAX
+  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt9(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=300  params=28589128
+steps_per_epoch=312  total_steps=93600
+grad-accum=16x  micro_batch=256 (4 devices x 64)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+E1021 13:23:52.163828  323791 rendezvous.cc:108] [id=0] This thread has been waiting for `[3] [rank=3] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` for 10 seconds and may be stuck. All 4 threads joined the rendezvous, however the leader has not marked the rendezvous as completed. Leader can be deadlocked inside the rendezvous callback.
+E1021 13:23:52.163832  323785 rendezvous.cc:108] [id=2] This thread has been waiting for `[1] [rank=1] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` for 10 seconds and may be stuck. All 4 threads joined the rendezvous, however the leader has not marked the rendezvous as completed. Leader can be deadlocked inside the rendezvous callback.
+E1021 13:23:52.163916  323788 rendezvous.cc:108] [id=1] This thread has been waiting for `[2] [rank=2] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` for 10 seconds and may be stuck. All 4 threads joined the rendezvous, however the leader has not marked the rendezvous as completed. Leader can be deadlocked inside the rendezvous callback.
+E1021 13:23:52.382270  323785 rendezvous.cc:130] [id=2] This thread is unstuck waiting for `[1] [rank=1] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` after 10.218574388s. All threads joined the rendezvous on time however the leader took long time to complete it. Warning above was a false-positive. Perhaps the timeout is too short.
+E1021 13:23:52.382267  323791 rendezvous.cc:130] [id=0] This thread is unstuck waiting for `[3] [rank=3] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` after 10.218797127s. All threads joined the rendezvous on time however the leader took long time to complete it. Warning above was a false-positive. Perhaps the timeout is too short.
+E1021 13:23:52.382277  323788 rendezvous.cc:130] [id=1] This thread is unstuck waiting for `[2] [rank=2] [run_id=-237864732] Initialize clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=1; incarnations=[]` after 10.218773158s. All threads joined the rendezvous on time however the leader took long time to complete it. Warning above was a false-positive. Perhaps the timeout is too short.
+W1021 13:26:24.883910  323791 bfc_allocator.cc:598] Allocator (GPU_3_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:26:24.886419  323782 bfc_allocator.cc:598] Allocator (GPU_0_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:26:24.886542  323785 bfc_allocator.cc:598] Allocator (GPU_1_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:26:24.887051  323788 bfc_allocator.cc:598] Allocator (GPU_2_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:26:24.887532  323791 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:26:24.888917  323785 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:26:24.890856  323788 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:26:24.892437  323782 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+Traceback (most recent call last):
+  File "/home/skoonce/lean/proof_verify_demo/verify-v2/jax/.lake/build/generated_convnext_tiny_imagenet_full.py", line 1942, in <module>
+    "  loss=" + str(round(float(loss), 4)) +
+                          ^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 300, in __float__
+    return self._value.__float__()
+           ^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/profiler.py", line 420, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 642, in _value
+    npy_value, did_copy = self._single_device_array_to_np_array_did_copy()
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 5.92GiB with allocator GPU_0_bfc on device 0. [tf-allocator-allocation-error=''] [executable_name='jit_train_step']
+===== 2026-10-21 13:30:02 attempt 2 (from epoch 0) =====
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589403.623379  328156 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589404.752813  328156 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ConvNeXt-T (ImageNet, bf16) · Lean 4 → JAX
+  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt9(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=300  params=28589128
+steps_per_epoch=312  total_steps=93600
+grad-accum=16x  micro_batch=256 (4 devices x 64)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+W1021 13:30:49.691839  328343 bfc_allocator.cc:598] Allocator (GPU_3_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:30:49.692858  328340 bfc_allocator.cc:598] Allocator (GPU_2_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:30:49.693038  328337 bfc_allocator.cc:598] Allocator (GPU_1_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:30:49.693071  328334 bfc_allocator.cc:598] Allocator (GPU_0_bfc) ran out of memory trying to allocate 5.92GiB (rounded to 6352477184) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W1021 13:30:49.694188  328343 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:30:49.696494  328340 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:30:49.696782  328337 bfc_allocator.cc:609] *******************____________*******______________________________________________________________
+W1021 13:30:49.696980  328334 bfc_allocator.cc:609] *************_____*******______*******______________________________________________________________
+Traceback (most recent call last):
+  File "/home/skoonce/lean/proof_verify_demo/verify-v2/jax/.lake/build/generated_convnext_tiny_imagenet_full.py", line 1942, in <module>
+    "  loss=" + str(round(float(loss), 4)) +
+                          ^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 300, in __float__
+    return self._value.__float__()
+           ^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/profiler.py", line 420, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 642, in _value
+    npy_value, did_copy = self._single_device_array_to_np_array_did_copy()
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 5.92GiB with allocator GPU_0_bfc on device 0. [executable_name='jit_train_step'] [tf-allocator-allocation-error='']
+===== 2026-10-21 13:34:33 attempt 3 (from epoch 0) =====
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589674.188257  331130 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1792589675.339624  331130 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ConvNeXt-T (ImageNet, bf16) · Lean 4 → JAX
+  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt9(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=300  params=28589128
+steps_per_epoch=312  total_steps=93600
+grad-accum=16x  micro_batch=256 (4 devices x 64)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
