@@ -186,7 +186,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `convnextin_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 5 |
 | `convnextin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_droperf_fwd.mlir` | fwd | `droperf` | stochastic depth, exact GELU | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
+| `convnextin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 4 |
 | `convnextin_fwd_s288.mlir` | fwd @288px | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_erf_fwd_s288.mlir` | fwd @288px | `erf` | exact GELU | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.0 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
@@ -209,7 +209,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `convnextin_adamwxerf_train_step.mlir` | train_step | `adamwxerf` | AdamW, no decay on norm/bias, exact GELU | 1.0 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_ema_train_step.mlir` | train_step | `ema` | EMA shadow (4-region blob), AdamW | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_emaaccdp16xwxdropbf16_train_step.mlir` | train_step | `emaaccdp16xwxdropbf16` | EMA shadow (5-region blob), AdamW, data-parallel, grad-accum ×16, stochastic depth, no decay on norm/bias, bf16, batch 16 per replica | 1.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextin_emaaccdp16xwxdroperfbf16_train_step.mlir` | train_step | `emaaccdp16xwxdroperfbf16` | EMA shadow (5-region blob), AdamW, data-parallel, grad-accum ×16, stochastic depth, no decay on norm/bias, exact GELU, bf16, batch 16 per replica | 1.2 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
+| `convnextin_emaaccdp16xwxdroperfbf16_train_step.mlir` | train_step | `emaaccdp16xwxdroperfbf16` | EMA shadow (5-region blob), AdamW, data-parallel, grad-accum ×16, stochastic depth, no decay on norm/bias, exact GELU, bf16, batch 16 per replica | 1.2 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 3 |
 | `convnextin_emadp_train_step.mlir` | train_step | `emadp` | EMA shadow (4-region blob), AdamW, data-parallel | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_emadperf_train_step.mlir` | train_step | `emadperf` | EMA shadow (4-region blob), AdamW, data-parallel, exact GELU | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextin_emadpwxclipdropbf16_train_step.mlir` | train_step | `emadpwxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16 | 1.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |

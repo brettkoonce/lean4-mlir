@@ -1,0 +1,13 @@
+[sup] 2026-10-24 15:58:33 START job=cnx-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-21-cnx-verified-bf16-300ep
+[sup] 2026-10-24 15:58:33 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-10-24 15:58:33 eta: bf16 ~109 h on 4x 4060 Ti at 16 x (4 x 64) (2026-10-12 smoke, runs/2026-10-12-cnx-default-emabf16-4gpu/: med 242 / min 222 / p90 254 ms per 256-row MICRO-step at w4, starvation 20 ms; 4,992 micro-steps + ~105 s eval/ckpt an epoch, 300 ep); bare device 194 ms; the one-shot clip render read 237 ms/step on 2026-09-25
+[sup] 2026-10-24 15:58:33 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-10-24 15:58:33   launched PID=1530623 PGID=1530623
+[sup] 2026-10-24 16:43:55 supervisor exiting — taking the run down (PID=1530623 PGID=1530623)
+[sup] 2026-10-24 16:44:03 START job=cnx-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-21-cnx-verified-bf16-300ep
+[sup] 2026-10-24 16:44:03 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-10-24 16:44:03 eta: bf16 ~109 h on 4x 4060 Ti at 16 x (4 x 64) (2026-10-12 smoke, runs/2026-10-12-cnx-default-emabf16-4gpu/: med 242 / min 222 / p90 254 ms per 256-row MICRO-step at w4, starvation 20 ms; 4,992 micro-steps + ~105 s eval/ckpt an epoch, 300 ep); bare device 194 ms; the one-shot clip render read 237 ms/step on 2026-09-25
+[sup] 2026-10-24 16:44:03 attempt 1: resuming at epoch 2/300 (next rest: 999)
+[sup] 2026-10-24 16:44:03   launched PID=1548914 PGID=1548914
+[sup]   last line: done (trained ConvNeXt-T (ImageNet-1k) emaaccdp16xwxdroperfbf16 + cosine→0.000001/warmup via packed threading).
+[sup] 2026-10-28 22:38:01 ✅ COMPLETE — 300/300 epochs

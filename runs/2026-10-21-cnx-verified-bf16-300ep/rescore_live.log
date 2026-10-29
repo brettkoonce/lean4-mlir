@@ -1,0 +1,56 @@
+ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  SCORING A CHECKPOINT — no training. ConvNeXt-T (ImageNet-1k) emaaccdp16xwxdroperfbf16, .lake/build/convnextin_emaaccdp16xwxdroperfbf16_ckpt_xla.bin
+  region 0 of 5 (the live weights), 28589128 params
+I1028 22:51:09.992036 3631082 service.cc:154] XLA service 0x7cce9801e480 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1028 22:51:09.992078 3631082 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1028 22:51:09.992084 3631082 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1028 22:51:09.992088 3631082 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1028 22:51:09.992091 3631082 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1028 22:51:09.994020 3631082 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1028 22:51:09.994069 3631082 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+I1028 22:51:09.994111 3631082 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+I1028 22:51:09.994123 3631082 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+I1028 22:51:09.994134 3631082 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1028 22:51:10.012971 3631082 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1028 22:51:10.475109 3631082 cuda_dnn.cc:442] Loaded cuDNN version 92400
+W1028 22:51:11.001999 3631136 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1028 22:51:11.335467 3631135 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 128 bytes spill stores, 128 bytes spill loads
+
+W1028 22:51:11.351814 3631149 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:51:12.265908 3631140 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1028 22:51:12.332574 3631138 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 804 bytes spill stores, 548 bytes spill loads
+
+W1028 22:51:12.429441 3631152 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1028 22:51:13.469346 3631133 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnextin_erf_fwd.mlir (@convnextin_erf_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 4080 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227874.388075 3631439 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1793227874.414688 3631439 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227875.451983 3631439 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1793227876.227616 3631543 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227876.474463 3631549 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1793227876.516440 3631549 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793227877.827206 3631549 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1793227878.554912 3631726 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @convnextin_erf_fwd holds 182 parameter tensors (109.1 MB) on 4 devices; they stop crossing PCIe from here
+I1028 22:51:19.208731 3631130 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I1028 22:51:19.212139 3631124 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I1028 22:51:19.229024 3631127 cuda_dnn.cc:442] Loaded cuDNN version 92400
+  xla/pjrt verified_mlir/convnextin_erf_fwd.mlir  (eval, SHARDED over 4 replicas)
+  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+  EVAL SHARDED: 4 replicas x 64 = 256 images per invoke, 196 invokes, last one 80 real + 176 pad
+  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held
+  ▸ val = all 50000 streamed (timm's denominator)
+  checkpoint: acc = 40990/50000 = 81.980000%  top5 = 47899/50000 = 95.798000%  [95% CI 81.64–82.31]
+    per-example top-1 bitmap -> runs/2026-10-21-cnx-verified-bf16-300ep/bitmaps/ver_e300_live.bin (50000 bytes) — pair two of these with scripts/demos/mcnemar.py

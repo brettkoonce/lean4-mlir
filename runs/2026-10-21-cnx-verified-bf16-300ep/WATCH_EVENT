@@ -1,0 +1,49 @@
+=== RUN ENDED at 2026-10-28 22:39:37 UTC ===
+[sup] 2026-10-24 16:44:03 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-10-24 16:44:03 eta: bf16 ~109 h on 4x 4060 Ti at 16 x (4 x 64) (2026-10-12 smoke, runs/2026-10-12-cnx-default-emabf16-4gpu/: med 242 / min 222 / p90 254 ms per 256-row MICRO-step at w4, starvation 20 ms; 4,992 micro-steps + ~105 s eval/ckpt an epoch, 300 ep); bare device 194 ms; the one-shot clip render read 237 ms/step on 2026-09-25
+[sup] 2026-10-24 16:44:03 attempt 1: resuming at epoch 2/300 (next rest: 999)
+[sup] 2026-10-24 16:44:03   launched PID=1548914 PGID=1548914
+[sup]   last line: done (trained ConvNeXt-T (ImageNet-1k) emaaccdp16xwxdroperfbf16 + cosine→0.000001/warmup via packed threading).
+[sup] 2026-10-28 22:38:01 ✅ COMPLETE — 300/300 epochs
+--- final evals ---
+  epoch 298: test_acc = 41073/50000 = 82.146000%  top5 = 47963/50000 = 95.926000%  [95% CI 81.81–82.48]
+  epoch 299: test_acc = 41080/50000 = 82.160000%  top5 = 47959/50000 = 95.918000%  [95% CI 81.82–82.49]
+  epoch 300: test_acc = 41073/50000 = 82.146000%  top5 = 47955/50000 = 95.910000%  [95% CI 81.81–82.48]
+--- loaders at end ---
+  pid 1531852  age   0.7 h  rss  5.20 GiB  arena  3.36 GiB  maps 391
+  pid 1531948  age   0.7 h  rss  5.06 GiB  arena  3.39 GiB  maps 385
+  pid 1532183  age   0.7 h  rss  5.30 GiB  arena  3.43 GiB  maps 382
+  pid 1532378  age   0.7 h  rss  5.13 GiB  arena  3.41 GiB  maps 387
+  pid 1550144  age   2.4 h  rss  5.29 GiB  arena  3.68 GiB  maps 378
+  pid 1550238  age   5.8 h  rss  5.51 GiB  arena  3.76 GiB  maps 355
+  pid 1550437  age   9.2 h  rss  4.81 GiB  arena  3.68 GiB  maps 349
+  pid 1550715  age  12.6 h  rss  5.52 GiB  arena  3.98 GiB  maps 342
+  pid 1609302  age  13.3 h  rss  5.16 GiB  arena  3.76 GiB  maps 341
+  pid 1678288  age  13.4 h  rss  5.92 GiB  arena  3.94 GiB  maps 346
+  pid 1747649  age  13.4 h  rss  5.51 GiB  arena  3.79 GiB  maps 338
+  pid 1817722  age  13.4 h  rss  5.89 GiB  arena  3.72 GiB  maps 350
+  pid 1887733  age  13.4 h  rss  5.44 GiB  arena  3.82 GiB  maps 347
+  pid 1957286  age  13.4 h  rss  5.20 GiB  arena  3.92 GiB  maps 350
+  pid 2027416  age  13.4 h  rss  5.27 GiB  arena  3.85 GiB  maps 342
+  pid 2097412  age  13.4 h  rss  5.27 GiB  arena  3.78 GiB  maps 348
+  pid 2167202  age  13.4 h  rss  5.54 GiB  arena  4.05 GiB  maps 357
+  pid 2237150  age  13.4 h  rss  5.19 GiB  arena  3.94 GiB  maps 355
+  pid 2306547  age  13.4 h  rss  4.98 GiB  arena  3.68 GiB  maps 341
+  pid 2376051  age  13.4 h  rss  5.65 GiB  arena  3.97 GiB  maps 345
+  pid 2446218  age  13.3 h  rss  5.94 GiB  arena  3.96 GiB  maps 345
+  pid 2515827  age  13.3 h  rss  5.28 GiB  arena  3.91 GiB  maps 355
+  pid 2586195  age  13.3 h  rss  5.94 GiB  arena  3.94 GiB  maps 350
+  pid 2655683  age  13.3 h  rss  5.15 GiB  arena  3.70 GiB  maps 344
+  pid 2725094  age  13.3 h  rss  4.87 GiB  arena  3.62 GiB  maps 339
+  pid 2794731  age  13.3 h  rss  5.32 GiB  arena  3.78 GiB  maps 346
+  pid 2864059  age  13.3 h  rss  4.95 GiB  arena  3.80 GiB  maps 347
+  pid 2933884  age  13.3 h  rss  5.15 GiB  arena  3.79 GiB  maps 349
+  pid 3003445  age  13.3 h  rss  5.22 GiB  arena  3.78 GiB  maps 347
+  pid 3073003  age  13.3 h  rss  5.02 GiB  arena  3.80 GiB  maps 339
+  pid 3141880  age  13.3 h  rss  5.30 GiB  arena  3.80 GiB  maps 335
+  pid 3210771  age  13.3 h  rss  6.03 GiB  arena  3.97 GiB  maps 348
+  pid 3280249  age  13.3 h  rss  6.00 GiB  arena  3.79 GiB  maps 352
+  pid 3349711  age  13.3 h  rss  5.87 GiB  arena  3.90 GiB  maps 346
+  pid 3419709  age   9.9 h  rss  5.30 GiB  arena  3.92 GiB  maps 342
+  pid 3488731  age   6.5 h  rss  5.27 GiB  arena  3.77 GiB  maps 355
+  pid 3558285  age   3.1 h  rss  5.53 GiB  arena  3.90 GiB  maps 381

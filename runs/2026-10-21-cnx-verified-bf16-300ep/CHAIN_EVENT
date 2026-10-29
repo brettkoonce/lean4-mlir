@@ -1,0 +1,6 @@
+▶ launching 2026-10-24 15:58:28 UTC
+✅ launched 2026-10-24 15:58:39 UTC: cnx-off-ver + 5 watchers
+▶ resume test: stopping mid-epoch 3 at 2026-10-24 16:43:55 UTC (marker 2)
+  stopped; marker still 2; relaunching
+✅ relaunched 2026-10-24 16:44:10 UTC: cnx-off-ver + 5 watchers
+✅ resume test: the relaunch resumed from the epoch-2 checkpoint
