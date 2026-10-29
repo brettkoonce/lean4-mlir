@@ -9309,9 +9309,78 @@ seventeen blocks.
 The Imagenette run above trained on $\sim$9.5K images. The same backbone
 scales to full 1000-class ImageNet exactly the way ResNet-34 did in
 Chapter~\ref{chap:residual}: the inverted-residual stack is unchanged, only
-the head widens to 1000 and the dataset and schedule grow. As there, the
-recipe runs on both paths --- the reference first, then the verified path,
-then the two side by side.
+the head widens to 1000 and the dataset and schedule grow. The recipe is
+not the paper's sentence but TF-slim's own reproduction command
+(\texttt{research/slim/nets/mobilenet/README.md}), read with the sources it
+runs: $0.045$ per $96$ images, so $0.12$ at $256$, stepped $\times0.98$ every
+$2.5$ epochs of data as a staircase from step $0$ with no warmup; TF~1's
+RMSProp, with the learning rate folded into the momentum buffer and the
+mean-square started at $1$; coupled weight decay $4 \times 10^{-5}$ on the
+\texttt{conv2d} kernels alone, so off BatchNorm, biases and the depthwise
+kernels; slim's truncated-normal initialization ($\sigma = 0.09$) on every
+kernel; label smoothing $0.1$; the weight average at $0.9999$, which is what
+the README scores; slim's crop ranges, its colour distortion (brightness,
+then saturation), TF~1's bilinear kernel on every resize, its validation
+crop ($0.875$ of both sides, then $224^2$) and $(x - 0.5) \times 2$ inputs;
+and the README's ``about 700K steps'' of $768$, which is $420$ epochs of
+data. One row is not reproduced, on either path: Sandler et al.\ trained
+asynchronously on sixteen workers of $96$ images each, and this run is four
+replicas of $64$, synchronous.
+
+As there, the recipe runs on both paths, the reference first, then the
+verified path, then the two side by side; what it changes from ResNet-34's
+comes first.
+
+\subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
+2018-era recipe of the SGD lineage: momentum, cosine polish,
+label smoothing. MobileNetV2 is a 2018 paper too, but from the other
+side of a fork. Google's TensorFlow and Inception training tradition
+runs RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
+tiny weight decay, and nothing beyond crop and flip on the data
+side. So this diff is not a time jump but two contemporary recipes
+side by side, and it is the base that the next chapter's 2019
+EfficientNet recipe is built on. The entry point is the same on both
+paths, and every row of Table~\ref{tab:mnv2_vs_2018} is one argument or one
+field:
+
+\begin{table}[H]
+\centering
+\caption{The MobileNetV2 recipe against ResNet-34's 2018 recipe, knob by knob.}
+\label{tab:mnv2_vs_2018}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & MobileNetV2 (2018) & What the MNv2 choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & inverted residual, 3.5\,M     & depthwise $3\times3$ at the wide point between $1\times1$s, at $1/6$ the parameters \\
+Optimizer     & SGD + momentum $0.9$   & RMSProp                       & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}1.0$, where the huge $\varepsilon$ keeps the adaptive step damped (B0 shrinks it to $10^{-3}$ and pays for it) \\
+Peak LR       & $0.1$                  & $0.045$ per 96, $0.12$ at 256 & RMSProp's scale, not comparable to SGD's $0.1$; the README scales it with the clones \\
+LR schedule   & cosine to zero         & exponential, $\times0.98$ per $2.5$ epochs & the TF-lineage staircase the whole family inherits, two fifths as often as the paper's sentence \\
+Epochs        & 90                     & $420$                         & the README's 700K steps, the long-haul schedule the slow stair makes non-negotiable \\
+Weight decay  & $10^{-4}$, weights only & $4\times10^{-5}$, kernels only & depthwise filters are 9 weights per channel, and slim regularizes \texttt{conv2d} alone: not BN, not biases, not the depthwise \\
+Label smoothing & $0.1$                & $0.1$                         & the paper names none; the README's command sets it \\
+Weights scored & raw                  & EMA $0.9999$                  & the TF lineage's polish, in place of annealing the rate to zero \\
+Augmentation  & RRC + hflip            & slim's crop + hflip + colour   & brightness and saturation jitter, no learned policy and no mixing, still the leanest recipe in this book \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent What carries over unchanged: batch 256, train and eval both
+at $224$, running-BN evaluation, and bf16 convolution under an fp32
+classifier head. R34's
+5-epoch warmup does not: MobileNetV2's staircase starts at step $0$, as
+the paper's does.
+
+The through-line of this fork is that nothing here regularizes harder.
+MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
+network $1/6$ the size, and its distinctive knobs (adaptive
+optimizer, staircase decay, a tiny weight decay on the kernels alone, the
+weight average)
+are the ones EfficientNet inherits and ConvNeXt eventually replaces
+wholesale. The 2019--2022 tables that follow all diff against the
+same 2018 SGD column. This one shows where their other half came
+from.
 
 \prosesection{The reference (JAX)}
 
@@ -9339,7 +9408,7 @@ def mobilenetV2Imagenet : NetSpec where
     .dense 1280 1000 .identity      -- 1000-class head
   ]
 
--- TF-slim's README command, row for row; the table below names each value's source.
+-- TF-slim's README command, row for row, each value's source beside it.
 def mobilenetV2ImagenetConfig : TrainConfig where
   learningRate   := 0.12      -- 0.045 per 96 images, scaled to 256
   batchSize      := 256
@@ -9392,58 +9461,15 @@ def mobilenetV2ImagenetConfigFull : TrainConfig :=
   { mobilenetV2ImagenetConfig with epochs := 420 }
 \end{verbatim}
 
-\noindent Table~\ref{tab:mnv2_config_sources} is where each value of the
-config comes from.
-
-\begin{table}[H]
-\centering
-\caption{Where each value of the MobileNetV2 ImageNet config comes from: TF-slim's \texttt{research/slim} tree, the README command and the files it runs.}
-\label{tab:mnv2_config_sources}
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}p{2.6cm} p{2.9cm} p{8.4cm}@{}}
-\hline
-Knob & Value & Source \\
-\hline
-\cellleft learning rate & \cellleft $0.12$ at $256$ & \cellleft README: \texttt{learning\_rate 0.045*NUM\_GPUS} on \texttt{batch\_size 96*NUM\_GPUS}, so $0.045$ per $96$ images \\
-\cellleft epochs & \cellleft $90$; \texttt{full} $420$ & \cellleft the validation tier; the README's ``about 700K steps'' on 8 clones of 96 is $700{,}000 \times 768 / 1{,}281{,}167 \approx 420$ epochs of data \\
-\cellleft optimizer & \cellleft RMSProp, TF~1 form & \cellleft \texttt{train\_image\_classifier.py}: \texttt{optimizer} defaults to \texttt{rmsprop}; TF~1's \texttt{ApplyRMSProp} folds the rate into the momentum term \\
-\cellleft RMSProp $\mu$, $\rho$, $\varepsilon$ & \cellleft $0.9$, $0.9$, $1.0$ & \cellleft \texttt{rmsprop\_momentum 0.9}, \texttt{rmsprop\_decay 0.9}, \texttt{opt\_epsilon 1.0}, not $10^{-8}$ \\
-\cellleft weight decay & \cellleft $4 \times 10^{-5}$, coupled & \cellleft \texttt{weight\_decay 4e-5}, the regularization loss; \texttt{l2\_regularizer} on \texttt{slim.conv2d} only, so no BN $\gamma/\beta$, no biases, and \texttt{separable\_conv2d} has \texttt{weights\_regularizer=None} \\
-\cellleft initialization & \cellleft truncated normal, $\sigma = 0.09$ & \cellleft \texttt{training\_scope(stddev=0.09)}, on every kernel and the logits \\
-\cellleft schedule & \cellleft $\times 0.98$ every $2.5$ epochs, staircase, no warmup & \cellleft \texttt{learning\_rate\_decay\_factor 0.98}; \texttt{num\_epochs\_per\_decay = 2.5 / NUM\_GPUS} per-clone epochs, $2.5$ epochs of data; \texttt{staircase=True} from step 0; \texttt{warmup\_epochs} unset \\
-\cellleft dropout & \cellleft $0.2$ & \cellleft \texttt{dropout\_keep\_prob 0.8} \\
-\cellleft train crop & \cellleft area $0.05$--$1$, aspect $0.75$--$1.33$, 100 attempts & \cellleft \texttt{inception\_preprocessing}: \texttt{distorted\_bounding\_box\_crop} with \texttt{area\_range (0.05, 1.0)}, \texttt{aspect\_ratio\_range (0.75, 1.33)}, \texttt{max\_attempts 100}, then the whole image; a horizontal flip \\
-\cellleft resize & \cellleft bilinear, TF~1 kernel, no antialias & \cellleft \texttt{resize\_images} in \texttt{fast\_mode}; TF~1's \texttt{resize\_bilinear} (\texttt{half\_pixel\_centers=False}), which \texttt{resize\_images} was; train and eval \\
-\cellleft color & \cellleft brightness, then saturation & \cellleft \texttt{distort\_color fast\_mode}: brightness $\pm 32/255$, saturation $0.5$--$1.5$ \\
-\cellleft input scale & \cellleft $(x - 0.5) \times 2$ & \cellleft slim's \texttt{inception\_preprocessing} \\
-\cellleft eval crop & \cellleft slim's window & \cellleft \texttt{preprocess\_for\_eval}: \texttt{central\_crop(0.875)} of both sides, then \texttt{resize\_bilinear} to $224 \times 224$; slim's window, not tf-models' shorter-side square; timm's resize-then-crop kept beside it for \texttt{PROTOCOL=timm} \\
-\cellleft label smoothing & \cellleft $0.1$ & \cellleft README: \texttt{--label\_smoothing=0.1} \\
-\cellleft EMA & \cellleft $0.9999$, warmed up & \cellleft README: \texttt{--moving\_average\_decay=0.9999}; \texttt{ExponentialMovingAverage(decay, num\_updates=global\_step)} \\
-\cellleft BatchNorm & \cellleft decay $0.997$, $\varepsilon = 10^{-3}$, running stats at eval & \cellleft \texttt{training\_scope bn\_decay 0.997}, PyTorch momentum $0.003$; \texttt{slim.batch\_norm}'s $\varepsilon$ \\
-\cellleft precision & \cellleft bf16 convolutions, fp32 head, f32 eval & \cellleft the reference's own choice, matching every verified render \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent The run below is \texttt{mobilenetV2ImagenetConfigFull}, launched
-by \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}. The recipe is
-not the paper's sentence but TF-slim's own reproduction command
-(\texttt{research/slim/nets/mobilenet/README.md}), read with the sources it
-runs: $0.045$ per $96$ images, so $0.12$ at $256$, stepped $\times0.98$ every
-$2.5$ epochs of data as a staircase from step $0$ with no warmup; TF~1's
-RMSProp, with the learning rate folded into the momentum buffer and the
-mean-square started at $1$; coupled weight decay $4 \times 10^{-5}$ on the
-\texttt{conv2d} kernels alone, so off BatchNorm, biases and the depthwise
-kernels; slim's truncated-normal initialization ($\sigma = 0.09$) on every
-kernel; label smoothing $0.1$; the weight average at $0.9999$, which is what
-the README scores; slim's crop ranges, its colour distortion (brightness,
-then saturation), TF~1's bilinear kernel on every resize, its validation
-crop ($0.875$ of both sides, then $224^2$) and $(x - 0.5) \times 2$ inputs;
-and the README's ``about 700K steps'' of $768$, which is $420$ epochs of
-data. One row is not reproduced, on either path: Sandler et al.\ trained
-asynchronously on sixteen workers of $96$ images each, and this run is four
-replicas of $64$, synchronous.
+\noindent Every value in that config is read off TF-slim's tree rather than
+the paper: the README command for the rate, the batch, the smoothing and the
+weight average; \texttt{train\_image\_classifier.py} for the optimizer and
+the staircase; \texttt{training\_scope} for the initialization, the
+regularizer's reach and the BatchNorm constants; and
+\texttt{inception\_preprocessing} for the crop, the resize, the colour
+distortion and the input scale. The run below is
+\texttt{mobilenetV2ImagenetConfigFull}, launched by
+\texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}.
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
 convolutions cast to bfloat16 the instant the flag is on, but MobileNet's
@@ -9453,10 +9479,7 @@ originally ran in fp32 regardless. Routing them through the same
 \texttt{convdt} cast as the plain convolutions is what lets bf16 reach the
 bulk of the network, and the whole block runs $\sim2\times$ faster on
 cuDNN for it: the $1\times1$s are really matmuls and love bfloat16, and the
-depthwise $3\times3$ is a wash. The weight decay also drops to
-$4\times10^{-5}$, because MobileNet's depthwise filters are tiny at nine
-weights per channel, and the $10^{-4}$ that suits ResNet over-regularizes
-them.
+depthwise $3\times3$ is a wash.
 
 \textbf{Why 420 epochs.} The paper fixes the optimizer, the peak, the
 batch, the weight decay and the decay rate --- $\times0.98$ per epoch ---
@@ -9472,71 +9495,24 @@ recipe is a prefix of the same curve at a rate barely off its peak, which
 is why the validation tier is not the row; a shortened run has to
 substitute cosine to be worth anything, which is a different experiment
 rather than a cheaper version of the same one.
-Figure~\ref{fig:mnv2_jax_curve} is the check that the README's length is
-enough. Table~\ref{tab:mnv2_jax} is the run.
 
-\begin{table}[H]
-\centering
-\caption{MobileNetV2 on ImageNet-1k, reference trainer (JAX): global batch 256 as $4 \times 64$ replicas, the weight average at $0.9999$ scored over all $50{,}000$ validation images every epoch through an fp32 forward.}
-\label{tab:mnv2_jax}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $7.0$ min & 420 & $48.7$ hr & $\mathbf{71.84\%}$ & $\mathbf{90.53\%}$ \\
-\hline
-\end{tabular}
-\end{table}
+The run finished at \textbf{71.84\%} top-1 and \textbf{90.53\%} top-5, the
+weight average at epoch 420 through an fp32 forward, in $48.7$ hours on
+four RTX 4060 Ti, one attempt. The last $25$ epochs average $71.72\%$, a
+tenth of a point under the endpoint. The paper's figure is $72.0\%$ and the
+README promises ``roughly 72.0''; at $n=50{,}000$ the Wilson 95\% interval
+on this run is $[71.44, 72.23]$, so the README's command is not
+distinguishable from the README's number, which is the claim here and a
+weaker one than closing a gap by a measured amount.
 
-\noindent The wall-clock win over the
+The wall-clock win over the
 $6.2\times$-larger ResNet-34 is real but sub-proportional, as
 \S\ref{sec:mnv2_runit} measured at small scale: depthwise convolution is
 memory-bound, so an order of magnitude fewer FLOPs buys a factor of two or
 three on this hardware rather than six. The RMSProp peak of $0.12$ took
 off cleanly, because $\varepsilon=1.0$ keeps the adaptive step well damped
 --- in sharp contrast to EfficientNet's $\varepsilon=10^{-3}$ in
-Chapter~\ref{chap:se}. The last $25$ epochs average $71.72\%$, a tenth of
-a point under the endpoint. The paper's figure is $72.0\%$ and the README
-promises ``roughly 72.0''; at $n=50{,}000$ the Wilson 95\% interval on this
-run is $[71.44, 72.23]$, so the README's command is not distinguishable
-from the README's number, which is the claim here and a weaker one than
-closing a gap by a measured amount.
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=425, ymin=0, ymax=95,
-    xtick={0,50,100,150,200,250,300,350,400}, ytick={20,40,60,80},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=0.7pt},
-    title style={font=\small},
-    title={MobileNetV2, TF-slim's README recipe, 420 epochs --- reference},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,17.38) (10,56.19) (20,60.68) (30,63.16) (40,64.44) (50,65.41) (60,66.07) (70,66.59) (80,67.24) (90,67.63) (100,67.93) (110,68.12) (120,68.41) (130,68.82) (140,68.97) (150,69.22) (160,69.44) (170,69.58) (180,69.83) (190,69.98) (200,70.20) (210,70.24) (220,70.37) (230,70.52) (240,70.56) (250,70.85) (260,70.83) (270,70.98) (280,70.94) (290,71.24) (300,71.27) (310,71.33) (320,71.44) (330,71.31) (340,71.34) (350,71.49) (360,71.59) (370,71.47) (380,71.57) (390,71.60) (400,71.69) (410,71.77) (420,71.84)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,37.94) (10,80.20) (20,83.55) (30,85.05) (40,85.93) (50,86.53) (60,87.09) (70,87.52) (80,87.68) (90,87.81) (100,88.12) (110,88.33) (120,88.44) (130,88.67) (140,88.79) (150,88.98) (160,89.12) (170,89.24) (180,89.38) (190,89.33) (200,89.52) (210,89.60) (220,89.60) (230,89.82) (240,89.85) (250,89.89) (260,90.01) (270,90.04) (280,90.02) (290,90.10) (300,90.20) (310,90.28) (320,90.32) (330,90.25) (340,90.44) (350,90.38) (360,90.39) (370,90.27) (380,90.39) (390,90.47) (400,90.52) (410,90.40) (420,90.53)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\caption{Validation accuracy of the MobileNetV2 reference run, at epoch~1 and every tenth epoch after.}
-\label{fig:mnv2_jax_curve}
-\end{figure}
-
-\noindent Epoch $100$ has $95\%$ of the
-final accuracy, the run is still climbing at $200$, and the last $50$
-epochs move top-1 by $0.37$ with the last $25$ averaging a tenth under the
-endpoint: at the README's length the curve is flattening, not flat, and
-the stair is still at $4 \times 10^{-3}$, so this is where another hundred
-epochs stops being worth a day, not where the run stops moving.
+Chapter~\ref{chap:se}.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:mnv2_phase4}
@@ -9613,28 +9589,18 @@ it matches the other ImageNet drivers. The job:
 lake run mnv2-default-4gpu
 \end{verbatim}
 
-\noindent Table~\ref{tab:mnv2_pjrt} is the run.
-
-\begin{table}[H]
-\centering
-\caption{MobileNetV2 on ImageNet-1k, verified path (PJRT): global batch 256 as $4 \times 64$ replicas with synchronised BatchNorm statistics, the weight average scored over the same $50{,}000$ images every epoch through an fp32 forward; one restart, on a corrected PCIe error off a chipset bridge, resumed from the previous epoch's checkpoint.}
-\label{tab:mnv2_pjrt}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $9.1$ min & 420 & $63.7$ hr & $\mathbf{71.69\%}$ & $\mathbf{90.52\%}$ \\
-\hline
-\end{tabular}
-\end{table}
+\noindent The run finished at \textbf{71.69\%} top-1 and \textbf{90.52\%}
+top-5, the weight average at epoch 420 through the same fp32 forward, in
+$63.7$ hours on the same four cards, with one restart, on a corrected PCIe
+error off a chipset bridge, resumed from the previous epoch's checkpoint.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:mnv2_paths} is the two paths, row by row.
+Table~\ref{tab:mnv2_paths} is the two paths.
 
 \begin{table}[H]
 \centering
-\caption{MobileNetV2 on ImageNet-1k: the reference and the verified path, row by row. Both are TF-slim's README recipe at 420 epochs, on the same four RTX 4060 Ti cards, scored over the same $50{,}000$ validation images; rows above the first rule differ, rows between the rules are held equal by construction.}
+\caption{MobileNetV2 on ImageNet-1k: the reference and the verified path. Both are TF-slim's README recipe at 420 epochs, global batch 256 as $4 \times 64$ replicas with the BatchNorm statistics over the global 256, on the same four RTX 4060 Ti cards, the weight average at $0.9999$ scored over the same $50{,}000$ validation images through an fp32 forward; the rows above the rule are everything that differs.}
 \label{tab:mnv2_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -9642,28 +9608,15 @@ Table~\ref{tab:mnv2_paths} is the two paths, row by row.
 \hline
 lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step   & yes                      & none \\
-\hline
-precision            & bf16 convolutions        & bf16 convolutions \\
-classifier head      & fp32                     & fp32 \\
-evaluation forward   & fp32                     & fp32 \\
-init                 & truncated normal, $\sigma = 0.09$ & truncated normal, $\sigma = 0.09$ \\
-global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
-BN statistic group   & 256 (global)             & 256 (global) \\
-steps/epoch          & 5{,}004                  & 5{,}004 \\
-optimizer            & TF RMSProp, $\varepsilon=1.0$ & TF RMSProp, $\varepsilon=1.0$ \\
-schedule             & $\times0.98$ / $2.5$ ep staircase, no warmup & $\times0.98$ / $2.5$ ep staircase, no warmup \\
-weight decay         & $4\times10^{-5}$, kernels only & $4\times10^{-5}$, kernels only \\
-label smoothing      & $0.1$                    & $0.1$ \\
-weights scored       & EMA $0.9999$, epoch 420  & EMA $0.9999$, epoch 420 \\
+per epoch            & $7.0$ min                & $9.1$ min \\
+total                & $48.7$ hr                & $63.7$ hr \\
+restarts             & none                     & one, from the previous epoch's checkpoint \\
 \hline
 \textbf{val top-1}   & $\mathbf{71.84\%}$       & $\mathbf{71.69\%}$ \\
 \textbf{val top-5}   & $\mathbf{90.53\%}$       & $\mathbf{90.52\%}$ \\
 \hline
 \end{tabular}
 \end{table}
-
-\noindent The BatchNorm group is held equal too: the reference normalizes over the global $256$ under its mesh, and the
-verified render all-reduces to the same $256$.
 
 \medskip\noindent\textbf{The two paths tie}, $-0.15$ on top-1 (78 images)
 and $-0.01$ on top-5, inside the 95\% Wilson interval ($\pm0.40$ at $71\%$
@@ -9673,15 +9626,12 @@ window, and the sampled accuracies never part by more than $0.35$ at any
 epoch in the table. Paired on the same images, the two checkpoints agree on
 $44{,}494$ and disagree on $5{,}506$, $2{,}792$ against $2{,}714$, and
 McNemar's exact test gives $p = 0.30$: they cannot be told apart on this
-validation set. The pair this replaces ran the paper's sentence rather than
-the README's command --- $0.045$ unscaled with the stair every epoch for
-$350$ epochs, no smoothing, no weight average, the depthwise kernels
-decayed, and on the verified side the depthwise init at the narrow fan and
-the head in a different precision from the reference's --- and read
-$71.63$ against $71.12$, a $0.51$ gap with two of its rows held unequal;
-every row is held equal here by construction, and the gap is gone.
-Table~\ref{tab:mnv2_paths_epochs} is the two paths at selected epochs and
-Figure~\ref{fig:mnv2_paths_curve} every ten.
+validation set. Table~\ref{tab:mnv2_paths_epochs} is the two paths at selected
+epochs and Figure~\ref{fig:mnv2_paths_curve} every ten. At the README's
+length both curves are flattening, not flat: the stair is still at
+$4 \times 10^{-3}$, and the last fifty epochs move the reference's top-1 by
+$0.37$, so this is where another hundred epochs stops being worth a day
+rather than where the run stops moving.
 
 \begin{table}[H]
 \centering
@@ -9728,64 +9678,12 @@ $\Delta$              & $-0.07$ & $-0.16$ & $-0.23$ & $-0.20$ & $-0.21$ & $-0.35
 \label{fig:mnv2_paths_curve}
 \end{figure}
 
-\subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
-
-The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-2018-era recipe of the SGD lineage: momentum, cosine polish,
-label smoothing. MobileNetV2 is a 2018 paper too, but from the other
-side of a fork. Google's TensorFlow and Inception training tradition
-runs RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
-tiny weight decay, and nothing beyond crop and flip on the data
-side. So this diff is not a time jump but two contemporary recipes
-side by side, and it is the base that the next chapter's 2019
-EfficientNet recipe is built on. The entry point is the same on both
-paths, and every row of Table~\ref{tab:mnv2_vs_2018} is one argument or one
-field:
-
-\begin{table}[H]
-\centering
-\caption{The MobileNetV2 recipe against ResNet-34's 2018 recipe, knob by knob.}
-\label{tab:mnv2_vs_2018}
-\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
-\hline
-Knob & ResNet-34 (2018) & MobileNetV2 (2018) & What the MNv2 choice buys \\
-\hline
-Backbone      & basic block, 21.8\,M   & inverted residual, 3.5\,M     & depthwise $3\times3$ at the wide point between $1\times1$s, at $1/6$ the parameters \\
-Optimizer     & SGD + momentum $0.9$   & RMSProp                       & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}1.0$, where the huge $\varepsilon$ keeps the adaptive step damped (B0 shrinks it to $10^{-3}$ and pays for it) \\
-Peak LR       & $0.1$                  & $0.045$ per 96, $0.12$ at 256 & RMSProp's scale, not comparable to SGD's $0.1$; the README scales it with the clones \\
-LR schedule   & cosine to zero         & exponential, $\times0.98$ per $2.5$ epochs & the TF-lineage staircase the whole family inherits, two fifths as often as the paper's sentence \\
-Epochs        & 90                     & $420$                         & the README's 700K steps, the long-haul schedule the slow stair makes non-negotiable \\
-Weight decay  & $10^{-4}$, weights only & $4\times10^{-5}$, kernels only & depthwise filters are 9 weights per channel, and slim regularizes \texttt{conv2d} alone: not BN, not biases, not the depthwise \\
-Label smoothing & $0.1$                & $0.1$                         & the paper names none; the README's command sets it \\
-Weights scored & raw                  & EMA $0.9999$                  & the TF lineage's polish, in place of annealing the rate to zero \\
-Augmentation  & RRC + hflip            & slim's crop + hflip + colour   & brightness and saturation jitter, no learned policy and no mixing, still the leanest recipe in this book \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent What carries over unchanged: batch 256, train and eval both
-at $224$, running-BN evaluation, and bf16 convolution under an fp32
-classifier head. R34's
-5-epoch warmup does not: MobileNetV2's staircase starts at step $0$, as
-the paper's does.
-
-The through-line of this fork is that nothing here regularizes harder.
-MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
-network $1/6$ the size, and its distinctive knobs (adaptive
-optimizer, staircase decay, a tiny weight decay on the kernels alone, the
-weight average)
-are the ones EfficientNet inherits and ConvNeXt eventually replaces
-wholesale. The 2019--2022 tables that follow all diff against the
-same 2018 SGD column. This one shows where their other half came
-from.
-
 The general pattern is deeper and narrower, with a per-channel conv
 between surrounding $1 \times 1$ expansions, and it carries forward to
 MobileNet V3 and the EfficientNet family. All of those add their own
 small modifications on top (SE blocks, Swish activations, compound
 scaling) but the core depthwise-separable scaffolding is exactly what
 this chapter formalized.
-
 \section{Side quest: MobileNet V4}
 \label{sec:mnv4_side_quest}
 
@@ -9885,64 +9783,17 @@ byte-identical. AdamW at peak $0.004$ for an effective batch of $4096$,
 reached as a $512$-image micro-batch accumulated eight times, so $312$
 optimizer steps an epoch; bf16 convolutions against fp32 master weights; the
 live weights scored every fifth epoch and the last, through an fp32 forward.
-Table~\ref{tab:mnv4_jax} is the run.
+The run finished at \textbf{77.74\%} top-1 and \textbf{93.50\%} top-5,
+the live weights at epoch 100 through an fp32 forward, in about $22.5$ hours
+on four RTX 4060 Ti at about $13.7$ minutes an epoch, one attempt.
 
-\begin{table}[H]
-\centering
-\caption{MobileNetV4-Conv-M on ImageNet-1k, reference trainer (JAX): the paper tier at $256^2$ cut to 100 epochs, micro-batch $512$ as $4 \times 128$ replicas accumulated $8\times$ to the effective $4096$; the live weights scored over all $50{,}000$ validation images through an fp32 forward.}
-\label{tab:mnv4_jax}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$13.7 min & 100 & $\sim$22.5 hr & $\mathbf{77.74\%}$ & $\mathbf{93.50\%}$ \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent The trainer is feed-bound at this shape, $2.59$\,s an optimizer
-step with the four cards waiting on the input pipeline; one attempt, no
-restart. Set against this chapter's other half, that is the six-year
-argument in two rows: $\mathbf{+5.90}$ points over MobileNetV2's
-README-faithful $71.84\%$, from $2.8\times$ the parameters and under a
-quarter of the epochs, $100$ against $420$. By 2024 the mobile line is not
-trading accuracy for size so much as reaching the same accuracy with a block
-that happens to be cheap. Figure~\ref{fig:mnv4_jax_curve} is the run, scored
-every five epochs.
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=102, ymin=0, ymax=95,
-    xtick={0,20,40,60,80,100}, ytick={20,40,60,80},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-    title style={font=\small},
-    title={MobileNetV4-Conv-M, the paper tier at 100 epochs --- reference},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(5,4.61) (10,36.60) (15,54.63) (20,56.98) (25,60.65) (30,60.97) (35,64.26) (40,65.72) (45,66.79) (50,67.99) (55,68.18) (60,69.08) (65,70.99) (70,72.23) (75,74.39) (80,75.75) (85,76.78) (90,77.25) (95,77.59) (100,77.74)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(5,13.62) (10,62.53) (15,78.88) (20,80.83) (25,83.48) (30,83.86) (35,85.89) (40,87.08) (45,87.83) (50,88.52) (55,88.53) (60,89.00) (65,90.02) (70,90.78) (75,91.96) (80,92.58) (85,92.98) (90,93.34) (95,93.47) (100,93.50)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\caption{Validation accuracy of the MobileNetV4-Conv-M reference run, every five epochs: the paper tier at $256^2$, 100 epochs, the live weights scored over all $50{,}000$ validation images.}
-\label{fig:mnv4_jax_curve}
-\end{figure}
-
-\noindent The last ten epochs move top-1 by $0.49$ ($77.25 \to 77.59 \to
-77.74$), so at a hundred epochs this schedule is not exhausted: the pack wants
-the length, which is what the yaml's $500$ is for, and the two points to
-$79.9\%$ are the schedule's to close.
+The trainer is feed-bound at this shape, $2.59$\,s an optimizer
+step with the four cards waiting on the input pipeline. Set against
+this chapter's other half, that is the six-year argument in two rows:
+$\mathbf{+5.90}$ points over MobileNetV2's README-faithful $71.84\%$, from
+$2.8\times$ the parameters and under a quarter of the epochs, $100$ against
+$420$. By 2024 the mobile line is not trading accuracy for size so much as
+reaching the same accuracy with a block that happens to be cheap.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:mnv4_pjrt}
@@ -10040,34 +9891,20 @@ scripts/supervise.sh mnv4-full-e100-4gpu
 
 \noindent The job config is the 500-epoch row's with
 \texttt{LEAN\_MLIR\_EPOCHS=100}, which sets the cosine as well as the loop
-bound, under the run's own checkpoint tag. Table~\ref{tab:mnv4_pjrt} is the
-run.
-
-\begin{table}[H]
-\centering
-\caption{MobileNetV4-Conv-M on ImageNet-1k, verified path (PJRT): the paper tier at $256^2$ cut to 100 epochs, micro-batch $512$ as $4 \times 128$ replicas accumulated $8\times$ as on the reference; the live weights scored over the same $50{,}000$ images through an fp32 forward.}
-\label{tab:mnv4_pjrt}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$10.6 min & 100 & $\sim$17.6 hr & $\mathbf{77.42\%}$ & $\mathbf{93.48\%}$ \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent Compute-bound, at about a quarter of a second a $512$-image
-micro-step, which is why the proven graph finishes five hours ahead of the
-Python trainer on the same four cards; one attempt, no restart and no thermal
-rest.
+bound, under the run's own checkpoint tag. The run finished at
+\textbf{77.42\%} top-1 and \textbf{93.48\%} top-5, the live weights at epoch
+100 through the same fp32 forward, in about $17.6$ hours on the same four
+cards at about $10.6$ minutes an epoch, one attempt. It is compute-bound, at
+about a quarter of a second a $512$-image micro-step, which is why the proven
+graph finishes five hours ahead of the Python trainer.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:mnv4_paths} is the two paths, row by row.
+Table~\ref{tab:mnv4_paths} is the two paths.
 
 \begin{table}[H]
 \centering
-\caption{MobileNetV4-Conv-M on ImageNet-1k: the reference and the verified path, row by row. Both are the paper tier at $256^2$ cut to 100 epochs, on the same four RTX 4060~Ti cards, scored over the same $50{,}000$ validation images under the same protocol; rows above the first rule differ, rows between the rules are held equal by construction.}
+\caption{MobileNetV4-Conv-M on ImageNet-1k: the reference and the verified path. Both are the paper tier at $256^2$ cut to 100 epochs: AdamW at $0.004$ for an effective batch of $4096$ as $8 \times 512$, the BatchNorm statistics over the $512$-image micro-batch, the live weights scored over the same $50{,}000$ validation images through an fp32 forward, on the same four RTX 4060~Ti cards; the rows above the rule are everything that differs.}
 \label{tab:mnv4_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -10077,23 +9914,8 @@ lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\
 Python in the step  & yes                      & none \\
 classifier head     & bf16                     & fp32 \\
 depthwise init, variance & $2/k^2$             & $2/(C k^2)$ \\
-\hline
-input               & $256^2$                  & $256^2$ \\
-precision           & bf16 convolutions        & bf16 convolutions \\
-evaluation forward  & fp32                     & fp32 \\
-effective batch     & 4096                     & 4096 \\
-accumulation        & $8 \times 512$           & $8 \times 512$ \\
-BN statistic group  & 512 (Ghost-BN)           & 512 (Ghost-BN) \\
-BN decay, $\varepsilon$ & $0.997$, $10^{-3}$   & $0.997$, $10^{-3}$ \\
-steps/epoch         & 312                      & 312 \\
-optimizer           & AdamW $\beta(0.9, 0.999)$ & AdamW $\beta(0.9, 0.999)$ \\
-AdamW $\varepsilon$ & $10^{-7}$                & $10^{-7}$ \\
-schedule            & cosine from step 0, 5-ep warmup & cosine from step 0, 5-ep warmup \\
-epochs              & 100                      & 100 \\
-weight decay        & $0.1$, not norms or biases & $0.1$, not norms or biases \\
-RandAugment         & $m15$ at $p\,0.7$         & $m15$ at $p\,0.7$ \\
-dropout, drop-path  & $0.2$, $0.075$           & $0.2$, $0.075$ \\
-weights scored      & live                     & live \\
+per epoch           & $13.7$ min               & $10.6$ min \\
+total               & $22.5$ hr                & $17.6$ hr \\
 \hline
 \textbf{val top-1}  & $\mathbf{77.74\%}$       & $\mathbf{77.42\%}$ \\
 \textbf{val top-5}  & $\mathbf{93.50\%}$       & $\mathbf{93.48\%}$ \\
@@ -10114,10 +9936,13 @@ reference's way and $2{,}071$ the verified path's, and McNemar's exact test
 puts $p = 0.014$ on the $162$ between them. The reference's half of that
 pairing is its epoch-100 checkpoint rescored through the same fp32 forward
 with a per-image bitmap, $38{,}870$ of $50{,}000$, the in-training count
-exactly. The verified path leads at seven of the twenty scorings, epochs 5,
-10 and 20 and again from 55 to 70, by as much as $+1.47$ at epoch 60; the
-reference leads at every scoring from 75 on, by $0.43$ on the mean of the
-last five. Table~\ref{tab:mnv4_paths_epochs} is the selected epochs and
+exactly. The verified path leads through the first two thirds of the run,
+by as much as a point and a half, and the reference leads at every scoring
+in the last quarter, by $0.43$ on the mean of the last five. At a hundred
+epochs neither curve is exhausted: both are still climbing through the last
+ten, by about half a point, so the pack wants the length the yaml's $500$ is
+for, and the two points to $79.9\%$ are the schedule's to close.
+Table~\ref{tab:mnv4_paths_epochs} is the selected epochs and
 Figure~\ref{fig:mnv4_paths_curve} every five.
 
 \medskip\noindent The two halves ran one after the other on the same four
