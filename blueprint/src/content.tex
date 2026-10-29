@@ -191,9 +191,20 @@ right. That's the pipeline this book is built around.
 
 \section*{Why image recognition}
 
-Same reason as the first book. It's the oldest, best-understood corner
-of deep learning, so the primitives can arrive one at a time in a
-sensible order.
+Image classification is where a training run can be checked cheaply,
+sharply and legibly. Cheap: every rung up to Imagenette trains in under
+an hour on one consumer card, so the ladder below ImageNet is an afternoon
+to rerun, and the ImageNet rungs are there because that is where the
+baselines live. Sharp: those baselines are known to the decimal, so when
+the verified path and the reference land within a tenth of a point of a
+published number the agreement means something, and a run that misses by
+a point has something to explain. Legible: the ladder from MLP to ViT is
+the one every practitioner has climbed, so a reader who has trained a
+ResNet knows where they are and what the next chapter adds. Language
+gives none of the three: a tokenizer sits in front of the first layer,
+outside anything the proofs can say; the pretraining data is too large to
+rerun; and the number at the end depends on the vocabulary, so two labs
+with different tokenizers are not measuring the same thing.
 
 We start with MNIST (digits, $28 \times 28$ grayscale) and work up
 through CIFAR-10 (color, $32 \times 32$) to Imagenette and then full
