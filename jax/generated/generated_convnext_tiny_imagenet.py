@@ -1836,7 +1836,7 @@ if __name__ == "__main__":
 
     MICRO_BATCH = (256 // n_devices) * n_devices or n_devices
     BATCH_SIZE = MICRO_BATCH * GRAD_ACCUM   # effective batch = micro × accum; train_step accumulates GRAD_ACCUM micro-batches/step
-    EPOCHS = 80
+    EPOCHS = 300
     LR = 0.004000
     steps_per_epoch = train_examples // BATCH_SIZE
     total_steps = steps_per_epoch * EPOCHS
@@ -1868,7 +1868,7 @@ if __name__ == "__main__":
             'kind': 'header', 'phase': 'phase2',
             'netspec_name': "ConvNeXt-T (ImageNet, bf16)",
             'config': {
-                'lr': 0.004000, 'batch_size': 256, 'epochs': 80,
+                'lr': 0.004000, 'batch_size': 256, 'epochs': 300,
                 'use_adam': True,
                 'weight_decay': 0.050000,
                 'cosine': True,

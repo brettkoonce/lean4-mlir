@@ -40,10 +40,9 @@ def convNeXtTinyImagenet : NetSpec where
     .dense 768 1000 .identity                  -- 1000-class head
   ]
 
-/-- ConvNeXt-T 80-epoch recipe — the full faithful regularizer
-    stack on (EMA + stochastic depth) at 80 epochs, to validate those
-    features train cleanly before the 300-epoch run (`convNeXtTinyImagenetConfigFull`
-    is this at 300). ConvNeXt needs AdamW, not SGD: decoupled weight
+/-- ConvNeXt-T, the official recipe (facebookresearch/ConvNeXt's main.py and its README
+    command) at its 300-epoch schedule, the full regularizer stack on (EMA + stochastic
+    depth). ConvNeXt needs AdamW, not SGD: decoupled weight
     decay 0.05 (excluding norm/bias/LayerScale — timm no_weight_decay), label smoothing 0.1,
     bf16 + bf16 conv. EMA (decay 0.9999) + stochastic depth
     (dropPath 0.1, the ConvNeXt-T paper value) on. Geometric RandAugment (N=2, M=9,
@@ -64,12 +63,12 @@ def convNeXtTinyImagenet : NetSpec where
     `--model_ema_decay 0.9999`, a constant decay from step 0 (`emaWarmup := false`); and the
     validation forward in f32 (`evalF32`), as `--model_ema_eval` scores through the fp32 model.
     The verified pair render is `convnextin_emaaccdp16xwxdroperfbf16` (4 × 64 × 16).
-    The 80-epoch tier keeps all of it at the shorter schedule. -/
+    -/
 def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate   := 0.004   -- the official `--lr 4e-3` AT ITS BATCH of 4096 (effective, below)
   batchSize      := 256     -- the micro-batch, 4 × 64 — what one forward sees
   gradAccumSteps := 16      -- × 16 = 4096, the official total batch; exact without BatchNorm
-  epochs         := 80
+  epochs         := 300     -- the official schedule
   optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true  -- timm no_weight_decay: skip norm γ/β, biases, LayerScale γ (1-D params)
@@ -110,18 +109,17 @@ def convNeXtTinyImagenetConfig : TrainConfig where
 
 #eval convNeXtTinyImagenet.validate!
 
-/-- Paper-faithful full run: identical recipe at the 300-epoch schedule (where
-    Mixup/CutMix actually pay off). Selected with the `full` recipe arg. -/
-def convNeXtTinyImagenetConfigFull : TrainConfig :=
-  { convNeXtTinyImagenetConfig with epochs := 300 }
+/-- `full` is the same config, kept because `scripts/jobs/cnx-default-jax-4gpu.conf` and the
+    CI emission check name its emitted file `generated_convnext_tiny_imagenet_full.py`. -/
+def convNeXtTinyImagenetConfigFull : TrainConfig := convNeXtTinyImagenetConfig
 
 def convNeXtTinyImagenetRecipes : List Recipe := [
   { name := "default", cfg := convNeXtTinyImagenetConfig,
     out := "generated_convnext_tiny_imagenet.py",
-    desc := "80-epoch validation tier (full aug pack + geometric RandAugment)" },
+    desc := "the official 300-epoch run (full aug pack + geometric RandAugment)" },
   { name := "full",    cfg := convNeXtTinyImagenetConfigFull,
     out := "generated_convnext_tiny_imagenet_full.py",
-    desc := "paper-faithful 300-epoch run (where Mixup/CutMix pay off)" }
+    desc := "the same run, under the name the jobs call it by" }
 ]
 
 def main (args : List String) : IO Unit :=

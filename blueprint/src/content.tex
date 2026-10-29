@@ -12170,9 +12170,10 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 
 \label{sec:convnext_imagenet}
 
-ConvNeXt's architecture reached this book through the Imagenette
-example earlier in this chapter, and the recipe runs on both paths ---
-the reference first, then the verified path, then the two side by side.
+ConvNeXt's architecture reached this book through the Imagenette example
+earlier in this chapter, and the recipe is the architecture's whole
+thesis, so it comes first here: what it changes from ResNet-34's, then the
+reference, then the verified path, then the two side by side.
 
 The recipe is the official one, facebookresearch/ConvNeXt's own
 \texttt{main.py} with its README command for ConvNeXt-T: AdamW at
@@ -12191,6 +12192,71 @@ paths. One thing is disclosed rather than matched: Mixup's $\lambda$ is
 drawn once per $4096$-image step on the reference and once per
 $256$-image micro-batch on the verified path, where the official trainer
 draws it once per $128$, so agreement there is distributional.
+
+\subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
+2018-era recipe: the original paper's SGD-with-momentum plus
+the ``bag of tricks'' polish (cosine schedule, warmup, label
+smoothing, random-resized-crop). The config below is the 2022
+ConvNeXt recipe, DeiT's transformer-training playbook applied to a
+convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
+the 2018$\to$2021 jump on a fixed ResNet, this table shows the
+2018$\to$2022 jump with the block modernized in step. Since
+``the recipe is the thesis'' is this architecture's whole argument,
+Table~\ref{tab:cnx_vs_2018} is the chapter in table form. The
+\texttt{trainAdamSched} entry point is identical in both columns, and
+every row is a one-line change to the \texttt{VerifiedNetSpec}, the
+\texttt{VerifiedConfig}, or the arguments beside them.
+
+\begin{table}[H]
+\centering
+\caption{The ConvNeXt-T recipe against ResNet-34's 2018 recipe, knob by knob.}
+\label{tab:cnx_vs_2018}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & ConvNeXt-T (2022) & What the ConvNeXt choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & ConvNeXt block, 28.6\,M       & BN+ReLU $\to$ LN+GELU; dw-$7\times7$ + inverted bottleneck + LayerScale --- the modernized block this chapter built \\
+Optimizer     & SGD + momentum $0.9$   & AdamW                         & decoupled decay + per-parameter step scale; LR-robust where B0's RMSProp proved fragile \\
+Effective batch & 256                  & 4096 ($16 \times 256$ accumulated) & the official total batch, and the rate is set for it; exact without BatchNorm \\
+Peak LR       & $0.1$                  & $4\mathrm{e}{-3}$ at 4096     & AdamW's scale, not comparable to SGD's $0.1$ \\
+Warmup        & 5 epochs               & 20 epochs                     & heavy augmentation + adaptive optimizer want a long, gentle ramp \\
+Epochs        & 90                     & 300                           & heavy regularization needs a long schedule to pay, and converts it straight into accuracy rather than into overfitting \\
+Loss          & softmax cross-entropy  & CE over soft targets          & unlike A3's BCE switch, ConvNeXt keeps CE --- the softening comes from the Mixup/CutMix labels \\
+Weight decay  & $10^{-4}$, weights only & $0.05$, skip 1-D params       & $500\times$ stronger, never on norm/bias/LayerScale (timm's \texttt{no\_weight\_decay}) \\
+Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives \\
+Stochastic depth & none                & drop-path $0.1$               & randomly drops whole residual branches per step --- the depth regularizer \\
+EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights; with drop-path, together ${<}5\%$ per epoch \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent What carries over unchanged: cosine LR decay, the
+warmup-then-anneal structure, random-resized-crop + horizontal flip
+as the base augmentation, label smoothing $0.1$, no gradient clipping,
+train and eval both at $224$ (no FixRes), and bf16 convolution under an
+fp32 classifier head.
+
+The augmentation row is the full DeiT pack: Mixup (Zhang et al.\ 2017,
+\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
+(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
+Random Erasing (Zhong et al.\ 2017,
+\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
+RandAugment (Cubuk et al.\ 2019,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
+are implemented as data-only kernels that mutate the input tensor
+before the graph sees it, tier 1 in our codegen scope, no MLIR
+plumbing required. Mixup and CutMix route through a soft-label
+train-step variant since they produce fractional labels. Random
+Erasing and RandAugment leave labels alone.
+
+The through-line is the same ``regularize harder, train bigger''
+as RSB-A3, arrived at from the transformer side: keep cross-entropy
+and soften the targets instead of switching losses, AdamW instead of
+LAMB at a large batch that accumulation reaches as A3's does,
+stochastic depth and EMA from the ViT toolkit, and a $3\times$ longer
+schedule to let the regularization pay.
 
 \prosesection{The reference (JAX)}
 
@@ -12227,7 +12293,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate   := 0.004   -- the official `--lr 4e-3`, at its batch of 4096
   batchSize      := 256     -- the micro-batch, 4 x 64: what one forward sees
   gradAccumSteps := 16      -- x 16 = 4096, the official total batch; exact without BN
-  epochs         := 80
+  epochs         := 300     -- the official schedule
   optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true  -- timm no_weight_decay: norm γ/β, biases, LayerScale γ
@@ -12261,10 +12327,6 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   f32StemHead    := true    -- classifier head in fp32, as every verified render
   useEMA         := true     -- weight averaging (decay 0.9999): eval + ckpt use it
   dropPath       := 0.1      -- stochastic depth, ConvNeXt-T paper value
-
--- 300-epoch "full" tier: same config, longer schedule.
-def convNeXtTinyImagenetConfigFull : TrainConfig :=
-  { convNeXtTinyImagenetConfig with epochs := 300 }
 \end{verbatim}
 
 Unlike MobileNet and EfficientNet, ConvNeXt trains with AdamW and a
@@ -12276,56 +12338,19 @@ cores to bite, unlike the $3\times3$ depthwise, which is a wash), and
 the inverted-bottleneck $1\times1$s are matmuls that love it. The
 channel LayerNorm and GELU stay in fp32.
 
-The elements of the paper recipe, wired and on:
-
-\begin{itemize}
-  \item the faithful patchify stem (\texttt{.convNextStem}:
-    $4\times4$ stride-4 conv $\to$ channel-LayerNorm, no BN/ReLU)
-  \item \textbf{stochastic depth} (drop-path 0.1) and \textbf{EMA}
-    (decay 0.9999), together ${<}5\%$ per epoch
-  \item \textbf{decoupled weight decay that excludes the
-    norm/bias/LayerScale 1-D params} (\texttt{wdExcludeNormBias},
-    timm's \texttt{no\_weight\_decay})
-  \item the \textbf{full DeiT-style augmentation pack}: Mixup
-    $\alpha0.8$, CutMix $\alpha1.0$, Random Erasing $p0.25$, and
-    geometric RandAugment ($N{=}2$, $M{=}9$, \texttt{mstd0.5-inc1})
-\end{itemize}
-
-\noindent The peak LR is the official $4\mathrm{e}{-3}$ at a total batch
-of $4096$, reached as sixteen accumulated micro-batches of $256$, over a
-20-epoch per-step warmup; the optimizer takes $312$ steps an epoch.
-Table~\ref{tab:cnx_jax} is the full 300-epoch tier, trained and evaluated
-on an antialiased bicubic resize and scored at the paper's protocol,
-$224$ with a $0.875$ centre crop, through an fp32 forward.
-
-\begin{table}[H]
-\centering
-\caption{ConvNeXt-T on ImageNet-1k, reference trainer (JAX): both figures the exponential moving average of the weights at epoch 300, scored over all $50{,}000$ validation images through an fp32 forward.}
-\label{tab:cnx_jax}
-\begin{tabular}{l l r r r r}
-\hline
-GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 3060 & 300 & $14.8$ min & $74.1$ hr & $\mathbf{81.99\%}$ & $\mathbf{95.87\%}$ \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent The same checkpoint's live weights score $81.92\%$ / $95.74\%$,
-so weight averaging is worth $+0.07$ points at the end of this recipe ---
-the cosine has annealed the learning rate to its floor over the final
-epochs, and weights that have stopped moving leave the average little to
-remove. The last twenty-five epochs average $81.93$ / $95.89$, so the
-final number is the tail's mean, not the top of a rise.
-
-The full 300-epoch tier (\texttt{convnext-tiny-imagenet full},
-\texttt{convNeXtTinyImagenetConfigFull}) reached $\mathbf{81.99\%}$ top-1
-and $\mathbf{95.87\%}$ top-5 on the held-out validation pass. That is the
-strongest result in this book's sweep by a wide margin, ahead of
-ResNet-50 RSB-A3 ($77.58\%$), EfficientNet-B0 ($77.17\%$) and ResNet-34
-($73.98\%$). ConvNeXt-T's $82.1\%$ paper headline sits inside the run's
-95\% interval ($81.65$--$82.32$), from a from-scratch
-Lean$\to$JAX-codegen reimplementation of the official recipe.
+The run reached $\mathbf{81.99\%}$ top-1 and
+$\mathbf{95.87\%}$ top-5, the EMA weights at epoch 300 through an fp32
+forward at the paper's protocol, $224$ with a $0.875$ centre crop, in
+$74.1$ hours on four RTX 3060 at $14.8$ minutes an epoch. The same
+checkpoint's live weights score $81.92\%$ / $95.74\%$, so weight averaging
+is worth $+0.07$ points at the end of this recipe: the cosine has annealed
+the learning rate to its floor over the final epochs, and weights that have
+stopped moving leave the average little to remove. The last twenty-five
+epochs average $81.93$ / $95.89$, so the final number is the tail's mean,
+not the top of a rise. That is the strongest result in this book's sweep by
+a wide margin, ahead of ResNet-50 RSB-A3 ($77.58\%$), EfficientNet-B0
+($77.17\%$) and ResNet-34 ($73.98\%$), and ConvNeXt-T's $82.1\%$ paper
+headline sits inside the run's 95\% interval ($81.65$--$82.32$).
 
 The validation curve has a shape the recipe predicts. The scored model is
 the EMA shadow at decay $0.9999$, and at batch $4096$ the optimizer takes
@@ -12345,39 +12370,9 @@ because the official recipe does not clip. It is robust: at the
 $4\mathrm{e}{-3}$ peak, top-1 climbed across the whole 300-epoch schedule
 with no erosion and no divergence, the opposite of B0's RMSProp blow-up.
 AdamW's bounded, decoupled step is what lets the heavy augmentation run
-to schedule instead of destabilizing it early.
-Figure~\ref{fig:cnx_jax_curve} is the run, epoch by epoch.
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=305, ymin=0, ymax=100,
-    xtick={0,50,100,150,200,250,300}, ytick={20,40,60,80,100},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=0.8pt, mark=none},
-]
-\addplot[blue] coordinates {
-(1,0.10) (2,0.11) (3,0.13) (4,0.14) (5,0.17) (6,0.22) (7,0.29) (8,0.33) (9,0.42) (10,0.54) (11,0.56) (12,0.61) (13,0.64) (14,0.62) (15,0.63) (16,0.63) (17,0.65) (18,0.68) (19,0.70) (20,0.70) (21,0.72) (22,0.74) (23,0.75) (24,0.75) (25,0.73) (26,0.72) (27,0.71) (28,0.69) (29,0.69) (30,0.70) (31,0.69) (32,0.68) (33,0.70) (34,0.71) (35,0.73) (36,0.76) (37,0.82) (38,0.88) (39,0.95) (40,1.07) (41,1.23) (42,1.40) (43,1.60) (44,1.89) (45,2.30) (46,2.85) (47,3.55) (48,4.39) (49,5.32) (50,6.37) (51,7.56) (52,8.96) (53,10.61) (54,12.45) (55,14.47) (56,16.53) (57,18.88) (58,21.58) (59,24.23) (60,26.99) (61,29.59) (62,32.18) (63,34.68) (64,37.14) (65,39.64) (66,41.93) (67,44.07) (68,46.13) (69,48.15) (70,49.98) (71,51.71) (72,53.18) (73,54.63) (74,56.04) (75,57.42) (76,58.70) (77,59.93) (78,60.90) (79,61.98) (80,62.95) (81,63.89) (82,64.73) (83,65.49) (84,66.20) (85,66.89) (86,67.49) (87,68.08) (88,68.58) (89,69.07) (90,69.59) (91,69.97) (92,70.36) (93,70.76) (94,71.19) (95,71.54) (96,71.83) (97,72.22) (98,72.52) (99,72.80) (100,73.03) (101,73.30) (102,73.57) (103,73.78) (104,74.00) (105,74.22) (106,74.36) (107,74.57) (108,74.77) (109,74.94) (110,75.09) (111,75.29) (112,75.42) (113,75.58) (114,75.72) (115,75.82) (116,75.93) (117,76.07) (118,76.19) (119,76.33) (120,76.43) (121,76.59) (122,76.71) (123,76.80) (124,76.90) (125,77.00) (126,77.07) (127,77.16) (128,77.22) (129,77.30) (130,77.39) (131,77.49) (132,77.56) (133,77.65) (134,77.77) (135,77.84) (136,77.93) (137,77.97) (138,78.03) (139,78.09) (140,78.16) (141,78.21) (142,78.25) (143,78.29) (144,78.35) (145,78.40) (146,78.44) (147,78.53) (148,78.52) (149,78.59) (150,78.63) (151,78.70) (152,78.76) (153,78.81) (154,78.88) (155,78.95) (156,78.99) (157,79.05) (158,79.12) (159,79.15) (160,79.19) (161,79.26) (162,79.32) (163,79.36) (164,79.40) (165,79.43) (166,79.46) (167,79.54) (168,79.56) (169,79.61) (170,79.66) (171,79.67) (172,79.68) (173,79.69) (174,79.71) (175,79.75) (176,79.79) (177,79.85) (178,79.90) (179,79.91) (180,79.97) (181,79.98) (182,80.03) (183,80.07) (184,80.12) (185,80.13) (186,80.15) (187,80.18) (188,80.20) (189,80.26) (190,80.31) (191,80.33) (192,80.37) (193,80.42) (194,80.43) (195,80.46) (196,80.49) (197,80.51) (198,80.53) (199,80.52) (200,80.55) (201,80.59) (202,80.61) (203,80.65) (204,80.67) (205,80.66) (206,80.67) (207,80.69) (208,80.71) (209,80.75) (210,80.79) (211,80.82) (212,80.86) (213,80.91) (214,80.91) (215,80.92) (216,80.95) (217,80.96) (218,81.00) (219,81.04) (220,81.08) (221,81.08) (222,81.13) (223,81.16) (224,81.19) (225,81.21) (226,81.24) (227,81.24) (228,81.26) (229,81.26) (230,81.26) (231,81.30) (232,81.33) (233,81.36) (234,81.39) (235,81.38) (236,81.41) (237,81.45) (238,81.45) (239,81.45) (240,81.45) (241,81.47) (242,81.48) (243,81.51) (244,81.52) (245,81.54) (246,81.57) (247,81.57) (248,81.58) (249,81.58) (250,81.59) (251,81.60) (252,81.62) (253,81.64) (254,81.64) (255,81.65) (256,81.67) (257,81.68) (258,81.69) (259,81.73) (260,81.74) (261,81.74) (262,81.77) (263,81.78) (264,81.78) (265,81.79) (266,81.80) (267,81.80) (268,81.82) (269,81.82) (270,81.84) (271,81.86) (272,81.86) (273,81.87) (274,81.86) (275,81.86) (276,81.88) (277,81.89) (278,81.90) (279,81.89) (280,81.87) (281,81.88) (282,81.90) (283,81.91) (284,81.92) (285,81.92) (286,81.92) (287,81.93) (288,81.93) (289,81.93) (290,81.94) (291,81.93) (292,81.95) (293,81.96) (294,81.97) (295,81.98) (296,81.98) (297,81.99) (298,81.99) (299,81.99) (300,81.99)
-};
-\addlegendentry{top-1}
-\addplot[orange] coordinates {
-(1,0.47) (2,0.50) (3,0.53) (4,0.65) (5,0.82) (6,1.07) (7,1.34) (8,1.68) (9,2.01) (10,2.22) (11,2.43) (12,2.54) (13,2.61) (14,2.74) (15,2.64) (16,2.66) (17,2.71) (18,2.68) (19,2.73) (20,2.78) (21,2.80) (22,2.82) (23,2.73) (24,2.75) (25,2.81) (26,2.82) (27,2.85) (28,2.82) (29,2.87) (30,2.97) (31,3.15) (32,3.31) (33,3.48) (34,3.69) (35,4.01) (36,4.36) (37,4.76) (38,5.36) (39,5.97) (40,6.75) (41,7.75) (42,8.91) (43,10.13) (44,11.41) (45,12.94) (46,14.61) (47,16.55) (48,18.76) (49,20.94) (50,23.32) (51,25.84) (52,28.44) (53,31.29) (54,34.16) (55,37.14) (56,40.26) (57,43.15) (58,46.25) (59,49.20) (60,52.31) (61,55.17) (62,57.92) (63,60.53) (64,63.05) (65,65.38) (66,67.49) (67,69.53) (68,71.41) (69,73.11) (70,74.77) (71,76.18) (72,77.51) (73,78.74) (74,79.85) (75,80.90) (76,81.85) (77,82.76) (78,83.54) (79,84.27) (80,84.91) (81,85.63) (82,86.21) (83,86.77) (84,87.20) (85,87.58) (86,88.02) (87,88.43) (88,88.75) (89,89.06) (90,89.38) (91,89.67) (92,90.01) (93,90.23) (94,90.44) (95,90.70) (96,90.86) (97,91.06) (98,91.20) (99,91.35) (100,91.50) (101,91.66) (102,91.83) (103,91.93) (104,92.04) (105,92.13) (106,92.24) (107,92.30) (108,92.43) (109,92.52) (110,92.61) (111,92.67) (112,92.73) (113,92.80) (114,92.88) (115,92.95) (116,93.04) (117,93.10) (118,93.17) (119,93.23) (120,93.28) (121,93.31) (122,93.37) (123,93.44) (124,93.49) (125,93.53) (126,93.59) (127,93.65) (128,93.68) (129,93.76) (130,93.80) (131,93.83) (132,93.87) (133,93.90) (134,93.94) (135,93.98) (136,94.01) (137,94.06) (138,94.09) (139,94.13) (140,94.16) (141,94.19) (142,94.23) (143,94.27) (144,94.28) (145,94.32) (146,94.35) (147,94.35) (148,94.39) (149,94.43) (150,94.46) (151,94.47) (152,94.49) (153,94.50) (154,94.52) (155,94.56) (156,94.60) (157,94.63) (158,94.67) (159,94.68) (160,94.72) (161,94.73) (162,94.75) (163,94.78) (164,94.79) (165,94.79) (166,94.81) (167,94.80) (168,94.81) (169,94.85) (170,94.88) (171,94.92) (172,94.96) (173,94.98) (174,94.99) (175,95.02) (176,95.06) (177,95.09) (178,95.12) (179,95.13) (180,95.13) (181,95.15) (182,95.16) (183,95.18) (184,95.18) (185,95.20) (186,95.21) (187,95.21) (188,95.21) (189,95.24) (190,95.27) (191,95.29) (192,95.31) (193,95.32) (194,95.35) (195,95.36) (196,95.35) (197,95.37) (198,95.37) (199,95.39) (200,95.40) (201,95.43) (202,95.45) (203,95.46) (204,95.49) (205,95.50) (206,95.51) (207,95.51) (208,95.54) (209,95.56) (210,95.57) (211,95.59) (212,95.60) (213,95.60) (214,95.60) (215,95.63) (216,95.63) (217,95.65) (218,95.66) (219,95.68) (220,95.71) (221,95.73) (222,95.74) (223,95.73) (224,95.76) (225,95.75) (226,95.78) (227,95.80) (228,95.82) (229,95.82) (230,95.81) (231,95.81) (232,95.84) (233,95.84) (234,95.86) (235,95.86) (236,95.87) (237,95.87) (238,95.86) (239,95.85) (240,95.85) (241,95.85) (242,95.85) (243,95.85) (244,95.85) (245,95.85) (246,95.87) (247,95.89) (248,95.89) (249,95.90) (250,95.90) (251,95.89) (252,95.90) (253,95.89) (254,95.90) (255,95.90) (256,95.90) (257,95.92) (258,95.92) (259,95.92) (260,95.93) (261,95.90) (262,95.90) (263,95.90) (264,95.89) (265,95.89) (266,95.90) (267,95.90) (268,95.90) (269,95.90) (270,95.91) (271,95.90) (272,95.90) (273,95.90) (274,95.90) (275,95.89) (276,95.90) (277,95.89) (278,95.90) (279,95.90) (280,95.89) (281,95.90) (282,95.90) (283,95.90) (284,95.90) (285,95.90) (286,95.90) (287,95.89) (288,95.89) (289,95.88) (290,95.89) (291,95.89) (292,95.90) (293,95.90) (294,95.89) (295,95.89) (296,95.89) (297,95.88) (298,95.88) (299,95.88) (300,95.87)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\caption{Validation accuracy per epoch of the 300-epoch ConvNeXt-T reference run: bf16, $4\times$ 3060, every point the EMA weights scored over all $50{,}000$ validation images through an fp32 forward.}
-\label{fig:cnx_jax_curve}
-\end{figure}
-
-\noindent Neither curve turns over:
-both rise through the schedule and flatten across the final $\sim$40
-epochs, where the cosine has annealed the learning rate to its floor.
+to schedule instead of destabilizing it early. The curve never turns over: it rises through the
+schedule and flattens only across the final forty epochs, where the cosine
+has annealed the learning rate to its floor.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:convnext_phase4}
@@ -12444,33 +12439,21 @@ lake run cnx-default-emabf16-4gpu
 \end{verbatim}
 
 \noindent It ran once, with one deliberate stop and resume in its third
-epoch to test the accumulating blob's checkpoint, and no other restart.
-Table~\ref{tab:cnx_pjrt} is the run.
-
-\begin{table}[H]
-\centering
-\caption{ConvNeXt-T on ImageNet-1k, verified path (PJRT): the official total batch of $4096$ as sixteen accumulated micro-batches of $4 \times 64$ at $4\mathrm{e}{-3}$, $312$ updates an epoch, the EMA weights at epoch 300 scored over the same $50{,}000$ validation images through an fp32 forward.}
-\label{tab:cnx_pjrt}
-\begin{tabular}{l l r r r r r}
-\hline
-GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 3060 (CUDA) & bf16 & 20.5 min & 300 & 102.7 hr & $\mathbf{82.15\%}$ & $\mathbf{95.91\%}$ \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent The last twenty-five epochs average $82.14$ / $95.93$, so here
-too the final number is the tail's mean. The same checkpoint's live
-weights score $81.98\%$, so the average is worth $+0.17$ on this path.
+epoch to test the accumulating blob's checkpoint, and no other restart, and
+finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$ top-5, the EMA
+weights at epoch 300 through the same fp32 forward, in $102.7$ hours on the
+same four cards at $20.5$ minutes an epoch. The last twenty-five epochs
+average $82.14$ / $95.93$, so here too the final number is the tail's mean,
+and the same checkpoint's live weights score $81.98\%$, so the average is
+worth $+0.17$ on this path.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:cnx_paths} is the two paths, row by row.
+Table~\ref{tab:cnx_paths} is the two paths.
 
 \begin{table}[H]
 \centering
-\caption{ConvNeXt-T on ImageNet-1k: the reference and the verified path, row by row. Both are the official recipe, 300 epochs, on the same four RTX 3060 cards, scored over the same $50{,}000$ validation images through an fp32 forward; rows above the first rule differ, rows between the rules are held equal by construction.}
+\caption{ConvNeXt-T on ImageNet-1k: the reference and the verified path. Both are the official recipe at 300 epochs, the total batch of $4096$ as sixteen accumulated micro-batches of $4 \times 64$ at $4\mathrm{e}{-3}$, $312$ updates an epoch, no clip, the exact GELU, trunc-normal $0.02$ init, on the same four RTX 3060 cards, the EMA weights at epoch 300 scored over the same $50{,}000$ validation images through an fp32 forward; the rows above the rule are everything that differs.}
 \label{tab:cnx_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -12480,19 +12463,6 @@ lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $
 Python in the step   & yes                      & none \\
 per epoch            & 14.8 min                 & 20.5 min \\
 total                & 74.1 hr                  & 102.7 hr \\
-\hline
-precision            & bf16 convolutions        & bf16 convolutions \\
-classifier head      & fp32                     & fp32 \\
-effective batch      & 4096 ($16 \times 4\times64$) & 4096 ($16 \times 4\times64$) \\
-updates/epoch        & 312                      & 312 \\
-peak LR              & $4\mathrm{e}{-3}$        & $4\mathrm{e}{-3}$ \\
-schedule             & per-step cosine, floor $10^{-6}$ & per-step cosine, floor $10^{-6}$ \\
-gradient clip        & none                     & none \\
-GELU                 & exact (erf)              & exact (erf) \\
-init                 & trunc-normal $0.02$      & trunc-normal $0.02$ \\
-EMA                  & $0.9999$ from step 0, scored per epoch & $0.9999$ from step 0, scored per epoch \\
-evaluation forward   & fp32                     & fp32 \\
-scored               & EMA weights, epoch 300   & EMA weights, epoch 300 \\
 \hline
 \textbf{val top-1}   & $\mathbf{81.99\%}$       & $\mathbf{82.15\%}$ \\
 \textbf{val top-5}   & $\mathbf{95.87\%}$       & $\mathbf{95.91\%}$ \\
@@ -12580,71 +12550,6 @@ $\Delta$                    & $-0.02$ & $-3.72$ & $-3.49$ & $-0.24$ & $+0.43$ & 
 $1.39\times$ per epoch}, $1{,}232$ against $889$ seconds with the
 evaluation of all $50{,}000$ images included, at the same shape on the
 same cards.
-
-\subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
-
-The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-2018-era recipe: the original paper's SGD-with-momentum plus
-the ``bag of tricks'' polish (cosine schedule, warmup, label
-smoothing, random-resized-crop). The config above is the 2022
-ConvNeXt recipe, DeiT's transformer-training playbook applied to a
-convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
-the 2018$\to$2021 jump on a fixed ResNet, this table shows the
-2018$\to$2022 jump with the block modernized in step. Since
-``the recipe is the thesis'' is this architecture's whole argument,
-Table~\ref{tab:cnx_vs_2018} is the chapter in table form. The
-\texttt{trainAdamSched} entry point is identical in both columns, and
-every row is a one-line change to the \texttt{VerifiedNetSpec}, the
-\texttt{VerifiedConfig}, or the arguments beside them.
-
-\begin{table}[H]
-\centering
-\caption{The ConvNeXt-T recipe against ResNet-34's 2018 recipe, knob by knob.}
-\label{tab:cnx_vs_2018}
-\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
-\hline
-Knob & ResNet-34 (2018) & ConvNeXt-T (2022) & What the ConvNeXt choice buys \\
-\hline
-Backbone      & basic block, 21.8\,M   & ConvNeXt block, 28.6\,M       & BN+ReLU $\to$ LN+GELU; dw-$7\times7$ + inverted bottleneck + LayerScale --- the modernized block this chapter built \\
-Optimizer     & SGD + momentum $0.9$   & AdamW                         & decoupled decay + per-parameter step scale; LR-robust where B0's RMSProp proved fragile \\
-Effective batch & 256                  & 4096 ($16 \times 256$ accumulated) & the official total batch, and the rate is set for it; exact without BatchNorm \\
-Peak LR       & $0.1$                  & $4\mathrm{e}{-3}$ at 4096     & AdamW's scale, not comparable to SGD's $0.1$ \\
-Warmup        & 5 epochs               & 20 epochs                     & heavy augmentation + adaptive optimizer want a long, gentle ramp \\
-Epochs        & 90                     & 300                           & heavy regularization needs a long schedule to pay, and converts it straight into accuracy rather than into overfitting \\
-Loss          & softmax cross-entropy  & CE over soft targets          & unlike A3's BCE switch, ConvNeXt keeps CE --- the softening comes from the Mixup/CutMix labels \\
-Weight decay  & $10^{-4}$, weights only & $0.05$, skip 1-D params       & $500\times$ stronger, never on norm/bias/LayerScale (timm's \texttt{no\_weight\_decay}) \\
-Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives \\
-Stochastic depth & none                & drop-path $0.1$               & randomly drops whole residual branches per step --- the depth regularizer \\
-EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights; with drop-path, together ${<}5\%$ per epoch \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent What carries over unchanged: cosine LR decay, the
-warmup-then-anneal structure, random-resized-crop + horizontal flip
-as the base augmentation, label smoothing $0.1$, no gradient clipping,
-train and eval both at $224$ (no FixRes), and bf16 convolution under an
-fp32 classifier head.
-
-The augmentation row is the full DeiT pack: Mixup (Zhang et al.\ 2017,
-\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
-(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
-Random Erasing (Zhong et al.\ 2017,
-\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
-RandAugment (Cubuk et al.\ 2019,
-\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
-are implemented as data-only kernels that mutate the input tensor
-before the graph sees it, tier 1 in our codegen scope, no MLIR
-plumbing required. Mixup and CutMix route through a soft-label
-train-step variant since they produce fractional labels. Random
-Erasing and RandAugment leave labels alone.
-
-The through-line is the same ``regularize harder, train bigger''
-as RSB-A3, arrived at from the transformer side: keep cross-entropy
-and soften the targets instead of switching losses, AdamW instead of
-LAMB at a large batch that accumulation reaches as A3's does,
-stochastic depth and EMA from the ViT toolkit, and a $3\times$ longer
-schedule to let the regularization pay.
 
 \section{Side quest: scaling to ConvNeXt-S and B}
 \label{sec:convnext_sb}
