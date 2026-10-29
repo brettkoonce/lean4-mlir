@@ -6916,6 +6916,15 @@ against the same proven gradient, which is what makes
 \S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
 model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
 
+\medskip\noindent \textbf{The BatchNorm list has 36 entries.} Every residual
+block normalizes after each of its two convolutions, and there are sixteen
+blocks across the four stages ($3+4+6+3$): 32. The projection shortcuts that
+open stages 2--4 carry one each, and the stem one, for 36. Each proves its own
+VJP via Theorem~\ref{thm:bnHasVJP} and composes with the rest of the network
+via Theorem~\ref{thm:vjpComp}. \texttt{bnChannels} lists them in forward order
+because the running-stat region is positional, and an off-by-one there
+misaligns every frozen statistic downstream of it at evaluation time.
+
 \medskip\noindent \textbf{The schedule.} Chapter~\ref{chap:bn} trained at a
 constant rate. Annealing the rate to zero on a cosine is worth about five
 points here ($-5.00 \pm 2.60$ in \S\ref{sec:r34_ablation}), the largest
@@ -6956,39 +6965,30 @@ block in Chapter~\ref{chap:se}, and at the head of every
 post-2015 vision architecture in the bestiary.
 
 \subsection*{Results}
+\label{sec:r34_results}
 
-\S\ref{sec:r34_runit} has the run: 80 epochs on one RTX 4060 Ti, finishing at
-\textbf{90.06\%} top-1 and \textbf{98.32\%} top-5 on Imagenette's 3,925-image
-validation split, one seed of the five that average $89.99 \pm 0.32$. That is
+\S\ref{sec:r34_runit} has the run, and its five-seed $89.99 \pm 0.32$ is the
+first row of Table~\ref{tab:imagenette_five}: the column
+Chapters~\ref{chap:depthwise} through~\ref{chap:attention} fill in, one network
+a chapter, on the same data, the same eighty epochs and the same card. That is
 the going rate for a scratch-trained ResNet-34 at this resolution and data
-size. From the log:
+size.
 
-\begin{itemize}
-\item \textbf{Per-step time is about 120\,ms} at batch 32, 295 steps to the
-  epoch, dominated by the four \texttt{.residualStage} groups where the
-  $3 \times 3$ convolutions at 64, 128, 256 and 512 channels are. The first
-  stage alone, at 64 channels on the $56 \times 56$ grid, is
-  $3 \times 3 \times 64 \times 64$ multiply-accumulates per output location,
-  about $1.2 \times 10^8$ per convolution, six convolutions in the stage,
-  times the batch, and the backward costs about twice the forward again.
+\medskip\noindent\textbf{Where the time goes.} A step is about 120\,ms at
+batch 32, 295 steps to the epoch, and the four \texttt{.residualStage} groups
+are most of it. The first stage alone, at 64 channels on the $56 \times 56$
+grid, is $3 \times 3 \times 64 \times 64$ multiply-accumulates per output
+location, about $1.2 \times 10^8$ per convolution, six convolutions in the
+stage, times the batch; the backward costs about twice the forward again.
 
-\item \textbf{Final loss plateaus near 0.50}, not zero. That's the
-  label-smoothing floor: with $\epsilon = 0.1$ and $K = 10$ classes the
-  smoothed target puts $1 - \epsilon + \epsilon/K = 0.91$ on the true
-  class and $\epsilon/K = 0.01$ on each of the other nine, and the
-  minimum possible cross-entropy against it is that target's entropy,
-  $-0.91 \log 0.91 - 9 \cdot 0.01 \log 0.01 \approx 0.500$. The 0.502 at
-  epoch 80 sits on that floor, so the model has essentially converged.
-  More epochs would mostly just extend training time without budging the
-  loss.
+\medskip\noindent\textbf{The loss ends near 0.50, not at zero}, here and in
+every later chapter's run. That is the label-smoothing floor: with
+$\epsilon = 0.1$ and $K = 10$ classes the smoothed target puts
+$1 - \epsilon + \epsilon/K = 0.91$ on the true class and $\epsilon/K = 0.01$
+on each of the other nine, and the minimum cross-entropy against it is that
+target's entropy, $-0.91 \log 0.91 - 9 \cdot 0.01 \log 0.01 \approx 0.500$.
+A run that ends on the floor has converged; more epochs would not move it.
 
-\item \textbf{BN layers: 36}. Every residual block contains two normalized
-  convolutions, and there are 16 blocks across the four stages
-  (3+4+6+3): 32. The projection shortcuts that open stages 2--4 carry
-  one each, and the stem one, for 36 total. Each one proves its own VJP
-  via Theorem~\ref{thm:bnHasVJP} and composes with the rest of the
-  network via Theorem~\ref{thm:vjpComp}.
-\end{itemize}
 
 \section{MLIR: Residual}
 
@@ -8311,23 +8311,10 @@ done (trained MobileNetV2 adam + cosine/warmup via packed threading).
 
 Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
 \textbf{89.25\%} top-1 with \textbf{98.68\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $89.32\%$. Set that
-against Chapter~\ref{chap:residual}, which ran the same data, the same
-recipe and the same number of epochs through a network with
-$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 over five seeds
-(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}). MobileNetV2 gives up three quarters of
-a point of top-1 --- less than one run's own $\pm 0.97$ interval --- picks
-up a fifth of a point of top-5, and does it in thirty-five minutes
-against forty-seven.
-
-Epoch 2 is worth a glance before moving on. Validation accuracy
-falls, from $24.1\%$ to $17.3\%$, while the training loss drops
-normally. The learning rate is still warming up and the BatchNorm running
-statistics are averaging over weights that are moving fast, so the
-evaluation forward --- \texttt{@mobilenetv2\_fwd\_eval}, the third
-artifact every BatchNorm net compiles, fed by the \texttt{running-stats
-BN} line above it --- is using statistics that no longer describe the
-thing being evaluated. It corrects itself by epoch 3 and never recurs.
+3,925-image validation split. The best epoch reached $89.32\%$.
+\S\ref{sec:mnv2_results} sets that against ResNet-34, which ran the same
+data, the same recipe and the same eighty epochs through $9.5\times$ the
+parameters.
 
 One scope note, because this is the chapter where the distinction starts
 to bite. The theorem that folds this run's backward into a single statement
@@ -9183,6 +9170,17 @@ is the kind of detail \texttt{bnChannels} exists to get right: the
 running-stat region is positional, and an off-by-one there misaligns every
 frozen statistic downstream of it at evaluation time.
 
+\textbf{\texttt{runningBN} is also why the net renders as three artifacts.}
+The training step is accompanied by \texttt{mobilenetv2\_fwd} and
+\texttt{mobilenetv2\_fwd\_eval}, and the second exists because BatchNorm
+evaluates against frozen running statistics rather than the batch's own.
+Those statistics are an average over recent weights, so while the weights are
+moving fast, during the warmup, the evaluation forward can be scoring a
+network that no longer exists: validation accuracy falls for an epoch while
+the training loss drops normally, and it recovers as soon as the rate
+settles. The transcript in \S\ref{sec:mnv2_runit} has one such epoch.
+ResNet-34 compiled the same three artifacts for the same reason.
+
 \textbf{The \texttt{toSpecs} arm carries the same count.}
 \texttt{.invertedResidualNB} is one more entry on
 Chapter~\ref{chap:tensor}'s \texttt{toSpecs}, and the $t{=}1$ carve-out
@@ -9215,56 +9213,33 @@ too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
 \texttt{mobilenetv2\_rms\_train\_step.mlir} instead.
 
 \subsection*{Results}
+\label{sec:mnv2_results}
 
-\S\ref{sec:mnv2_runit} has the run: 80 epochs at about 26
-seconds each on one RTX 4060 Ti, finishing at \textbf{89.25\%}
-top-1 and \textbf{98.68\%} top-5 on Imagenette's 3,925-image
-validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at $89.99 \pm 0.32$
-(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) on the same data and the same recipe, that is
-\textbf{0.74 points of top-1} for \textbf{9.5$\times$ fewer parameters}
-(2.24M against 21.3M). That is the depthwise-separable trade, and on
-this evidence it is a better one than the architecture's reputation
-suggests. From the log:
+Against ResNet-34's $89.99 \pm 0.32$ on the same data, the same recipe and
+the same eighty epochs, MobileNetV2's $89.25\%$ is \textbf{0.74 points of
+top-1} for \textbf{9.5$\times$ fewer parameters} (2.24M against 21.3M),
+inside one run's own $\pm 0.97$ interval, with a fifth of a point more
+top-5. That is the depthwise-separable trade, and on this evidence it is a
+better one than the architecture's reputation suggests. It is the second row
+of Table~\ref{tab:imagenette_five}.
 
-\begin{itemize}
-\item \textbf{2.24M parameters, and 1.07\,MB of MLIR} (1\,070\,905 chars)
-  for the AdamW training step. ResNet-34 emitted 754\,KB with $9.5\times$
-  the parameters, so the smaller network renders the larger
-  program. Emission is per-op, and the separable block trades one
-  convolution for three, each with its own BatchNorm. Parameter count
-  went down and operation count went up, and the text follows the
-  second.
+\medskip\noindent\textbf{Where the time goes.} A step is about 90\,ms at
+batch 32, against ResNet-34's 120 at the same batch and the same 295 steps to
+the epoch, so the run takes thirty-five minutes rather than forty-seven. That
+is a real $1.3\times$, and it is far short of what the parameter count
+promises: $9.5\times$ fewer weights buys $1.3\times$ the throughput. Depthwise
+convolution is memory-bound. It does nine multiply-accumulates per output
+element where the standard $3 \times 3$ it replaces does $9 C_\text{in}$, so
+the kernel spends its time moving activations rather than multiplying them,
+and arithmetic was never the whole bottleneck. \S\ref{sec:mnv2_imagenet} sees
+the same sub-proportional scaling at ImageNet.
 
-\item \textbf{Per-step time is about 90\,ms} at batch 32, against
-  ResNet-34's 120\,ms at the same batch, the same 295 steps to the epoch
-  and the same resident parameters, so the whole run takes thirty-five
-  minutes rather than forty-seven. That is a real $1.3\times$, and it is
-  far short of what the parameter count promises: $9.5\times$ fewer
-  weights buys $1.3\times$ the throughput, not $9.5\times$. Depthwise
-  convolution is
-  memory-bound. It does nine multiply-accumulates per output element
-  where the standard $3 \times 3$ it replaces does $9 C_\text{in}$, so
-  the kernel spends its time moving activations rather than multiplying
-  them, and arithmetic was never the whole bottleneck.
-  \S\ref{sec:mnv2_imagenet} sees the same sub-proportional scaling at
-  ImageNet.
+\medskip\noindent\textbf{The smaller network renders the larger program}:
+1{,}071\,KB of MLIR for the training step against ResNet-34's 754. Emission
+is per-op, and the separable block trades one convolution for three, each
+with its own BatchNorm. Parameter count went down, operation count went up,
+and the text follows the second.
 
-\item \textbf{The net renders as three artifacts.} The train step is accompanied by
-  \texttt{mobilenetv2\_fwd} (152\,793 chars) and
-  \texttt{mobilenetv2\_fwd\_eval} (120\,698 chars), the second existing
-  only because BatchNorm evaluates differently than it trains. It is
-  the concrete cost of the \texttt{bnChannels} line in the spec above.
-
-\item \textbf{52 BN layers}, up from ResNet-34's 36, for the same reason
-  the MLIR is bigger: more internal convolutions means more
-  BN-after-conv pairs. Each one still proves its VJP via
-  Theorem~\ref{thm:bnHasVJP}.
-
-\item \textbf{Final loss plateaus near 0.50} again. The label-smoothing floor at
-  $\varepsilon = 0.1$ over ten classes is $0.500$, the entropy of the
-  $0.91 / 0.01$ target, and this run's final $0.517$ sits just above it:
-  converged rather than stalled.
-\end{itemize}
 
 \section{MLIR: Depthwise Convolution}
 
@@ -10304,12 +10279,8 @@ done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).
 
 Eighty epochs at about 30 seconds each, forty-one minutes in total, and
 \textbf{90.04\%} top-1 with \textbf{98.29\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $90.17\%$. That is
-level with ResNet-34's five-seed $89.99 \pm 0.32$ and eight tenths of a
-point over MobileNetV2's $89.25\%$, on the same data,
-the same recipe and the same eighty epochs. EfficientNet-B0 does it with
-$5.3\times$ fewer parameters than ResNet-34 and in forty-one minutes
-against forty-seven.
+3,925-image validation split. The best epoch reached $90.17\%$.
+\S\ref{sec:enet_results} sets it against the two chapters before it.
 
 \prosesection{Three steps, one tensor product}
 
@@ -10850,68 +10821,32 @@ with Theorem~\ref{thm:elemwiseProductHasVJP} and the dense VJP
 block itself.
 
 \subsection*{Results}
+\label{sec:enet_results}
 
-\S\ref{sec:enet_runit} has the run: 80 epochs at about 30 seconds each,
-forty-one minutes, $\mathbf{90.04\%}$ top-1 and $\mathbf{98.29\%}$
-top-5, with the loss settling on the same ${\sim}0.50$ label-smoothing
-floor as ResNet-34 and MobileNetV2. Table~\ref{tab:imagenette_three} is the
-three-chapter comparison --- same dataset, same recipe, same eighty epochs,
-every row a measurement on the verified XLA path, on one RTX 4060 Ti.
+EfficientNet-B0 is level with ResNet-34 on top-1, at $90.04\%$ against
+$89.99 \pm 0.32$, and eight tenths of a point over MobileNetV2's $89.25\%$,
+on the same data, the same recipe and the same eighty epochs. It gets there
+with $5.3\times$ fewer parameters than ResNet-34 and in six fewer minutes;
+MobileNetV2 keeps top-5 by four tenths, the one place the larger model does
+not win. It is the third row of Table~\ref{tab:imagenette_five}.
 
-\begin{table}[H]
-\centering
-\caption{ResNet-34, MobileNetV2 and EfficientNet-B0 on Imagenette: 80 epochs each on the verified path, on one card. Step time is the epoch wall-clock divided by 295 batches, validation pass included; MLIR sizes are the committed \texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units.}
-\label{tab:imagenette_three}
-\begin{tabular}{l r r r r r r}
-\hline
-Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
-\hline
-ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 90.04\% & 98.29\% \\
-\hline
-\end{tabular}
-\end{table}
+\medskip\noindent\textbf{SE and Swish buy $+0.79$ top-1 over MobileNetV2 for
+$1.80\times$ the parameters} (4.02M against 2.24M), and the cost is the
+two-layer MLP inside every one of the sixteen MBConv blocks. That is a
+better trade than the ImageNet leaderboard suggests, where B0 is compared
+against far larger models. It is not the paper's thesis, either: that is
+compound scaling, depth, width and resolution tuned together, whose wins
+arrive at B3--B7, and ten-class Imagenette saturates well before that regime.
 
-\noindent ResNet-34's accuracies are the five-seed means of \S\ref{sec:r34_ablation}
-(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) and its times are one of those seeds' (\S\ref{sec:r34_runit}); the other two rows
-are one run each.
+\medskip\noindent\textbf{Where the time goes.} A step is 103\,ms, between
+MobileNetV2's 90 and ResNet-34's 120. It is slower than the first because of
+SE's own ops, a global-average-pool, two denses, a sigmoid and an elementwise
+multiply per block and the product-rule backward for all of it, and quicker
+than the second by less than the parameter count suggests, for the reason
+Chapter~\ref{chap:depthwise} gave: the core is a depthwise sandwich, and
+depthwise is memory-bound. Sixteen blocks of those ops also make this the
+largest render in the book, 1{,}317\,KB of StableHLO.
 
-\begin{itemize}
-\item \textbf{EfficientNet-B0 is level with ResNet-34 on top-1}, at
-  $90.04\%$ against $89.99 \pm 0.32$, and eight tenths of a point over
-  MobileNetV2's $89.25\%$. It gets there with $5.3\times$ fewer parameters
-  than ResNet-34 and in six fewer minutes. MobileNetV2 keeps top-5 by four
-  tenths, which is the one place the larger model does not win.
-
-\item \textbf{SE and Swish buy $+0.79$ top-1 over MobileNetV2 for
-  $1.80\times$ the parameters} (4.02M against 2.24M). That is a real
-  return rather than a bargain: the cost is the two-layer MLP inside
-  every one of the sixteen MBConv blocks. Whether $1.8\times$ the
-  parameters is worth eight tenths of a point is a judgement, but it is a
-  much better trade than it looks on the ImageNet leaderboard, where B0
-  is usually compared against far larger models.
-
-\item \textbf{1{,}317\,KB of MLIR is the largest render in the book},
-  ahead of MobileNetV2's 1{,}071\,KB and ResNet-34's 754\,KB. The extra
-  ops are SE's: each block emits a global-average-pool, two denses, a
-  sigmoid and an elementwise multiply, and then the product-rule backward
-  for all of it. Sixteen blocks of that is a lot of StableHLO.
-
-\item \textbf{103\,ms per step sits between the two}, slower than
-  MobileNetV2's 90\,ms because of exactly those extra ops, and quicker
-  than ResNet-34's 120\,ms by less than the parameter count suggests,
-  for the reason Chapter~\ref{chap:depthwise} gave: the core is a
-  depthwise sandwich, and depthwise is memory-bound.
-
-\item \textbf{The lift is not from SE alone.} EfficientNet's paper thesis
-  is compound scaling, tuning depth, width and resolution together
-  with one coefficient to reach the ImageNet state of the art. At the B0
-  baseline shown here SE gives a modest bump, and the real wins arrive at
-  B3--B7 where the scaling compounds. This example sits at B0 because the
-  dataset is 10-class Imagenette rather than 1000-class ImageNet, and the
-  return on scaling saturates much earlier.
-\end{itemize}
 
 \section{MLIR: Squeeze-and-Excitation}
 
@@ -12379,20 +12314,15 @@ $10^{-6}$, so a fresh block starts near the identity on its residual
 branch. It is the smallest parameter in the chapter and the one whose
 backward is a pure diagonal.
 
-\textbf{The wrong init is worth three points here.} Until
-2026-09-13 the verified path initialised layer scale to ones, and the same
-render on the same recipe landed at $85.45\%$ against the $82.27\%$
-above, resolved at $\pm 1.2$ per run
-(\texttt{runs/\allowbreak 2026-08-30-\allowbreak convnext-imagenette-headln/}). The two are level through
-epoch 10 and three to four points apart from epoch 20 on ($80.87$ against
-$77.43$ at 20, $84.18$ against $80.03$ at 40): with $\gamma$ at $10^{-6}$
-every residual branch's gradient is scaled by $\gamma$, so the branches
-train late, and 9,469 images over 80 epochs never make the time up. The
-recipe this init belongs to is 300 epochs on 1.28M images, where a late
-start costs nothing, and \S\ref{sec:convnext_imagenet} is that regime.
-The book keeps the paper's value because it is the paper's and the JAX
-reference's; the ones run is the better number on this recipe and not the
-paper's initialisation.
+\textbf{The paper's init is built for a longer schedule than this one.}
+With $\gamma$ at $10^{-6}$ every residual branch's gradient is scaled by
+$\gamma$, so the branches train late, and 9,469 images over 80 epochs do not
+make the time up. The init belongs to the recipe it was designed for, 300
+epochs on 1.28M images, where a late start costs nothing, and
+\S\ref{sec:convnext_imagenet} is that regime. The book keeps the paper's
+value because it is the paper's and the JAX reference's, and
+\S\ref{sec:convnext_results} counts it among the reasons this run lands where
+it does.
 
 \textbf{The stem and the downsamples are spelled out, not packaged.} A
 \texttt{.convNextDownsample 96 192} is two entries here, a
@@ -12418,64 +12348,39 @@ those 23 positivities are the only assumptions anywhere in the chain.
 \subsection*{Results}
 \label{sec:convnext_results}
 
-\S\ref{sec:convnext_runit} has the run: 80 epochs at about 55 seconds
-each, one hour and fourteen minutes, $\mathbf{82.27\%}$ top-1 and
-$\mathbf{96.51\%}$ top-5, with the loss settling on the same
-${\sim}0.50$ label-smoothing floor as the three chapters before it.
-Table~\ref{tab:imagenette_four} is the four-chapter comparison --- same
-dataset, same recipe, same eighty epochs, and every row a measurement on the
-verified XLA path, on one RTX 4060 Ti.
+The largest convnet in the column finishes last among them, and by a clear
+margin: $82.27\%$ against $89.99 \pm 0.32$ for ResNet-34 and $90.04\%$ for
+EfficientNet-B0, from $1.3\times$ and $6.9\times$ their parameters, on the
+same data, the same recipe and the same eighty epochs. Three things
+contribute. ConvNeXt-T carries 27.83M parameters against 9,469 training
+images, which is not the data scale that capacity wants. The recipe here is
+the shared one, AdamW at $10^{-3}$ with cosine and label smoothing, which is
+deliberately not the recipe ConvNeXt was designed around. And its layer scale
+starts at the paper's $10^{-6}$, which holds every residual branch back for
+longer than this schedule can afford (above). It is the fourth row of
+Table~\ref{tab:imagenette_five}.
 
-\begin{table}[H]
-\centering
-\caption{The four convolutional networks on Imagenette: 80 epochs each on the verified path, on one card, columns as in Table~\ref{tab:imagenette_three}. ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation} (\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing.}
-\label{tab:imagenette_four}
-\begin{tabular}{l r r r r r r}
-\hline
-Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
-\hline
-ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 90.04\% & 98.29\% \\
-ConvNeXt-T       & \textbf{27.83M} & 1{,}019\,KB & 188 ms & 1.2 h & 82.27\% & 96.51\% \\
-\hline
-\end{tabular}
-\end{table}
+\medskip\noindent\textbf{That is the chapter's thesis arriving as a result
+rather than a claim.} ConvNeXt's paper argues the modernization lives in the
+training recipe, so a ConvNeXt run on somebody else's recipe should
+underperform, and it does. \S\ref{sec:convnext_imagenet} is the control: the
+same architecture, given the official recipe and 300 epochs, reaches
+$82.15\%$ on ImageNet-1k on the verified path and $81.99\%$ on the
+reference, and beats every other network in this book. The architecture was
+never the variable.
 
-\begin{itemize}
-  \item \textbf{The largest convnet in the column finishes last among
-    them}, and by a clear margin: $82.27\%$ against $89.99 \pm 0.32$ for
-    ResNet-34 and $90.04\%$ for EfficientNet-B0, from $1.3\times$ and
-    $6.9\times$ their parameters. Three things contribute. ConvNeXt-T
-    carries 27.83M parameters against 9,469 training images, which is not
-    the data scale that capacity wants. The recipe here is the shared one,
-    AdamW at $10^{-3}$ with cosine and label smoothing, which is
-    deliberately not the recipe ConvNeXt was designed around. And
-    its layer scale starts at the paper's $10^{-6}$, which on this short
-    schedule is worth three points on its own (above).
-  \item \textbf{That is the chapter's thesis arriving as a result rather
-    than a claim.} ConvNeXt's paper argues the modernization lives in the
-    training recipe, so a ConvNeXt run on somebody else's recipe should
-    underperform, and it does. \S\ref{sec:convnext_imagenet} is the
-    control: the same architecture, given the official recipe and 300
-    epochs, reaches $82.15\%$ on ImageNet-1k on the verified path and
-    $81.99\%$ on the reference, and beats every other network in this
-    book. The architecture was never the variable.
-  \item \textbf{It is the slowest per step}, at 188 ms against
-    ResNet-34's 120 and EfficientNet-B0's 103. The depthwise $7 \times 7$
-    and the channel LayerNorms touch every spatial position twice per
-    block, and the $4\times$ expansion makes its $1 \times 1$s the largest
-    matmuls in the column.
-  \item \textbf{The MLIR is mid-pack at 1{,}019\,KB}, above ResNet-34's 754
-    and below MobileNetV2's 1,071 and EfficientNet-B0's 1,317. Block
-    count is not what separates them, since ConvNeXt's eighteen is more
-    than either. What separates them is what one block costs to emit:
-    ConvNeXt spends three convolutions and a single LayerNorm per block,
-    while an inverted residual spends three convolutions and three
-    BatchNorms, and an MBConv adds the squeeze-excitation pair on top of
-    that. One normalization per block instead of one per layer was item
-    seven on the modernization list, and it is visible in the file size.
-\end{itemize}
+\medskip\noindent\textbf{Where the time goes.} A step is 188\,ms, the
+slowest in the column, against ResNet-34's 120 and EfficientNet-B0's 103.
+The depthwise $7 \times 7$ and the channel LayerNorms touch every spatial
+position twice per block, and the $4\times$ expansion makes its
+$1 \times 1$s the largest matmuls in the column. The render is mid-pack at
+1{,}019\,KB, from more blocks than either MobileNetV2 (1{,}071\,KB) or
+EfficientNet-B0 (1{,}317\,KB): a ConvNeXt block emits three convolutions and
+one LayerNorm where an inverted residual emits three convolutions and three
+BatchNorms, and an MBConv adds the squeeze-excitation pair on top. One
+normalization per block instead of one per layer was item seven on the
+modernization list, and it is visible in the file size.
+
 
 \section{MLIR: Layer Scale}
 
@@ -13182,8 +13087,7 @@ Eighty epochs at about 18 seconds each, twenty-four minutes in total,
 and \textbf{68.74\%} top-1 with \textbf{90.42\%} top-5 on Imagenette's
 3,925-image validation split. The best epoch reached $68.92\%$. That is
 the fastest network in this book's Imagenette column by a wide margin
-and also the least accurate one in it
-(\S\ref{sec:attention_vit_example}).
+and also the least accurate one in it (\S\ref{sec:vit_results}).
 
 \prosesection{Attention in one equation}
 
@@ -14748,22 +14652,31 @@ Imagenette runs trained it; the ImageNet pairs of
 \subsection*{Results}
 \label{sec:vit_results}
 
-\S\ref{sec:vit_runit} has the run: 80 epochs at about 18 seconds each,
-twenty-four minutes, $\mathbf{68.74\%}$ top-1 and $\mathbf{90.42\%}$
-top-5. That completes the Part-1 column, Table~\ref{tab:imagenette_five}, and
-every row of it is now a measurement on the verified XLA path at the same
-dataset, the same eighty epochs, and one RTX 4060 Ti.
+ViT-Tiny is the fastest network in the column, by a factor of $1.5$ per
+step over the next one, and the least accurate by more than thirteen points.
+That gap is the data-hunger effect: 9,469 training images is tiny for a
+transformer. The ViT paper reached ImageNet-competitive accuracy only when
+trained on ImageNet-21K (14M images) or JFT-300M (300M images). At Imagenette
+scale the ConvNets' inductive bias, locality and translation equivariance,
+actively helps, and the ViT has to learn those properties from data it does
+not have. \S\ref{sec:vit_imagenet} is the control: the same architecture on
+1.28M images reaches $71.6\%$ over a thousand classes, which is the regime
+the design was for.
+
+\medskip\noindent That completes the Part~1 column. Every row of
+Table~\ref{tab:imagenette_five} is a measurement on the verified XLA path, on
+the same data, for the same eighty epochs, on one RTX 4060 Ti.
 
 \begin{table}[H]
 \centering
-\caption{The five Part~1 networks on Imagenette: 80 epochs each on the verified path, on one card, columns as in Table~\ref{tab:imagenette_three}. ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation} (\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing.}
+\caption{The five Part~1 networks on Imagenette: 80 epochs each on the verified path, on one RTX 4060 Ti. Step time is the epoch wall-clock divided by 295 batches, validation pass included; MLIR sizes are the committed \texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units. ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation} (\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing; the other rows are one run each. The four convnets share Chapter~\ref{chap:residual}'s recipe; ViT-Tiny trains at a third of its rate with a five-epoch warmup.}
 \label{tab:imagenette_five}
 \begin{tabular}{l r r r r r r}
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
 ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNet V2     &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
 EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 90.04\% & 98.29\% \\
 ConvNeXt-T       & 27.83M  & 1{,}019\,KB & 188 ms   & 1.2 h    & 82.27\% & 96.51\% \\
 ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68.74\% & 90.42\% \\
@@ -14771,16 +14684,16 @@ ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68
 \end{tabular}
 \end{table}
 
-ViT-Tiny is the fastest per step by a factor of $1.5$ over the next
-network and the lowest-accuracy by more than thirteen points. That gap
-is the data-hunger effect: 9,469 training images is tiny for a
-transformer. The ViT paper reached ImageNet-competitive accuracy only
-when trained on ImageNet-21K (14M images) or JFT-300M (300M images). At
-Imagenette scale the ConvNets' inductive bias, locality and translation
-equivariance, actively helps, and the ViT has to learn those properties
-from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
-the same architecture on 1.28M images reaches $71.6\%$ over a
-thousand classes, which is the regime the design was for.
+\noindent Read down the column rather than across the chapters. Accuracy is
+not a function of parameters at this data size: the three networks within a
+point of $90\%$ span 2.24M to 21.3M parameters, and the two designed for far
+more data, ConvNeXt-T and ViT-Tiny, finish last for the reason each chapter
+gave. Step time follows operation count and memory traffic rather than
+parameters, which is why MobileNetV2 at 2.24M is only $1.3\times$ quicker
+than ResNet-34 and ViT-Tiny at 5.53M is twice as quick. The size of the
+render follows the ops per block, so the smallest network is not the smallest
+program. Every row but ResNet-34's is one seed, so a difference under about a
+point is read against ResNet-34's $\pm 0.32$ alone.
 
 \medskip\noindent\textbf{It reproduces exactly.} This number was measured three times
 before being printed, and all three passes came back bit-identical on three different
