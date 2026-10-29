@@ -5595,13 +5595,13 @@ because its test forward runs on running statistics that lag the
 weights, while the per-image net evaluates with the statistics it trained
 on.
 
-\medskip\noindent That first epoch is worth a second look. Thirteen per
-cent is barely above chance on ten classes, and the un-normalized net
-spends four epochs getting to where the normalized ones start. The
-conditioning the three-term backward
-(Theorem~\ref{thm:bnNormalizeHasVJP}) buys is what that is, and it is worth
-more the deeper the stack --- exactly the trend that makes BN standard
-equipment by ResNet's thirty-four layers.
+\medskip\noindent The first epoch is the conditioning on its own. Thirteen
+per cent is barely above chance on ten classes, and the un-normalized net
+spends four epochs getting to where the normalized ones start. That head
+start is what the three-term backward
+(Theorem~\ref{thm:bnNormalizeHasVJP}) buys, and it is worth more the
+deeper the stack, which is the trend that makes BN standard equipment by
+ResNet's thirty-four layers.
 
 \subsection*{Lever 2: the optimizer}
 
@@ -5657,15 +5657,7 @@ move faster than that average follows, so the final test read carries
 the position of the last few hundred steps as well as the seed. The
 dips in Figure~\ref{fig:cifar_bn_curves} are the same effect at the epoch
 scale. The ImageNet chapters run this layer under a cosine schedule,
-which is what settles it. The un-normalized AdamW
-runs also printed \texttt{loss=NaN} in late epochs in three of the five
-seeds while their accuracy held, and that turned out to be the
-diagnostic, not the training: the progress line's loss is
-$\sum \mathrm{onehot}\cdot\log(\mathrm{softmax})$ with no log-sum-exp
-guard, so once an off-class probability underflows to zero it prints
-$0\cdot(-\infty)$. The gradient is $\mathrm{softmax}-\mathrm{onehot}$
-and never takes the log; the next epoch's loss came back finite and the
-accuracy never moved.
+which is what settles it.
 
 The reason we can make this comparison and trust it is that the
 optimizer is one swappable rendered tail. The forward pass, the
@@ -6084,11 +6076,11 @@ lake build resnet34-verified-adam
 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/full\_s2.log}: seed 2 of the
-five that \S\ref{sec:r34_ablation} averages, run by the ablation driver's
-\texttt{full} arm, which is this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=2}. XLA's startup banner and the resident-parameter
+On one RTX 4060 Ti (CUDA 12.9), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=2}, seed 2 of the five that
+\S\ref{sec:r34_ablation} averages
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/full\_s2.log}). XLA's
+startup banner and the resident-parameter
 notices are removed, the network description line is wrapped, each interval is
 wrapped onto an indented continuation, and epochs 5 through 75 are elided:
 
@@ -7987,11 +7979,9 @@ than A2's with a flag: the weight decay is baked into the artifact, $0.01$
 against A2's $0.02$.
 
 \medskip\noindent \textbf{A full schedule.} Table~\ref{tab:r50_a2_a1_time} is four
-cards, each path's own trainer timed on real ImageNet at the job's shape ---
-four replicas of $128$ accumulated four times to $2048$, $625$ optimizer steps
-an epoch; the rates are the 2026-10-07 re-probe
-(\texttt{runs/2026-10-07-d17-reprobe/}), after torchvision's crop and the
-bicubic RandAugment geometry entered the shims.
+cards (\texttt{runs/2026-10-07-d17-reprobe/}), each path's own trainer timed
+on real ImageNet at the job's shape --- four replicas of $128$ accumulated
+four times to $2048$, $625$ optimizer steps an epoch.
 
 \begin{table}[H]
 \centering
@@ -9310,13 +9300,12 @@ distortion and the input scale. The run below was launched by
 \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}.
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
-convolutions cast to bfloat16 the instant the flag is on, but MobileNet's
+convolutions cast to bfloat16 the instant the flag is on, and MobileNet's
 compute lives inside inverted-residual blocks (a $1\times1$ expansion, a
-depthwise $3\times3$, a $1\times1$ projection) whose convolutions
-originally ran in fp32 regardless. Routing them through the same
-\texttt{convdt} cast as the plain convolutions is what lets bf16 reach the
-bulk of the network, and the whole block runs $\sim2\times$ faster on
-cuDNN for it: the $1\times1$s are really matmuls and love bfloat16, and the
+depthwise $3\times3$, a $1\times1$ projection). The flag routes those
+through the same \texttt{convdt} cast as the plain convolutions, which is
+what lets bf16 reach the bulk of the network, and the whole block runs
+$\sim2\times$ faster on cuDNN for it: the $1\times1$s are really matmuls and love bfloat16, and the
 depthwise $3\times3$ is a wash.
 
 \textbf{Why 420 epochs.} The paper fixes the optimizer, the peak, the
