@@ -249,3 +249,15 @@ Lean files and the book). Pages 269 → 262, tables 86 → 76, figures 64 → 59
 
 Untouched by design: Ch 5's R34 anchor and the A2/A1 side quest; the ConvNeXt-S/B and ViT-S/B side quests (TODO runs; the ViT-B Lean config still has a `short` tier to drop when its section lands).
 Still open from §6–§7: the Appendix C scoreboard (§4), five seeds for the Imagenette column.
+
+**Queue item — five seeds for the Imagenette column (2026-10-29).** `tab:imagenette_five` has one
+averaged row (R34, 89.99 ± 0.32 over five seeds from `runs/2026-09-12-r34-ablation-fp32-seeds/`) and
+four single runs (MNv2, B0, CNX-T, ViT-Ti). Run the other four at seeds 2–5 (seed 1 is the printed
+run) so every row is a mean with a spread and the under-a-point comparisons in each chapter's
+Results read against a real interval. Driver: `scripts/sweeps/seed_sweep.sh` (SUITE=imagenette,
+`LEAN_MLIR_SEED`), packed one job per card; or the four `*-verified-adam` binaries by hand with
+`LEAN_MLIR_SEED=n`. Cost on one 4060 Ti per net, four more runs: MNv2 2.3 h, B0 2.7 h, CNX-T 4.9 h,
+ViT-Ti 1.6 h (~12 card-hours; ~3 h on four cards). ViT-Ti is bit-reproducible across cards, so its
+spread is the seed's alone. On landing: every row becomes mean ± half-width, the caption drops its
+one-seed note, Ch 6–9 Results restate their comparisons against the interval, and the column
+paragraph's one-seed caveat goes.

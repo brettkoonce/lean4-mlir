@@ -352,9 +352,8 @@ Chapters~\ref{chap:depthwise}--\ref{chap:attention} are optional.
 \begin{table}[H]
 \centering
 \caption{What each target architecture needs, read off the
-\texttt{\textbackslash uses} graph. Figure~\ref{fig:chapter_map} in
-Appendix~\ref{app:verification} draws the same graph at the scale of
-chapters.}
+\texttt{\textbackslash uses} graph. Figure~\ref{fig:spines} below draws
+the same graph, one column per target.}
 \label{tab:roadmap}
 \small
 \begin{tabular}{@{}l p{3.4cm} p{7.6cm}@{}}
@@ -369,6 +368,38 @@ ConvNeXt & Ch~1--\ref{chap:depthwise}, \ref{chap:layernorm} & GELU and LayerNorm
 Attention / ViT & Ch~1, \ref{chap:bn}'s inverse-stddev chain, \ref{chap:layernorm}'s GELU and LayerNorm, \ref{chap:attention} & the matrix-level machinery of \S\ref{sec:matrix_machinery} and the attention proofs; no convolution chapter on its chain \\
 \end{tabular}
 \end{table}
+
+Figure~\ref{fig:spines} is the same reading list drawn from the proofs
+themselves. Each column follows one network's whole-network certificate up
+through every statement it cites, so the chapters a column reaches are the
+chapters its row of Table~\ref{tab:roadmap} names.
+
+\begin{figure}[H]
+\centering
+\input{figures/depgraph/spines}
+\caption{The five chapter networks' whole-network certificates and what each
+stands on. A column follows one certificate's proof up through every statement it
+cites, transitively; the circle at a chapter is how many of that chapter's
+statements it reaches, the double circle marks the chapter that proves it,
+and every box is a link. All five reach this chapter's calculus and
+Chapter~\ref{chap:bn}'s normalisation lemmas. The three convolutional
+nets stop at their own chapter; the two LayerNorm nets go on to
+Chapter~\ref{chap:layernorm} and the matrix-level machinery of
+\S\ref{sec:matrix_machinery}, and their chains are twice the length.
+EfficientNet-B0 and ConvNeXt-T reach Chapter~\ref{chap:residual}'s
+residual; ViT-Tiny alone reaches Chapter~\ref{chap:attention}'s attention
+proofs. Not counted are the two statements every certificate passes
+through to be stated for a batch rather than one example, the matrix form
+of the VJP record and its row-wise lifting (\S\ref{sec:matrix_machinery}).}
+\label{fig:spines}
+\end{figure}
+
+Read down a column, this is what one network's certificate stands on;
+read across a row, this is what one chapter contributes, and
+Chapter~\ref{chap:tensor}'s row is the only one every column crosses. Each chapter's
+theorems section opens with the same picture at the scale of its own
+statements, and the full clickable dependency graph is in the blueprint
+web view.
 
 If you're unsure: read Chapter~1 carefully, pick a target that fits your
 interest, and follow its row. You can always extend the list later as new
@@ -812,9 +843,9 @@ the \emph{reference}, Lean emitting a JAX program from the same spec and
 the same recipe, differentiated by JAX's own autograd and run from Python.
 The reference is the oracle the verified path has to match, and each
 ImageNet section's table puts the two side by side, first at
-Table~\ref{tab:r34_paths}, with the rows that differ above a rule and the
-rows held equal by construction between the rules, so that a gap, when
-there is one, has one place to come from.
+Table~\ref{tab:r34_paths}, with the rows that differ above a rule and
+everything held equal by construction named in the caption, so that a
+gap, when there is one, has one place to come from.
 
 \part{The framework}
 
@@ -905,61 +936,14 @@ and nothing at all by epoch 12. Every later chapter has a real spread
 across seeds and reports it. This one has none to report, which makes it
 the cleanest baseline in the book to start from.
 
-\section{How it works}
-
-The theorems of this chapter all reduce to a single definition
-(\(\pdiv\)) plus chain rule, sum rule, and product rule, and every later
-chapter's theorems reduce to this chapter's. Before we drop you into the
-deep end, here is the shape of what's coming, at the scale of chapters:
-
-\begin{figure}[H]
-\centering
-\input{figures/depgraph/spines}
-\caption{The five chapter networks' whole-network certificates and what each
-stands on. A column follows one certificate's proof up through every statement it
-cites, transitively; the circle at a chapter is how many of that chapter's
-statements it reaches, the double circle marks the chapter that proves it,
-and every box is a link. All five reach this chapter's calculus and
-Chapter~\ref{chap:bn}'s normalisation lemmas. The three convolutional
-nets stop at their own chapter; the two LayerNorm nets go on to
-Chapter~\ref{chap:layernorm} and the matrix-level machinery of
-\S\ref{sec:matrix_machinery}, and their chains are twice the length.
-EfficientNet-B0 and ConvNeXt-T reach Chapter~\ref{chap:residual}'s
-residual; ViT-Tiny alone reaches Chapter~\ref{chap:attention}'s attention
-proofs. Not counted are the two statements every certificate passes
-through to be stated for a batch rather than one example, the matrix form
-of the VJP record and its row-wise lifting (\S\ref{sec:matrix_machinery}).}
-\label{fig:spines}
-\end{figure}
-
-Read down a column, this is what one network's certificate stands on;
-read across a row, this is what one chapter contributes, and this
-chapter's row is the only one every column crosses. Each chapter's
-theorems section opens with the same picture at the scale of its own
-statements, and the full clickable dependency graph is in the blueprint
-web view.
-
-\paragraph{How the proofs are written.}
-The proofs in this book follow Lamport's structured style
-(\href{https://lamport.azurewebsites.net/pubs/proof.pdf}{\emph{How to
-Write a 21\textsuperscript{st} Century Proof}}).
-Hypotheses are named up front in an \Assume{}/\Prove{} header, with the
-matching Lean hypothesis name in brackets. The proof is a numbered
-sequence of steps. Each step carries its own \textsc{proof} naming
-exactly the facts it follows from, and the final step is always \Qed{},
-which explains why the steps prove the goal. In equational chains,
-\(\prev\) stands for the expression established by the previous step.
-Each step mirrors one tactic block of the corresponding Lean proof, so
-the informal argument can be audited against the formal one step by
-step. One-line lemmas (\texttt{pdiv\_id}, \texttt{pdiv\_const},
-\texttt{pdiv\_reindex}, the identity VJP) stay unstructured:
-structuring a one-\texttt{simp} proof would be ceremony.
-
 \section{The theorems}
 
-Figure~\ref{fig:depgraph_tensor} is the dependency graph of this section. Every
-chapter's theorems section opens with its own, and the legend after this one
-applies to all of them.
+The theorems of this chapter all reduce to a single definition, \(\pdiv\),
+plus the chain rule, the sum rule and the product rule, and every later
+chapter's theorems reduce to this chapter's.
+Figure~\ref{fig:depgraph_tensor} is the dependency graph of this section;
+every chapter's theorems section opens with its own, and the legend after
+this one applies to all of them.
 
 \begin{figure}[H]
 \centering
@@ -976,6 +960,22 @@ Figure~\ref{fig:chapter_map} is the same graph at the scale of chapters.}
 \end{figure}
 
 {\noindent\small \depgraphlegend{}\par}
+
+\paragraph{How the proofs are written.}
+The proofs in this book follow Lamport's structured style
+(\href{https://lamport.azurewebsites.net/pubs/proof.pdf}{\emph{How to
+Write a 21\textsuperscript{st} Century Proof}}).
+Hypotheses are named up front in an \Assume{}/\Prove{} header, with the
+matching Lean hypothesis name in brackets. The proof is a numbered
+sequence of steps. Each step carries its own \textsc{proof} naming
+exactly the facts it follows from, and the final step is always \Qed{},
+which explains why the steps prove the goal. In equational chains,
+\(\prev\) stands for the expression established by the previous step.
+Each step mirrors one tactic block of the corresponding Lean proof, so
+the informal argument can be audited against the formal one step by
+step. One-line lemmas (\texttt{pdiv\_id}, \texttt{pdiv\_const},
+\texttt{pdiv\_reindex}, the identity VJP) stay unstructured:
+structuring a one-\texttt{simp} proof would be ceremony.
 
 \begin{definition}[Partial derivative]
   \label{ax:pdiv}
@@ -2065,97 +2065,6 @@ just proved. The driver that runs all of them is the same Lean either
 way, and it is shorter than you would expect, which is the subject of
 \S\ref{sec:mlp_inside_train}.
 
-\section{MLIR: Linear}
-
-The StableHLO in this section is the artifact the proofs are about, and
-it is what XLA compiles and runs. Nothing between the theorem and the GPU
-rewrites it.
-
-The forward half is short enough to print whole. This is
-\texttt{verified\_mlir/linear\_fwd.mlir} exactly as committed, and it is
-one of the two files the run at the top of the chapter compiled:
-
-\begin{verbatim}
-module @m {
-  func.func @linear_fwd(%x: tensor<128x784xf32>,
-                        %W0: tensor<784x10xf32>,
-                        %b0: tensor<10xf32>) -> tensor<128x10xf32> {
-    %v0 = stablehlo.dot_general %x, %W0,
-            contracting_dims = [1] x [0],
-            precision = [DEFAULT, DEFAULT]
-            : (tensor<128x784xf32>, tensor<784x10xf32>)
-              -> tensor<128x10xf32>
-    %v1 = stablehlo.broadcast_in_dim %b0, dims = [1]
-            : (tensor<10xf32>) -> tensor<128x10xf32>
-    %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>
-    return %v2 : tensor<128x10xf32>
-  }
-}
-\end{verbatim}
-
-Three operations for \(z = Wx + b\): a contraction, a broadcast of the
-bias across the batch, and an add. The shapes are the real ones, batch
-128 against 784 inputs and 10 classes, because this file is the render
-that trains and not an illustration of one.
-
-The backward is two gradients, not one. Nothing sits upstream of the
-input, so the linear classifier never needs $dx$; what it needs is
-$dW = x^{\!\top} dy$ and $db = \sum_{\text{batch}} dy$, with
-$dy = \mathrm{softmax}(\mathrm{logits}) - \text{onehot}$ the loss
-cotangent. Here they are as the other file the run compiled,
-\texttt{verified\_mlir/linear\_train\_step.mlir}, emits them. The SSA
-names are the artifact's, the default \texttt{precision} attribute is
-dropped, and the long lines are wrapped for the page:
-
-\begin{verbatim}
-%v7 = stablehlo.divide %v3, %v6 : tensor<128x10xf32>
-%v8 = stablehlo.subtract %v7, %onehot : tensor<128x10xf32>
-%v9 = stablehlo.dot_general %x, %v8, contracting_dims = [0] x [0]
-      : (tensor<128x784xf32>, tensor<128x10xf32>) -> tensor<784x10xf32>
-%v10 = stablehlo.constant dense<0.00078125> : tensor<784x10xf32>
-%v11 = stablehlo.multiply %v9, %v10 : tensor<784x10xf32>
-%v12 = stablehlo.subtract %W0, %v11 : tensor<784x10xf32>
-// ...
-%v23 = stablehlo.reduce(%v21 init: %v22)
-      applies stablehlo.add across dimensions = [0] : (tensor<128x10xf32>,
-      tensor<f32>) -> tensor<10xf32>
-%v24 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
-%v25 = stablehlo.multiply %v23, %v24 : tensor<10xf32>
-%v26 = stablehlo.subtract %b0, %v25 : tensor<10xf32>
-\end{verbatim}
-
-\noindent \texttt{\%v8} is $dy$. The \texttt{dot\_general} at
-\texttt{\%v9} contracts axis $0$ of $x$ against axis $0$ of $dy$, the
-batch axis of each, which is $x^{\!\top} dy$ summed over the 128
-examples; \texttt{\%v10}--\texttt{\%v12} scale it by $0.00078125 =
-0.1/128$ and subtract it from $W_0$. The bias gradient at
-\texttt{\%v23} is the same batch sum with nothing to contract against,
-and \texttt{\%v26} is its update. Theorem~\ref{thm:linear_fold} is the
-statement that these two returned tensors denote one SGD step on the
-certified gradient at batch 128, and that with the rate folded in as
-$\alpha/N$ it is a step at rate $0.1$ on the batch-mean loss. The graph
-that theorem is about is a Lean value, and
-\texttt{tests/TestSmallNetsBatchedEmit.lean} checks that printing it
-reproduces this file byte for byte.
-
-Everything else in this book scales that one move up. Each architecture
-chapter closes with an ``MLIR: operator'' section that takes the
-chapter's new operator, cuts the operations computing its backward out of
-the committed artifact of the chapter's trained network, and names the
-theorem under which that text denotes a proven derivative. Those
-operators are dense layers, convolution, BatchNorm, the residual fan-in,
-depthwise convolution, squeeze-excitation, layer scale, and attention.
-
-Every listing in those sections is an excerpt of a
-\texttt{verified\_mlir/} file at the shape that trained, with the
-artifact's own SSA names, and a gate
-(\texttt{scripts/book/book\_listings.py}) refuses any StableHLO in this
-book that is not, operation for operation, in the file it quotes. The
-book has no illustrative StableHLO. What is proven, what is tested and
-what is trusted on the way from a theorem to that text is set out in
-Appendix~\ref{app:verification}: the denoted graph, the tie theorems,
-the printer, and the execution oracles.
-
 \section{What's inside \texttt{.train}?}
 \label{sec:mlp_inside_train}
 
@@ -2322,16 +2231,50 @@ further infrastructure code. It all runs on your hardware, and
 \section{MLIR: Training Step}
 \label{sec:mlir_training_step}
 
-Section~\ref{sec:mlp_inside_train} made a claim about the inner call. One
-dispatched StableHLO graph does the forward pass, the loss, the backward
-pass, and the optimizer update, with no tape and no per-step graph
-construction. The ``MLIR: Linear'' section
-above read the two gradient bands out of this file. Here is the
-whole thing the linear classifier compiles to. This is
-\texttt{verified\_mlir/linear\_train\_step.mlir} as committed, with the
-default \texttt{precision} attributes dropped and the long type
-signatures wrapped for the page. Nothing else is removed, including one
-band that repeats:
+The StableHLO in this section is the artifact the proofs are about, and
+it is what XLA compiles and runs. Nothing between the theorem and the GPU
+rewrites it.
+
+The forward half is short enough to print whole. This is
+\texttt{verified\_mlir/linear\_fwd.mlir} exactly as committed, and it is
+one of the two files the run at the top of the chapter compiled:
+
+\begin{verbatim}
+module @m {
+  func.func @linear_fwd(%x: tensor<128x784xf32>,
+                        %W0: tensor<784x10xf32>,
+                        %b0: tensor<10xf32>) -> tensor<128x10xf32> {
+    %v0 = stablehlo.dot_general %x, %W0,
+            contracting_dims = [1] x [0],
+            precision = [DEFAULT, DEFAULT]
+            : (tensor<128x784xf32>, tensor<784x10xf32>)
+              -> tensor<128x10xf32>
+    %v1 = stablehlo.broadcast_in_dim %b0, dims = [1]
+            : (tensor<10xf32>) -> tensor<128x10xf32>
+    %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>
+    return %v2 : tensor<128x10xf32>
+  }
+}
+\end{verbatim}
+
+Three operations for \(z = Wx + b\): a contraction, a broadcast of the
+bias across the batch, and an add. The shapes are the real ones, batch
+128 against 784 inputs and 10 classes, because this file is the render
+that trains and not an illustration of one.
+
+The other file the run compiled is the whole training step, and it is short
+enough to print too. Section~\ref{sec:mlp_inside_train} made a claim about
+its inner call: one dispatched StableHLO graph does the forward pass, the
+loss, the backward pass and the optimizer update, with no tape and no
+per-step graph construction. The backward it holds is two gradients, not
+one. Nothing sits upstream of the input, so the linear classifier never
+needs $dx$; what it needs is $dW = x^{\!\top} dy$ and
+$db = \sum_{\text{batch}} dy$, with
+$dy = \mathrm{softmax}(\mathrm{logits}) - \text{onehot}$ the loss
+cotangent. This is \texttt{verified\_mlir/linear\_train\_step.mlir} as
+committed, with the default \texttt{precision} attributes dropped and the
+long type signatures wrapped for the page. Nothing else is removed,
+including one band that repeats:
 
 \begin{verbatim}
 func.func @linear_train_step(
@@ -2397,10 +2340,10 @@ $dy = \partial\mathrm{CE}/\partial\text{logits}$. That whole band is the
 rendering of a single verified graph, \texttt{lossCotGraph}, certified
 equal to the softmax--cross-entropy gradient by
 \texttt{lossCotGraph\_isCEgrad}. The second (\texttt{\%v9}--\texttt{\%v12})
-is the weight half: \texttt{dot\_general \%x, \%v8} is exactly the move
-from the ``MLIR: Linear'' section, $x^{\!\top} dy$, now serving as the
-weight gradient, and the three operations after it scale by the learning
-rate and subtract.
+is the weight half: \texttt{dot\_general \%x, \%v8} contracts the batch axis of $x$ against
+the batch axis of $dy$, which is $x^{\!\top} dy$ summed over the 128
+examples, the weight gradient, and the three operations after it scale by
+the learning rate and subtract.
 
 The third band (\texttt{\%v13}--\texttt{\%v21}) is the first band over
 again, operation for operation. The printer emits one cotangent chain per
@@ -2445,26 +2388,35 @@ the mean update. Everything else in the listing is the rendering of a theorem
 proved earlier in this chapter: Theorem~\ref{thm:linear_fold} certifies the
 two updates at every batch size, the batch sum and the $\alpha/N$ scale
 included, so with $\alpha/N = 0.1/128$ the emitted step is one step at rate
-$0.1$ on the batch-mean loss.
+$0.1$ on the batch-mean loss. The graph that theorem is
+about is a Lean value, and \texttt{tests/TestSmallNetsBatchedEmit.lean}
+checks that printing it reproduces this file byte for byte.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
 drives it. Strip \S~\ref{sec:mlp_inside_train}'s driver of its logging
 and its session setup and it is the Foundations chapter's five lines. The
 \texttt{train\_step} call is the listing above; the \texttt{eval} is the
-forward render printed in ``MLIR: Linear'', which is this listing's first
+forward render printed above, which is this listing's first
 three operations; and the loop around them counts epochs and slices
 batches, nothing more.
 
-\medskip\noindent\textbf{Where this stands.} The scheme above is the one
-every architecture in Part~1 trains under, and the book's official claim
-is exactly this, no more and no less: every architecture in Part~1
-trained end-to-end under one machine-checked scheme. What stays open is
-three things, stated once here and accounted for in
-Appendix~\ref{app:verification}: the theorems are over \(\mathbb{R}\) while
-the GPU runs a finite precision, and \S~\ref{sec:precision} is the budget
-that sits between them; each operator's printed text is trusted to compute
-what its graph node denotes, the per-op lexing the whole suite shares; and
-the compiler between the text and the card is trusted, not proved.
+Everything else in this book scales that one move up. Each architecture
+chapter closes with an ``MLIR: operator'' section that takes the
+chapter's new operator, cuts the operations computing its backward out of
+the committed artifact of the chapter's trained network, and names the
+theorem under which that text denotes a proven derivative. Those
+operators are dense layers, convolution, BatchNorm, the residual fan-in,
+depthwise convolution, squeeze-excitation, layer scale, and attention.
+
+Every listing in those sections is an excerpt of a
+\texttt{verified\_mlir/} file at the shape that trained, with the
+artifact's own SSA names, and a gate
+(\texttt{scripts/book/book\_listings.py}) refuses any StableHLO in this
+book that is not, operation for operation, in the file it quotes. The
+book has no illustrative StableHLO. What is proven, what is tested and
+what is trusted on the way from a theorem to that text is set out in
+Appendix~\ref{app:verification}: the denoted graph, the tie theorems,
+the printer, and the execution oracles.
 
 \section{Recap}
 
