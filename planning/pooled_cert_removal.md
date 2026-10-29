@@ -4,9 +4,9 @@
 CERTIFICATE MODEL" was scaffolding and gets deleted: 4×4-pooled 49-dim input, width-8 hidden,
 nets `mlpS` (capped, /256) and `mlpT` (unconstrained, /128).
 
-**Status.** Not started. The decisions in §4 are open. The removal map in §1–§3 was made at
-`ea934bc6` (2026-10-28) and should be re-checked before work starts. The quality-indicator pass that
-prompted it is in the lean-quality-indicators run of the same day.
+**Status.** Not started. The decisions in §4 are open; §6 (2026-10-28, `c141448b`) re-checked the
+map, measured both families' memory, and recommends an answer to each decision. The quality-indicator
+pass that prompted it is in the lean-quality-indicators run of 2026-10-28.
 
 ## 1. What goes
 
@@ -133,3 +133,112 @@ These break CI if done separately.
 - the `--check` of every touched generator
 - docstring-checkrefs, blueprint checkdecls
 - `scripts/certs/check_sdpfull.sh` if §4.1 (a) is taken
+
+## 6. Re-check at `c141448b` (2026-10-28)
+
+**The map holds.** None of the 19 commits between `ea934bc6` and `c141448b` touched the pooled
+sections of `lakefile.lean`, `tests/AuditAxioms.lean`, the comparator tier files, `formalization.yaml`
+or the gate baselines. Every path in §1–§3 was re-verified. Outside the family, the only *imports* are
+`tests/AuditAxioms.lean` and `tests/comparator/{Challenge,Solution}Tier.lean`; every other hit is a
+docstring or prose. `blueprint/src/content.tex` cites nothing from the family.
+
+### 6.1 Memory, measured
+
+Lean 4.35.0, `/usr/bin/time -v`, warm imports, this box. `LEAN_NUM_THREADS=1`; the default thread
+count gave the same peaks for the pooled files (one goal at a time either way).
+
+| module | peak RSS | wall |
+|---|---|---|
+| pooled `Instance` / `Scorecard` / `Float` / `MlpWitness` (`lake env lean`) | 1.9–2.7 GB | 4–30 s |
+| pooled `NetWitness` | 3.1 GB | 29 s |
+| pooled `ScorecardSDP` / `ScorecardSDPUncon` | 4.5 / 4.6 GB | 55 s each |
+| `ScorecardFull` apex, ImgsA/B/Nets prebuilt | 1.9 GB | 4 s |
+| `ScorecardFullImgsA` / `FullNets` (certs-heavy.yml comment, Lean 4.32) | 11.4 / 10.1 GB | — |
+| `ScorecardSDPFull`, `lake env lean` | 11.9 GB | 3:53 |
+| `ScorecardSDPFull`, `lake build` | 14.1 GB | 4:49 |
+| `ScorecardSDPFullUncon`, `lake env lean` | 12.5 GB | 3:57 |
+
+So: the full-input L2 family already fits the heavy runner's one-module-at-a-time loop and is
+CI-checked. The LipSDP-full pair is down from the 15–16 GB on record to 12–14 GB, but 14 GB under
+`lake build` is what a 16 GB runner has free. They stay local-only unless the PSD witnesses change
+shape (§6.3).
+
+### 6.2 The five roles of the pooled net, and what replaces each
+
+1. **L2 scorecard** (`scorecard` → `scorecardFull`). Exists in `CertsHeavy`, CI-checked. Nothing to
+   port.
+2. **LipSDP headline** (`scorecard_sdp` → `scorecard_sdp_full`). Exists, same shape, 16 proved images
+   (8 per radius) instead of 8. Built by no lib, so it cannot enter the comparator tier
+   (`comparator.yml` builds `Certs` only). → §4.1 **(a)**: point the yaml row at it, mark it checked
+   by `check_sdpfull.sh`, drop it from the comparator tier.
+3. **Smoothing at a concrete net** (`smoothing_cp_certified_mlpT`). `TRUST.md:29` and the yaml (4b,
+   and the Cohen row) cite it, so **port** rather than drop. The port is cheap:
+   - `mlpT_logit_continuous` generalises verbatim to any width → one engine lemma in `DenseEuclid`
+     (`mlp_logit_continuous (W1) (W2)`), which also serves `mlpTF`.
+   - `smoothing_cp_certified_net` needs one strict-argmax witness per class. The committed full-input
+     images (ImgsA/B: test #0–#7, #9, #25, #71) cover digits 0, 1, 2, 4, 7, 9. Four new 784-dim images
+     (first test image of digits 3, 5, 6, 8 with a strict `mlpTF` argmax) are needed, each with its 16
+     `dotZ` pre-activation evaluations — the existing ImgsA recipe.
+   - `smoothing_net_witness_gen.py` parses `ScorecardFullNets` instead of `Instance`. New module
+     `Smoothing/NetWitnessFull` in `CertsHeavy` (a few GB; ImgsA holds 10 images at ≤ 11.4 GB).
+   - Then `TRUST.md:29`, yaml 4b and the Cohen row say "the trained 784-dim `mlpTF`", and the
+     "witness file runs at the 49-dim net" caveat goes.
+4. **Float tier** (`certifiedC*_float` on `mlpS` → `mlpSF`). Portable: `mlp2_float_close_uniform` is
+   dimension-polymorphic and the weight bound is already a kernel `decide` (`abs_le_of_check`), so
+   784×16 costs nothing. What does not scale is the per-image `img*_abs_le` by `fin_cases` over the
+   coordinates; it has to become a kernel check too (an `absLeCheck` over the image as a 1×784
+   matrix). Budget constants are recomputed by the generator. Mostly generator work, lands in
+   `CertsHeavy`. Nothing cites it except two docstrings (`Verified/Attack.lean:18`,
+   `IbpConvScorecard/Net.lean:16`) and the book does not depend on it → **drop now**, keep this port
+   as a later option. If dropped, `FloatModel.mlp2F` / `mlp2_float_close_uniform` lose their only
+   consumer (§4.4).
+5. **The VJP witness** (`Trained/MlpWitness`). Level 1 is vacuous (`HasVJPAt` is inhabited by
+   `canonical`), and a 784-dim version would evaluate `pdiv_fwd_val` through a 784-term sum by
+   `simp [Fin.sum_univ_succ]`, the pattern the full files abandoned for `dotZ`. → §4.3 **delete**.
+   `CnnWitness` / `CnnSeal` remain the trained-weight witness rung; reword the yaml 4a sentence and
+   the `CnnWitness` / `trained_cnn_witness.py` / `trained_cnn_seal.py` "extends `Trained.MlpWitness`"
+   lines.
+
+Recommended answers, then: §4.1 (a); §4.2 port the smoothing tie, drop the float tier; §4.3 delete;
+§4.4 prune; §4.5 leave `GramQ` in `CertsHeavy`.
+
+### 6.3 Modules that only build on this box: the pattern
+
+The repo has a three-rung ladder and the gap is the top rung:
+
+| rung | gate | ceiling | enforced by |
+|---|---|---|---|
+| `Certs` | every proof push + nightly | ~5 GB per module, default scheduler | certs.yml, comparator.yml |
+| `CertsHeavy` | push on its paths + 1st/15th cron | ~12 GB, one module at a time, `LEAN_NUM_THREADS=1` | certs-heavy.yml; module splitting (`ImgsA–D`) pushes a file down into this rung |
+| no lib + local script | nothing | this box | `check_sdpfull.sh`, by hand |
+
+Nothing fails if `PairSDP` or the ImgsA/B/Nets files change and `check_sdpfull.sh` is not re-run.
+Three ways to close that, in the order to try them:
+
+1. **Fix at the source.** `planning/archive/certs_heavy_psd_memory.md` option 1: replace the exact
+   LDLᵀ witness by a `/2^k`-rounded factor plus a diagonally dominant remainder checked entrywise by
+   `norm_num` (`quad_form_nonneg_of_dd`, `lipsdp_slack_of_cert_split`). That removes the ~230-digit
+   fractions behind the 12 GB goals and would move both SDP-full modules into `CertsHeavy`. Estimated
+   half a day there; no draft exists in the tree (grep finds only the two planning mentions).
+2. **A freshness stamp.** `check_sdpfull.sh` writes a committed stamp (e.g.
+   `scripts/certs/sdpfull.stamp`) holding a hash of its inputs: the two modules, `PairSDP.lean`,
+   `ScorecardFull{Nets,ImgsA,ImgsB}.lean`, `lipschitz_cert_pair_sdp_full.py`, `lean-toolchain`,
+   `lake-manifest.json`. A cheap CI step (proofs.yml's Python block, or `lake lint`) recomputes the
+   hash and fails on mismatch. CI then enforces that the local check ran against the *current*
+   inputs without doing the work. Same ethos as the generators' `--check`; generalises to any future
+   local-only module through one table of (script, input globs, stamp).
+3. **A self-hosted runner on this box.** Zero runners are registered. The account is personal and on
+   the free plan; GitHub's larger runners are an org-level paid feature (Team / Enterprise), so this
+   box is the only bigger machine on offer. GitHub advises against self-hosted runners on public
+   repos; certs-heavy.yml never runs on pull requests, which limits the exposure, but it would still
+   want an ephemeral runner under a dedicated user, a `[self-hosted, certs-heavy]` label used by that
+   one workflow, and the box always up.
+
+Recommendation: the stamp now, so the removal commit can take §4.1 (a) honestly; the
+diagonal-dominance rewrite as the follow-up that makes the stamp unnecessary for this pair.
+
+### 6.4 Gates (addendum to §5)
+
+If §6.2.3 is taken: `lake build CertsHeavy` with `NetWitnessFull` in the certs-heavy.yml
+serialization loop (the "every root is in the loop" step enforces this), `tests/AuditAxiomsHeavy.lean`
+pins for its theorems, and `smoothing_net_witness_gen.py --check`.
