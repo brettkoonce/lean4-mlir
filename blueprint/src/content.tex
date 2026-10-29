@@ -14525,6 +14525,48 @@ against $4096$), the warmup ($5$ epochs against $20$), the EMA decay, and
 repeated augmentation, which ConvNeXt dropped; ConvNeXt's layer scale has
 no counterpart here.
 
+The other lever is the recipe on a fixed architecture, as
+Chapter~\ref{chap:residual}'s A3 table is for ResNet-50. ViT's headline
+numbers are pre-trained on JFT-300M or ImageNet-21k and fine-tuned, but
+the paper has one ImageNet-1k-only result too: its Table~3 recipe from
+scratch at $224$, followed by a fine-tune on the same data at $384$, which
+is how ViT-B/16 reaches $77.9\%$. DeiT trains once, at $224$, and reaches
+$81.8\%$ on the same network. Table~\ref{tab:vit_vs_deit} is what it
+changed.
+
+\begin{table}[H]
+\centering
+\caption{The DeiT recipe against the original ViT recipe for ImageNet-1k from scratch (Dosovitskiy et al.\ 2020, Table~3), knob by knob.}
+\label{tab:vit_vs_deit}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
+\hline
+Knob & ViT (2020) & DeiT (2021) & What the DeiT choice buys \\
+\hline
+Optimizer     & Adam, weight decay $0.3$ & AdamW, $0.05$ off norms, biases, tokens & a sixth of the decay, decoupled and selective; the regularization moves out of the optimizer \\
+Effective batch & 4096                 & 1024                          & one shot on four cards, and the rate scales with it \\
+Peak LR       & $3 \times 10^{-3}$ at 4096 & $10^{-3}$ at 1024          & within a third of each other per image \\
+Warmup        & 10k steps, about 32 epochs & 5 epochs, from $10^{-6}$   & a tenth of the ramp, once the augmentation carries the early stability \\
+LR schedule   & cosine                 & cosine per epoch, floor $10^{-5}$ & the same family \\
+Epochs        & 300                    & 300                           & unchanged \\
+Dropout       & $0.1$ after every dense layer & none                   & replaced by the row below \\
+Stochastic depth & none                & drop-path $0.1$               & drops whole branches instead of units, the regularizer the transformer era settled on \\
+Gradient clip & global norm $1$        & none                          & no longer needed at the smaller batch and shorter warmup \\
+Augmentation  & crop + flip            & full DeiT pack + repeated aug $3\times$ & RandAugment, Mixup, CutMix, Random Erasing, three copies a step: the row where the gap closes \\
+EMA           & none                   & $0.99996$                     & a smoothed shadow of the weights \\
+Resolution    & $224$, then fine-tuned at $384$ & $224$ throughout     & one stage instead of two; the old recipe's number leans on the higher-resolution pass \\
+Distillation  & none                   & optional token against a convnet teacher & $+2.3$ on DeiT-Ti, not implemented here \\
+ViT-B/16, top-1 & $77.9\%$, after the $384$ fine-tune & $81.8\%$ at $224$ & the recipe alone, same network, same data, with the resolution on the old recipe's side \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent What carries over unchanged: the Adam family, a cosine anneal
+and 300 epochs. Every row DeiT moved takes
+regularization out of the optimizer and puts it into the data, which is
+why the same recipe transferred to a convnet in the next year without a
+change.
+
+
 \prosesection{The reference (JAX)}
 
 The reference trainer is \texttt{jax/MainVitImagenet.lean}, and its

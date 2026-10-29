@@ -226,3 +226,22 @@ what differs from it.
   but R34's is one seed.
 
 Net: 253 lines out, 168 in; gates green; preview 2026-10-29 evening.
+
+**Landed 2026-10-29 (evening), all on main, unpushed at the time of writing:**
+
+- df213b38 — the Imagenette pass, Ch 5–9 (above).
+- f0cdbd9b — Ch 6 ImageNet + MNv4 side quest.
+- 51174dee — Ch 7 ImageNet; `efficientNetB0ImagenetConfig` → 350 epochs and `mobilenetV2ImagenetConfig`
+  → 420, the `*ConfigFull` names kept as aliases for the jobs/CI; both default trainers re-emitted
+  (epoch count only; `_full` files and shims byte-identical). 04b85a34 — preview tool stats line.
+- a17b9786 — Ch 8 ImageNet; `convNeXtTinyImagenetConfig` → 300 the same way. Supersedes the stash
+  "ch8 imagenet cheap cuts" (stash@{0}), which can be dropped.
+- 5c5f0525 — Ch 9 ImageNet, with the new `tab:vit_vs_2018`.
+
+Two more rules came out of the review, now in memory: the curated text never cites a superseded run,
+even as a measurement (the Ch 8 layer-scale paragraph); and a reference config carries one schedule,
+the official one, with no short validation tier (the 80/90-epoch `default` tiers are gone from three
+Lean files and the book). Pages 269 → 262, tables 86 → 76, figures 64 → 59 over the day.
+
+Untouched by design: Ch 5 (R34, R50, the A2/A1 side quest); the ConvNeXt-S/B and ViT-S/B side quests.
+Still open from §6–§7: the Appendix C scoreboard (§4), five seeds for the Imagenette column.
