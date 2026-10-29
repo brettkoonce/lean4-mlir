@@ -3119,9 +3119,11 @@ zero map on it, and its \texttt{correct} field holds by definition. The habit is
 chain rule more than once: the whole MLP's backward is the dense backward
 and the ReLU backward strung together in reverse, and
 Theorem~\ref{thm:mlp_fold} says the six updates the trainer emits are
-exactly that, summed over the batch at every batch size, with
-Theorem~\ref{thm:mlp_sgd_descends} the descent on the first layer at one
-example. Two witnesses, one hand-built and one at the trained weights,
+exactly that, summed over the batch at every batch size,
+Theorem~\ref{thm:mlp_loss_grad} that every gradient node among them is
+the loss's derivative in its parameter, and
+Theorem~\ref{thm:mlp_sgd_descends} is the descent on the first layer at
+one example. Two witnesses, one hand-built and one at the trained weights,
 show the gradient is not the zero function.
 
 The price of the corner is a hypothesis. The bridge from the proof to the
@@ -6028,9 +6030,9 @@ normalization proof of their own.
 
 The experiment half says what the proofs do not: at eight convolutions,
 normalization is what governs training, the optimizer moves the result by
-less than a seed does, the group the statistics are taken over decides
-whether one run's number can be trusted, and the number format is not
-measurable against seed noise. Eight is also about where a
+about what a seed does and only AdamW's deficit clears the spread, where
+the statistics come from sets the run-to-run spread, and the number format
+is not measurable against seed noise. Eight is also about where a
 plain stack stops helping. The next chapter adds the skip connection, whose
 VJP is additive fan-in, the second of the three composition rules, and
 composes it with convolution and BatchNorm to go thirty-four layers deep,
@@ -8051,12 +8053,15 @@ and~\ref{thm:resnet50_step_tie}), and the data-parallel twins
 (Theorem~\ref{thm:resnet34_sync_tie}) say four cards computing a synchronised
 step compute one card's step at four times the batch. This is also the
 chapter that sets the ImageNet pattern every later chapter repeats: a
-reference trainer, the verified path, the two side by side at the end, and
-the recipe measured one ingredient at a time rather than inherited.
+reference trainer, the verified path, the two side by side at the end,
+the recipe measured one ingredient at a time rather than inherited, and
+every later recipe stated as a diff from this one.
 
-What the chapter does not settle is the top of the recipe ladder: A3 ran
-on both paths and the verified render landed on the paper's number, while
-A2 and A1 are rendered and timed, not run. What the network costs is
+ResNet-50 runs the two ends of the recipe ladder. On 2018 the two paths
+tie as ResNet-34's do; on A3 the verified path lands on the paper's number
+and half a point ahead of the reference, a difference between two trained
+models at one seed that the chapter leaves unexplained. A2 and A1 are
+rendered and timed, not run. What the network costs is
 parameters: a standard convolution does spatial mixing and channel mixing
 in one kernel and pays for both. The next chapter factors them, and the
 network that results has a ninth of the parameters.
@@ -11059,7 +11064,7 @@ The chapter's other lesson is that a recipe is a specification, not a list
 of hyperparameters: RMSProp in TensorFlow's form, the EMA shadowing the
 BatchNorm buffers, the warmup-corrected decay, each a detail that moves
 the number. The two paths tie, every recipe row held equal by construction, and the
-section says which rows did the work. The next chapter takes the recipe
+section names the four details that move the number. The next chapter takes the recipe
 idea to its conclusion, a ResNet modernized one transformer-era choice at a
 time, and brings the two operations that era runs on, LayerNorm and GELU.
 
@@ -14813,32 +14818,23 @@ the composition is. On ImageNet, at DeiT's own batch, the two paths tie to
 three hundredths of a point (Table~\ref{tab:vit_paths}), and paired per
 image the tie holds.
 
-
-Every layer primitive shipped in Part 1's trainers (MLP,
-CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT) has a
-machine-checked backward pass. The same pipeline, a
+Every layer primitive in Part~1's trainers, from the MLP to ViT-Tiny, has
+a machine-checked backward pass, and one pipeline, a
 \texttt{VerifiedNetSpec}, a \texttt{VerifiedConfig} and
-\texttt{trainAdamSched}, trains all of them with at most config-level
-changes. The MLIR each emits is
-between 7\,KB (MLP) and 1{,}317\,KB (EfficientNet-B0), and the
-lowerer compiles all of them the same way.
-
-The bestiary in Part 2 then shows that every other
-architecture you've seen in modern deep learning composes from the
-same small set of primitives plus a handful of
-architecture-specific bundled layers. That list runs UNet, YOLO, DETR,
-Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
-AlphaGo, AlphaZero, MuZero, Mamba, BERT, GPT, Whisper, CLIP, LLaVA,
-SAM, SegFormer, DeepLab v3+, Nyström-former, QANet and Evoformer. Three rules (chain, additive
-fan-in, multiplicative fan-in). Five Jacobian tricks (diagonal,
-sparse Toeplitz, binary selection, rank-1 correction, outer
-product).
-
-That's the whole framework. Part~2's bestiary takes the same set
-of primitives and tours how they compose into every well-known
-modern architecture, a survey of the field expressed in the
-proven kit, with a small library of bundled idioms for the patterns
-that recur.
+\texttt{trainAdamSched}, trains all of them with config-level changes;
+the MLIR each emits runs from 7\,KB for the MLP to 1{,}317\,KB for
+EfficientNet-B0, and the lowerer compiles every one the same way. Three
+composition rules, chain, additive fan-in and multiplicative fan-in, and
+five Jacobian shapes, diagonal, sparse Toeplitz, binary selection,
+rank-one correction and outer product, are the whole framework.
+Part~2 puts it to work. The kit names the layers the bestiary's
+architectures compose from; the chapter networks go to detection,
+inspection, sign language, field leaves, remote sensing and segmentation;
+the same primitives then carry language, diffusion, a Boltzmann
+generator, gravitational-wave strain, a quantum spin chain and protein
+structure; and the last chapter plays Pong, poker and tic-tac-toe, each
+scored against something exact: the state the pixels encode, the best
+response, the solved game.
 
 \part{The bestiary}
 
