@@ -132,6 +132,12 @@ CutMix drawn per batch, torchvision's crop; plus the exact erf GELU, the cosine 
 RandAugment's fill at the image mean, and scoring at timm's 288 / 1.0. The EMA pair has not run —
 `cnx-default-jax-4gpu` / `cnx-default-emabf16-4gpu`, ~77 + 107 h. S/B: as T's.
 
+**✅ T landed 2026-10-28.** JAX `runs/2026-10-21-cnx-full-jax-bf16-300ep/` 81.990 / 95.87 (74.07 h), verified
+`runs/2026-10-21-cnx-verified-bf16-300ep/` 82.146 / 95.910 (102.66 h), both EMA at e300 through an f32
+forward; McNemar EMA p = 0.18, live p = 0.64. The ch 8 section is this pair alone and its marker is gone
+(the book commit after 1c98b112). Not done from the list above: scoring at timm's 288 / 1.0 (the book
+reports the paper's 224 / 0.875). S/B: still pending, their marker stands.
+
 Today (`jax/MainConvNeXtImagenet.lean`): batch 256 (4×64, no accumulation), lr 2.5e-4 (the 4096 rate
 scaled down), warmup 20, clip 1.0, drop-path 0.1, EMA, `cropTorchvision`, `randAugmentInc`, erf GELU
 (D1, landed 2026-10-06); no minLR, no switch, no fill, no f32 eval. Renders: `convnext{,s,b}in_
@@ -594,7 +600,7 @@ f32 eval); `imagenet_parity.md` D6 / D13 / D20–D22 / F2 and §10.4 carry the s
 | R50 A3 / A2 / A1 | done | done | existing | done | green | done | 4d612bb9 | A3 landed 10-13/14 (77.60 / 78.08); A2 / A1 pending | A3's deleted; A2/A1's stands (RASampler, the runs) |
 | ViT-Ti | done | done | done (the `smx` render, 2170bd9f) | done | green | done | 320f5045, 3336f4a7 | ✅ landed 2026-10-16 (04c72553): verified 71.612 / 90.948, JAX 71.638 / 90.980 | stands for the patch-embed bias (R4) only |
 | ViT-S / B | done | done | done (B: the first `acc` render) | done | green | done | a39f5cf7 | pending | stands |
-| ConvNeXt-T / S / B | done | done | done (the first `acc` ConvNeXt renders, six) | done | green | done | a0c125b3 | pending | stands |
+| ConvNeXt-T / S / B | done | done | done (the first `acc` ConvNeXt renders, six) | done | green | done | a0c125b3 | ✅ T landed 2026-10-28: verified 82.146 / 95.910, JAX 81.990 / 95.87 (p = 0.18); S / B pending | T's deleted; S/B's stands |
 | MNv4-Conv-M | done (the paper's yaml) | done | done (`mnv4in256`, five) | done | green | done | 263da67a (+ 3333bbd5: /26 and the crop fallback) | ✅ the 100-epoch pair landed 2026-10-15 (6bcdb7f3): verified 77.35 / 93.53, JAX 77.39 / 93.46 — before 3333bbd5; the 500-epoch tier pending | stands, rewritten |
 | MNv2 | done (the README's command, every row: + `evalCropSlim` / TF 1's bilinear, D23) | done | done (the first `rmstf` + EMA MNv2 render) | done | green | done | 6762494c + the D23 addendum | pending | stands, rewritten (the crop and the kernel in it) |
 | EfficientNet-B0 | done (TF's code, every row: 5 new flags + `rmspropTf` / `evalF32`) | done (`headTfUniform`) | done (D3's 36 Xla artifacts; the `emarmstfdp64dropdowneps0001bf16` render) | done | green | done | a89fa9af + dedb34f5 | pending | stands, rewritten to TF's rows |
