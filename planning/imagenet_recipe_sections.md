@@ -237,11 +237,15 @@ Net: 253 lines out, 168 in; gates green; preview 2026-10-29 evening.
 - a17b9786 — Ch 8 ImageNet; `convNeXtTinyImagenetConfig` → 300 the same way. Supersedes the stash
   "ch8 imagenet cheap cuts" (stash@{0}), which can be dropped.
 - 5c5f0525 — Ch 9 ImageNet, with the new `tab:vit_vs_2018`.
+- 8c39ef98 — Ch 9: `tab:vit_vs_deit`, the recipe lever on a fixed architecture (the ViT paper's
+  ImageNet-1k-only row is from scratch at 224 then a 384 fine-tune; disclosed in the table).
+- 067b43e2 — Ch 5 R50 subsection, same shape with the 2×2 grid kept. Every ImageNet pair is now
+  R34-in-full-then-diffs.
 
 Two more rules came out of the review, now in memory: the curated text never cites a superseded run,
 even as a measurement (the Ch 8 layer-scale paragraph); and a reference config carries one schedule,
 the official one, with no short validation tier (the 80/90-epoch `default` tiers are gone from three
 Lean files and the book). Pages 269 → 262, tables 86 → 76, figures 64 → 59 over the day.
 
-Untouched by design: Ch 5 (R34, R50, the A2/A1 side quest); the ConvNeXt-S/B and ViT-S/B side quests.
+Untouched by design: Ch 5's R34 anchor and the A2/A1 side quest; the ConvNeXt-S/B and ViT-S/B side quests (TODO runs; the ViT-B Lean config still has a `short` tier to drop when its section lands).
 Still open from §6–§7: the Appendix C scoreboard (§4), five seeds for the Imagenette column.

@@ -7399,7 +7399,9 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{table}
 
 \noindent That fp32 scoring is how the verified path and \texttt{timm} score, and
-the run's own bf16 evaluation lands within $0.01$ of it. Figure~\ref{fig:r34_jax_curve} is the run,
+the run's own bf16 evaluation lands within $0.01$ of it;
+Appendix~\ref{app:imagenet_tier} is the protocol every ImageNet number in
+this book is scored under. Figure~\ref{fig:r34_jax_curve} is the run,
 epoch by epoch.
 
 \begin{figure}[H]
@@ -20937,6 +20939,58 @@ Table~\ref{tab:track4_runners} and seven of the eight side quests of
 Table~\ref{tab:track4_side_quests} --- are weeks of four-card time;
 \texttt{start} is the confirmation.
 
+\section*{How the numbers are scored}
+
+Every top-1 and top-5 in this book follows one validation protocol, the
+one \texttt{timm} implements for ``ResNet Strikes Back'' (Wightman et
+al.\ 2021, \href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}), so
+that a number here and a number there are answers to the same question.
+Five things are matched, and each uses \texttt{timm} as the reference:
+
+\begin{itemize}
+  \item \textbf{The centre-crop ratio is read from \texttt{timm}'s own
+    model configuration}, not from a global default.
+    \texttt{resnet50.a1\_in1k}, \texttt{a2\_in1k} and \texttt{a3\_in1k}
+    all resolve \texttt{crop\_pct} $= 0.95$; the $2018$ torchvision
+    weights (\texttt{tv\_in1k}) resolve $0.875$. Both values appear in
+    this book, attached to the recipe each belongs to.
+  \item \textbf{The field of view is identical.} We decode a centred
+    square of side $\mathrm{crop\_pct} \cdot \min(h,w)$ and resize it to
+    the evaluation resolution; \texttt{timm} resizes the whole image so
+    its shorter side is $\mathrm{img\_size}/\mathrm{crop\_pct}$ and then
+    centre-crops. The two orders end on the same pixels, and the
+    ordering itself is measured at $0.02$--$0.04$ points.
+  \item \textbf{Top-5 is the true label's rank}, matching the
+    reference's own $\sum \mathbb{1}[\ell_i > \ell_y] < 5$, and the
+    train/test resolution split is the recipe's (RSB-A3 trains at $160$
+    and evaluates at $224$).
+  \item \textbf{The resampler is \texttt{timm}'s.} Validation resizes
+    the whole image so its shorter side is
+    $\mathrm{img\_size}/\mathrm{crop\_pct}$ and only then centre-crops,
+    which is \texttt{timm}'s order rather than the Google/TPU
+    ``Inception'' crop-then-resize; and both that resize and the
+    training \texttt{RandomResizedCrop} run antialiased, because
+    PIL antialiases when downscaling and \texttt{tf.image.resize} does
+    not by default. The two have to move together: a network partly
+    fits the aliasing of the resampler it trained under, so matching
+    only the evaluation side would be worse than matching neither.
+    Antialiased \texttt{tf.image.resize} agrees with PIL to a mean
+    $|\Delta|$ of $0.30$ of $255$, flat across the whole range of
+    downscale ratios ImageNet's validation set spans.
+  \item \textbf{Each net can also be scored at \texttt{timm}'s test
+    resolution.} \texttt{timm} validates many of its pretrained weights
+    at a size other than the one they trained at --- $288 / 1.0$ for
+    RSB-A1/A2 and ConvNeXt, $256 / 1.0$ for MNv4-Conv-M --- and the
+    resize-then-crop above takes that size and crop as parameters, read
+    from the pinned \texttt{timm} into
+    \texttt{jax/timm\_eval\_protocols.json}. The reference forward
+    accepts any size; the verified number comes from a verified graph
+    rendered at the test size, never from the JAX forward on converted
+    weights. The ImageNet chapters report each run's own evaluation at
+    the recipe's training size; the test-resolution scorer is for
+    comparing a checkpoint against \texttt{timm}'s.
+\end{itemize}
+
 \section*{Side quests}
 
 Several chapters end in a variant that is rendered but is not an imagenet-tier runner,
@@ -21074,58 +21128,6 @@ stream through \texttt{tfds.as\_numpy}, so TFDS's \texttt{tf.data}
 pipeline carries the loading (parallel shard reads, JPEG decode,
 prefetch, all engineered to scale), and we inherit that performance work
 for free.
-
-\medskip\noindent\textbf{How the ImageNet numbers are validated.} Every
-top-1 and top-5 in this book faithfully follows the validation protocol of
-\texttt{timm}'s ``ResNet Strikes Back''
-(\href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}), so that a
-number here and a number there are answers to the same question.
-Concretely, five things are matched, and each uses \texttt{timm} as a
-reference:
-
-\begin{itemize}
-  \item \textbf{The centre-crop ratio is read from \texttt{timm}'s own
-    model configuration}, not from a global default.
-    \texttt{resnet50.a1\_in1k}, \texttt{a2\_in1k} and \texttt{a3\_in1k}
-    all resolve \texttt{crop\_pct} $= 0.95$; the $2018$ torchvision
-    weights (\texttt{tv\_in1k}) resolve $0.875$. Both values appear in
-    this book, attached to the recipe each belongs to.
-  \item \textbf{The field of view is identical.} We decode a centred
-    square of side $\mathrm{crop\_pct} \cdot \min(h,w)$ and resize it to
-    the evaluation resolution; \texttt{timm} resizes the whole image so
-    its shorter side is $\mathrm{img\_size}/\mathrm{crop\_pct}$ and then
-    centre-crops. The two orders end on the same pixels, and the
-    ordering itself is measured at $0.02$--$0.04$ points.
-  \item \textbf{Top-5 is the true label's rank}, matching the
-    reference's own $\sum \mathbb{1}[\ell_i > \ell_y] < 5$, and the
-    train/test resolution split is the recipe's (RSB-A3 trains at $160$
-    and evaluates at $224$).
-  \item \textbf{The resampler is \texttt{timm}'s.} Validation resizes
-    the whole image so its shorter side is
-    $\mathrm{img\_size}/\mathrm{crop\_pct}$ and only then centre-crops,
-    which is \texttt{timm}'s order rather than the Google/TPU
-    ``Inception'' crop-then-resize; and both that resize and the
-    training \texttt{RandomResizedCrop} run antialiased, because
-    PIL antialiases when downscaling and \texttt{tf.image.resize} does
-    not by default. The two have to move together: a network partly
-    fits the aliasing of the resampler it trained under, so matching
-    only the evaluation side would be worse than matching neither.
-    Antialiased \texttt{tf.image.resize} agrees with PIL to a mean
-    $|\Delta|$ of $0.30$ of $255$, flat across the whole range of
-    downscale ratios ImageNet's validation set spans.
-  \item \textbf{Each net can also be scored at \texttt{timm}'s test
-    resolution.} \texttt{timm} validates many of its pretrained weights
-    at a size other than the one they trained at --- $288 / 1.0$ for
-    RSB-A1/A2 and ConvNeXt, $256 / 1.0$ for MNv4-Conv-M --- and the
-    resize-then-crop above takes that size and crop as parameters, read
-    from the pinned \texttt{timm} into
-    \texttt{jax/timm\_eval\_protocols.json}. The reference forward
-    accepts any size; the verified number comes from a verified graph
-    rendered at the test size, never from the JAX forward on converted
-    weights. The ImageNet chapters report each run's own evaluation at
-    the recipe's training size; the test-resolution scorer is for
-    comparing a checkpoint against \texttt{timm}'s.
-\end{itemize}
 
 \section*{Demo datasets}
 
@@ -21311,7 +21313,7 @@ Detection Approach via Fusing Multiple Hierarchical Features}, IEEE
 TIM~69(4), 2020, the boxes). No licence is stated; the maintainer's page
 asks for a citation. \texttt{download\_neu.sh} therefore fetches the
 maintainer's own Google-Drive copy (26\,MB) and the repository
-redistributes nothing --- the same posture as BraTS below. The download
+redistributes nothing. The download
 checks the census before anything else: $1{,}800$ images with $1{,}800$
 matching XMLs and exactly the six class names, because mirrors of this set
 differ in file extension and in whether the names carry underscores.
@@ -21401,10 +21403,10 @@ for training parts and $224$ centre-cropped for evaluation parts. PlantVillage
 is split twice, $80/10/10$ per class: \texttt{random}, a stratified
 permutation, and \texttt{grouped}, whose test set is the maintainers'
 $10{,}709$ exactly and whose validation tenth is carved from their training
-list by leaf id, so no leaf straddles a line. The audit of the ArASL build
-runs on it and finds $0.1\%$ of consecutive photographs within six grey
-levels and $1.3\%$ of random-split test images with a near-twin in training:
-the four photographs of a leaf are different poses. Beside the test tenth it
+list by leaf id, so no leaf straddles a line. The near-duplicate audit runs
+on it and finds $0.1\%$ of consecutive photographs within six grey levels of
+each other and $1.3\%$ of random-split test images with a near-twin in
+training: the four photographs of a leaf are different poses. Beside the test tenth it
 writes the same images from \texttt{segmented}, the leaf on its image's median
 background colour, the background with the leaf filled by that colour, and
 the flat colour alone --- the four counterfactuals of the section's two-player
