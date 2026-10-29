@@ -13,10 +13,12 @@ or bullet, so its boundaries do not move with the page break) with word-level <d
 order, every block linking the page in both PDFs. Filtered out as not-a-change: theorem /
 definition / section renumbering ("Theorem 12" -> "Theorem 13", "10.3.2", "§10.3.5"), page numbers
 and pgfplots tick labels, text that only moved (a section that changed chapters prints once, as the
-edits inside it, not as a wall of green), hyphenation and ligature reflow. index.html links the
-diff, both webs, both dep graphs and both PDFs.
+edits inside it, not as a wall of green), hyphenation and ligature reflow. Under the heading, and on
+the console: the source +/- line count against --base (git numstat over blueprint/src) and each
+build's page count, LaTeX error count and overfull-box count, current -> proposed. index.html
+links the diff, both webs, both dep graphs and both PDFs.
 
-Needs plastex + leanblueprint (pip), latexmk / xelatex, pdftotext (poppler) and git. Nothing under
+Needs plastex + leanblueprint (pip), latexmk / xelatex, pdftotext and pdfinfo (poppler) and git. Nothing under
 blueprint/ is written: both trees are copied out first (a copy must keep print.tex AND
 macros/print.tex; the PDF build needs both).
 """
@@ -124,7 +126,27 @@ def wdiff(a, b):
     if all(re.fullmatch(r'[\d.,()–-]*', t) for t in D + I) and len(D) >= 3 and len(I) >= 3: changed = 0   # a column of numbers
     return ' '.join(out), changed, D, I
 
-def diff_html(cur_pdf, pro_pdf, out, title):
+def stats(base, out):
+    """source lines +/- against `base` (blueprint/src), and per build: pages, LaTeX errors, overfull boxes."""
+    ins = dele = 0
+    for line in subprocess.run(['git', 'diff', '--numstat', base, '--', 'blueprint/src'],
+                               capture_output=True, text=True).stdout.splitlines():
+        a, d = line.split('\t')[:2]
+        if a.isdigit(): ins += int(a); dele += int(d)
+    def build(d):
+        info = subprocess.run(['pdfinfo', str(out / d / 'pdf' / 'print.pdf')], capture_output=True, text=True).stdout
+        m = re.search(r'^Pages:\s+(\d+)', info, re.M)
+        log = out / d / 'pdf.log'
+        txt = log.read_text(errors='replace') if log.exists() else ''
+        return int(m.group(1)) if m else 0, len(re.findall(r'^!', txt, re.M)), txt.count('Overfull')
+    return ins, dele, build('current'), build('proposed')
+
+def stats_line(st, sep=' · '):
+    ins, dele, (pc, ec, oc), (pp, ep, op) = st
+    return sep.join(['+%d / −%d source lines' % (ins, dele), 'pages %d → %d' % (pc, pp),
+                     'LaTeX errors %d → %d' % (ec, ep), 'overfull %d → %d' % (oc, op)])
+
+def diff_html(cur_pdf, pro_pdf, out, title, st):
     A, B = paras(cur_pdf), paras(pro_pdf)
     ka = [' '.join(keys(p.split(' '))) for _, p in A]; kb = [' '.join(keys(p.split(' '))) for _, p in B]
     ops = [o for o in difflib.SequenceMatcher(None, ka, kb, autojunk=False).get_opcodes() if o[0] != 'equal']
@@ -197,7 +219,8 @@ def diff_html(cur_pdf, pro_pdf, out, title):
             '<h1>Rendered text diff — %s</h1>' % html.escape(title),
             '<p>%d changed paragraphs in page order (%d renumbering / reflow / moved blocks filtered). '
             '<del>removed</del> <ins>added</ins>. Page links open the proposed PDF, “cur” the current one. '
-            '<a href="index.html">index</a></p>' % (len(blocks), skipped)]
+            '<a href="index.html">index</a></p>' % (len(blocks), skipped),
+            '<p class="p">%s</p>' % html.escape(stats_line(st))]
     for pb, pa, body in blocks:
         page.append('<div class="b"><div class="p"><a href="proposed/pdf/print.pdf#page=%d">p.%d</a> '
                     '(<a href="current/pdf/print.pdf#page=%d">cur p.%d</a>)</div>%s</div>' % (pb, pb, pa, pa, body))
@@ -240,9 +263,11 @@ def main():
             sys.exit(1)
     for d in ('current', 'proposed'):
         if not (out / d / 'pdf' / 'print.pdf').exists(): sys.exit('no %s/pdf/print.pdf under %s (build first)' % (d, out))
-    n, skipped = diff_html(out / 'current' / 'pdf' / 'print.pdf', out / 'proposed' / 'pdf' / 'print.pdf', out, title)
+    st = stats(args.base, out)
+    n, skipped = diff_html(out / 'current' / 'pdf' / 'print.pdf', out / 'proposed' / 'pdf' / 'print.pdf', out, title, st)
     index_html(out, title)
     print('%s: %d changed paragraphs (%d filtered) -> %s' % (title, n, skipped, out / 'diff.html'))
+    print('  ' + stats_line(st, sep='; '))
     if args.serve:
         ip = subprocess.run(['sh', '-c', "ip -4 addr show tailscale0 2>/dev/null | grep -oE 'inet [0-9.]+' | cut -d' ' -f2"],
                             capture_output=True, text=True).stdout.strip() or 'localhost'
