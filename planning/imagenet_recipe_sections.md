@@ -250,7 +250,7 @@ Lean files and the book). Pages 269 → 262, tables 86 → 76, figures 64 → 59
 Untouched by design: Ch 5's R34 anchor and the A2/A1 side quest; the ConvNeXt-S/B and ViT-S/B side quests (TODO runs; the ViT-B Lean config still has a `short` tier to drop when its section lands).
 Still open from §6–§7: the Appendix C scoreboard (§4), five seeds for the Imagenette column.
 
-**Queue item — five seeds for the Imagenette column (2026-10-29).** `tab:imagenette_five` has one
+**Queue item — five seeds for the Imagenette column (2026-10-29).** Now item 1a of `planning/runs_queue_2026-10-29.md`, the ordered list of runs the book needs. `tab:imagenette_five` has one
 averaged row (R34, 89.99 ± 0.32 over five seeds from `runs/2026-09-12-r34-ablation-fp32-seeds/`) and
 four single runs (MNv2, B0, CNX-T, ViT-Ti). Run the other four at seeds 2–5 (seed 1 is the printed
 run) so every row is a mean with a spread and the under-a-point comparisons in each chapter's
