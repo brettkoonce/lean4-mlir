@@ -1,1 +1,7 @@
 render	status	seconds
+convnext_adamdil_train_step	FAIL	3269.9
+efficientnet_adamdil_train_step	FAIL	226.7
+mobilenetv2_adamdil_train_step	FAIL	192.4
+resnet34_adam16dil_train_step	CACHED	495.1
+resnet34_adamdil_train_step	FAIL	720.8
+resnet50_adamdil_train_step	CACHED	1202.1

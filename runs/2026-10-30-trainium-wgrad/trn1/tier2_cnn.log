@@ -1,0 +1,15 @@
+golden resnet34_adam16_train_step 18:22:30
+wrote resnet34_adam16_train_step: 405 outputs, 0 non-finite
+neuron resnet34_adam16_train_step 18:22:40
+compile 36682 ms, first call 606 ms
+OK conv-pool/f32: median 3.3e-03 (≤0.03), p90 1.4e-02 (≤0.07), max 2.1e-02 at output 121
+golden resnet34_adam16dil_train_step 18:23:19
+wrote resnet34_adam16dil_train_step: 405 outputs, 0 non-finite
+neuron resnet34_adam16dil_train_step 18:23:27
+compile 37241 ms, first call 605 ms
+OK conv-pool/f32: median 3.9e-03 (≤0.03), p90 1.6e-02 (≤0.07), max 2.1e-02 at output 206
+golden resnet50_adamdil_train_step 18:24:06
+wrote resnet50_adamdil_train_step: 592 outputs, 0 non-finite
+neuron resnet50_adamdil_train_step 18:24:28
+compile 56832 ms, first call 786 ms
+FAIL conv-pool/f32: median 5.1e-02 (≤0.03), p90 7.3e-02 (≤0.07), max 1.1e-01 at output 328

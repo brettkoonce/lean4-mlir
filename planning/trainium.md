@@ -10,6 +10,12 @@ atlas). Work lives on branch `trainium`, which is not pushed; local `main` was m
 
 - **Works, matches CUDA:** MNIST (92.10 / 97.82 / 98.73) and ViT-Tiny on Imagenette — with the rewritten
   patch-embed gradient, 80 epochs in 34.5 min at 69.27 % (the Arc B50: 68.46 %).
+- **The convnets after the renderer fix (2026-10-30 evening, `runs/2026-10-30-trainium-wgrad/`):** ResNet-34
+  b16 trains at 478 ms (was 491; stock JAX 349) and passes the CPU check — the dilation was not its problem;
+  a device profile says it is DMA-bound (88 % DMA-active, 1.6× stock JAX's DMA cycles on the same bytes).
+  ResNet-50 b32 f32 compiles and runs for the first time (659 ms) but fails the CPU check by a median 5 %,
+  unexplained. ConvNeXt-T (8.6M), B0 (5.04M) and MobileNetV2 (5.05M) still exceed the 5M-instruction cap at
+  batch 32; batch-16 renders are the next try.
 - **Broken by Neuron:**
   - CIFAR and every CNN with max pooling: the max-pool gradient (`select_and_scatter`) is wrong, and so
     is a 2× upsample feeding a weight-gradient conv.
@@ -47,7 +53,7 @@ Item 1 is the user's call (it moves pinned renders). Item 2 is the first thing t
    - Delete the scratch renders once the instance has tested the real ones: `vit_adamwg{B,C}`, `*dil`.
 2. ~~ViT-Tiny on real Imagenette with the rewrite~~ **done 2026-10-30**: 80 epochs in 34.5 min on one
    NeuronCore, 69.27 % top-1 (the Arc B50: 39 min, 68.46 %). `runs/2026-10-30-trainium-wgrad/trn1/full.log`.
-3. **File the four upstream issues, on the user's okay.** Drafts and scripts are in
+3. **File the six upstream issues, on the user's okay** (1–4 from the first sessions; 5, the dilated-kernel conv computing wrong values, and 6, the depthwise kernel-grad compile failure, from 10-30, both reproduced in plain JAX). Drafts and scripts are in
    `runs/2026-10-30-trainium-upstream/`. They go to `aws-neuron/aws-neuron-sdk`, which is public. Then
    wait about a week for a response.
 4. **Benchmark a full stock-JAX run on real Imagenette, alone on the box.** This is the cheapest
@@ -64,7 +70,18 @@ Item 1 is the user's call (it moves pinned renders). Item 2 is the first thing t
    fails to parse there. Add a two-replica compile, warm it, and time ViT on 2 cores.
 6. **CIFAR workaround (lower priority while the upstream bugs are open):** use the `dot_general`
    upsample only at small spatial sizes. The full v2 rewrite never finished compiling.
-7. **ResNet-34 batch 16:** if Trainium stays, give `resnet34_adam16{,bf16}` real `#eval` lines in
+7. **ResNet-34: find the DMA shape.** `neuron-explorer capture` then `view --output-format json` on the
+   dilated b16 NEFF (`MODULE_9809179191403821896` in `/var/tmp/neuron-compile-cache-dil`) and on stock JAX's
+   (`MODULE_13503892209821715641` in `/var/tmp/neuron-jax-cache`): which HLO ops own the DMA time. The
+   summaries are in `runs/2026-10-30-trainium-wgrad/trn1/`; the `.ntff` captures are in `~/wgrad/` on the
+   instance. Suspects: the max-pool backward's nine shifted pads summed, the flat `[B, c·h·w]` relayouts
+   around every pointwise op (`Pretty.lean` § "Pointwise ops at their 4-D shape"), BN reductions.
+8. **ResNet-50 b32 numerics on Neuron.** Median 5e-2 against the CPU golden where ResNet-34 b16 is 4e-3.
+   Bisect with `tier2.py`-style slices (`runs/2026-10-30-trainium-setup/{cut,multi,slice}.py`); first
+   check whether `resnet50_acc2x16` (which trained) passes the same check.
+9. **Batch-16 renders for ConvNeXt-T, B0 and MobileNetV2** so they fit under the 5M-instruction cap;
+   B0 and MobileNetV2 are 1 % over at batch 32.
+10. **ResNet-34 batch 16:** if Trainium stays, give `resnet34_adam16{,bf16}` real `#eval` lines in
    `ResNet34RenderB.lean`. Otherwise delete the scratch renders.
 
 ## 3. How to run a session

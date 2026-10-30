@@ -174,6 +174,47 @@ Before/after at `ty` level, the stride-2 3×3 weight grad (`sWGradDil 3 = (0, 1,
   %g  = stablehlo.convolution(%xt, %dt) … pad = [[1, 0], [1, 0]], rhs_dilate = [2, 2]
 ```
 
+## The convnets on the instance (`trn1/r34-*`, `trn1/r50-*`, `trn1/tier2_cnn.log`, `trn1/*-summary.*`)
+
+Second instance session, 18:13–18:33 UTC, with the six convnet rewrites warmed on atlas
+(`runs/platform/2026-10-30-atlas-neuron-warm-13/`, `-14`):
+
+| render, f32 | compiles? | ms/step | numerics vs CPU golden (tier 2, conv-pool/f32 tolerance 3e-2 / 7e-2) |
+|---|---|---|---|
+| ResNet-34 b16, as rendered (control, same session) | yes | 491 | OK: median 3.3e-03, p90 1.4e-02, max 2.1e-02 |
+| ResNet-34 b16, dilated | yes, 495 s on atlas (was 21–26 min) | **478** | OK: median 3.9e-03, p90 1.6e-02, max 2.1e-02 |
+| stock JAX ResNet-34 b16 (`../2026-10-30-trainium-imagenette/`) | | 349 | |
+| ResNet-50 b32, dilated | **yes — the first b32 f32 ResNet-50 to compile** (1,202 s) | 659 | **FAIL: median 5.1e-02, p90 7.3e-02, max 1.1e-01** |
+| ResNet-34 b32, dilated | no: NCC_IBIR243 on the max-pool's `maximum`, as before (issue 3) | | |
+| ConvNeXt-T b32, dilated | no: 8.56M instructions, cap 5M (was 9.17M) | | |
+| EfficientNet-B0 / MobileNetV2 b32, dilated | no: 5.04M / 5.05M instructions, cap 5M (were 5.12M / 5.08M) | | |
+
+So the dilation was ViT's problem and only ViT's: ResNet-34 moves 3 %, even though its MAC count fell
+from 182 to 160 G (stock JAX's number exactly) and its PE stream from 66 to 28 MB. Its numerics do
+not move either, and they pass. ResNet-50 at batch 32 now compiles and runs but is off the CPU golden
+by a median 5 %, fifteen times ResNet-34's, with no b32 f32 baseline to compare against (the original
+never compiled); unexplained. ConvNeXt's instruction count is not about dilation — its stride-1 7×7
+depthwise convs and channel LayerNorms at batch 32 are — and B0 and MobileNetV2 sit 1 % over the cap;
+a batch-16 render is the obvious next try for all three.
+
+**Where ResNet-34's 1.4× is**, from `neuron-explorer` device profiles of the dilated verified NEFF and
+the stock JAX NEFF, each run once alone (`trn1/r34dil-summary.txt`, `trn1/jaxr34-summary.txt`):
+
+| one step, profiled | verified (dilated) | stock JAX |
+|---|---|---|
+| total active time | 0.312 s | 0.200 s |
+| DMA active | **88 %** of the time, 409M cycles | 255M cycles |
+| DMA bytes / transfers | 10.79 GB / 45,875 | 10.60 GB / 54,991 |
+| spill save / reload | 3.52 GB / 7.17 GB | 3.56 GB / 6.95 GB |
+| tensor engine active | 11.9 % | 19.4 % |
+| vector engine active | 4.2 % | 19.6 % |
+| tensor-engine instructions | 441k | 502k |
+
+Same bytes, same spills, 60 % more DMA time, half the engine utilization: the verified step is
+DMA-bound on how its transfers are shaped, not on how many bytes move or how many MACs it does.
+The per-op breakdown (`neuron-explorer view --output-format json`, 300 MB `.ntff` captures left in
+`~/wgrad/` on the instance) is the next step; the summaries are here.
+
 ## ResNet-34 for contrast (`attr/r34_f32_b16_verified_vs_jax.txt`)
 
 Verified 494 ms vs stock JAX 349 (1.4×). Same DMA blocks (54,447 vs 54,991), 2× the PE

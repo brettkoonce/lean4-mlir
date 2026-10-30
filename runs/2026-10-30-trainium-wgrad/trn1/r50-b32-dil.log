@@ -1,0 +1,26 @@
+== r50-b32-dil: resnet50-verified-adam variant adamdil  NEURON_CC_FLAGS=--auto-cast=none 18:18:44
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/resnet50_adamdil_train_step.mlir (@resnet50_adamdil_train_step, 592 outputs, 1 replica) in 47279 ms
+[pjrt_ffi] compiled verified_mlir/resnet50_fwd.mlir (@resnet50_fwd, 1 outputs, 1 replica) in 2747 ms
+[pjrt_ffi] compiled verified_mlir/resnet50_fwd_eval.mlir (@resnet50_fwd_eval, 1 outputs, 1 replica) in 1642 ms
+ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet50_adamdil_train_step.mlir
+  xla/pjrt verified_mlir/resnet50_fwd.mlir
+  xla/pjrt verified_mlir/resnet50_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-50 (Imagenette) adamdil (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @resnet50_adamdil_train_step holds 483 parameter tensors (269.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.358101
+  step 1/295: loss=2.981763
+  step 2/295: loss=3.328833
+  step 100/295: loss=2.451988
+  PROBE: 659 ms/step (median of 100 steps 61..160, ResNet-50 (Imagenette))
+  PROBE-SPREAD: min=657 med=659 p90=661 mean=659 ms/step (starvation wait = med-min = 2 ms)
+  PROBE-DUMP: 100 steps → /home/ubuntu/wgrad/r50-b32-dil-probe.tsv
+EXIT 0 18:21:50
