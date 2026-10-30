@@ -42,7 +42,9 @@ Stock JAX ViT is ~15× faster than the verified ViT graph on Neuron. On the 4060
 runs 61 ms/step, so the cost is specific to how Neuron handles our graph. The op mix (`train_step`
 lowered on CPU, `stablehlo` op counts) is the first lead. The verified graph has 2,632 reshapes
 against 291, 148 slices against 3, and 146 pads against 1. Those are likely the per-head split and
-its backward. Unprofiled. The JAX ResNet-34 numbers are timing only, because its max-pool backward
+its backward. Unprofiled. (Profiled later the same day in `../2026-10-30-trainium-wgrad/`: it is not
+the head split; it is the patch-embed weight gradient's 209×209 dilated kernel, 92 % of the
+compiled step's DMA blocks.) The JAX ResNet-34 numbers are timing only, because its max-pool backward
 runs through Neuron's broken `select_and_scatter`.
 
 The generated JAX ViT trainer on real Imagenette (`jax/vit-tiny-b32-e1.log`) was killed 16 s in.

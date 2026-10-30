@@ -1,0 +1,17 @@
+## form A
+hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
+TOTAL                      266995     266995     591652     164781      63445     172592     397492
+?pad                       158761     158761          0          0          0          0          0
+convolution                105629     105629     267446     164778      63388      69561     175081
+?                               1          1     324206          2          2     103031     219759
+pad                          2604       2604          0          1         55          0       2652
+## form B
+hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
+TOTAL                         184        184       1564        200         89        318        244
+convolution                   114        114       1033        198          6        169        142
+?                              70         70        531          2         83        149        102
+## form C
+hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
+TOTAL                         152        152       2121        235        110        186        192
+dot                           130        130       1584        233         15         28        162
+?                              22         22        537          2         95        158         30

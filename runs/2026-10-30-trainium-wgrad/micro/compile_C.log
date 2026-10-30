@@ -1,0 +1,8 @@
+2026-10-30T15:34:38Z INFO 3026828 [root]: Pipeline: HLOToTensorizer Frontend StaticIOTranspose WalrusDriver NeffWrapper
+2026-10-30 15:34:38.988008: I hilo/partition/Partition.cc:86] [INFO] needsModular? No. macCnt 924844032 num non-trivial Ops 1
+2026-10-30T15:34:40Z INFO 3026828 [job.WalrusDriver.0]: propagate_exit=True
+2026-10-30T15:34:40Z INFO 3027506 [Unroll]: legalizeCondExit: optimized 0 exit blocks
+2026-10-30T15:34:40Z INFO 3027506 [Unroll]: legalizeCondExit: optimized 0 exit blocks
+2026-10-30T15:34:41Z INFO 3026636 [root]: Subcommand returned with exitcode=0
+C 3.09 s 308320 KB
+C exit 0

@@ -1,9 +1,10 @@
 # trainium.md — AWS Trainium (trn1) as a platform: where it stands, what's next
 
-Started 2026-10-30. Two sessions so far (2026-10-29/30 night, 2026-10-30 day). Work lives on branch
-`trainium`, which is not pushed. `main` also carries the first two commits (3d96445f, a859a2c3), local only;
-decide whether `main` keeps them. Run records: `runs/2026-10-30-trainium-setup/README.md`,
-`runs/2026-10-30-trainium-imagenette/README.md`, `runs/2026-10-30-trainium-upstream/README.md`.
+Started 2026-10-30. Three sessions so far (2026-10-29/30 night, 2026-10-30 day, 2026-10-30 afternoon on
+atlas). Work lives on branch `trainium`, which is not pushed; local `main` was moved back to da5a1404 on
+2026-10-30, so the Trainium commits are on this branch only. Run records: `runs/2026-10-30-trainium-setup/README.md`,
+`runs/2026-10-30-trainium-imagenette/README.md`, `runs/2026-10-30-trainium-upstream/README.md`,
+`runs/2026-10-30-trainium-wgrad/README.md`.
 
 ## 1. Where it stands
 
@@ -17,29 +18,43 @@ decide whether `main` keeps them. Run records: `runs/2026-10-30-trainium-setup/R
   - ResNet-34 at batch 16 (scratch renders `resnet34_adam16{,bf16}`, uncommitted) trains, but on wrong
     pool gradients.
 - **Speed:** the verified ViT runs 1,281 ms/step (733 in bf16). **Stock JAX ViT on the same core runs 82.5
-  (63.8 in bf16)**, about the 4060 Ti's 61. The cost is in how Neuron handles our graph, not the
-  hardware. ResNet-34 b16: verified 494, stock JAX 349.
+  (63.8 in bf16)**, about the 4060 Ti's 61. ResNet-34 b16: verified 494, stock JAX 349.
+- **The 15× was one op, and it is fixed in a scratch render** (`runs/2026-10-30-trainium-wgrad/`): the
+  patch-embed weight gradient was rendered as a conv whose kernel is the token cotangent padded
+  `interior = [0, 0, 15, 15]` to 209×209 — 206 of the step's 325 GMAC against zeros, a 1 GB operand, 92 %
+  of the compiled step's DMA blocks. Rewritten as a `rhs_dilate = [16, 16]` conv (form B) or an im2col
+  matmul (form C), **the f32 step runs 71 ms on one NeuronCore (was 1,281; stock JAX 82.5), 54 ms with
+  bf16 matmuls (JAX 63.8)**, and compiles in 400 s on atlas instead of 2,000. Neuron also computed the
+  old conv wrong: the patch-embed Adam moment was 72 % off the CPU golden; the rewrite is within 1e-4.
+  The scratch renders `verified_mlir/vit_adamwg{B,C}_train_step.mlir` are uncommitted; the renderer fix
+  is item 1 below.
 - **Compiler flags:** `-O1`, `-O3` and `--model-type=transformer` change nothing (bit-identical results
   and timing). `-O1` makes the DMA spills worse. tf32 auto-cast crashes the compiler. Only bf16 moves
   the step time.
 
 ## 2. Next session
 
-Item 1 runs on atlas, so no instance is needed. Item 3 is the first thing to do once the instance is up.
+Item 1 is the user's call (it moves pinned renders). Item 2 is the first thing to do once the instance is up.
 
-1. **ViT: find the 15× (atlas only, no instance).** In op counts, the verified `vit_adam_train_step` has
-   2,632 reshapes against stock JAX's 291, 148 slices against 3, and 146 pads against 1. That is likely
-   the per-head split (slice + reshape) and its backward (pad). To check:
-   - Lower a ViT block both ways and compare which ops Neuron turns into DMA. `neuronx-cc` can dump
-     intermediate output, or use `neuron-profile` on the instance.
-   - Then try a renderer change that writes the head split the way JAX does (one reshape + transpose,
-     `dot_general` with batch dims) and confirm it is still the same math: bit-identical on XLA:CPU,
-     like `sas_rewrite.py` does.
-   - If the renderer changes, the proofs that cover it need to follow. Scope that before committing to it.
-2. **File the four upstream issues, on the user's okay.** Drafts and scripts are in
+1. **Fix the patch-embed weight gradient in the renderer.** `Pretty.lean`'s `patchEmbedWeightGrad`
+   emitter (line ~4190, `"patchEmbedWeightGrad" | "patchEmbedWeightGradBf16"`) and `patchEmbedWeightSgd`
+   (line ~1889): drop the interior pad and give the conv `rhs_dilate = [P, P]` (form B), or emit the
+   im2col matmul stock JAX uses (form C; keeps Neuron's conv lowering, which has two open miscompiles in
+   weight-gradient convs, out of the path). `den` is on the AST node, so no proof moves; the pinned text
+   of all 75 `vit*_train_step.mlir` renders moves, plus the tier-2 golden `vit_adam_train_step.npz` and
+   whatever `scripts/book/book_listings.py --check` pins. Re-render, re-golden, rerun the CUDA gate.
+   The ConvNeXt stem (`interior = [0, 0, 3, 3]`, 16× the MACs, 600 MB operand at b32) and the ResNets'
+   stride-2 weight grads (`interior = [0, 0, 1, 1]`, 4×) are the same pattern; do ViT first, then decide.
+   - Not yet measured anywhere: XLA:CPU keeps the 209×209 kernel too, so the 4060 Ti likely pays part of
+     this as well. Time `vit_adam_train_step` against `vit_adamwgB_train_step` on a CUDA box.
+2. **ViT-Tiny on real Imagenette with the rewrite**, alone on the box: `LEAN_MLIR_VARIANT=adamwgB` through
+   `smoke.sh`, one epoch, then a few — the 34.62 % epoch-1 number was trained on the wrong patch-embed
+   gradient, so it needs redoing before it is quoted. Cache: `/var/tmp/neuron-compile-cache-wgrad.tar.gz`
+   on atlas, already merged into the instance's cache (f32 and the bf16 auto-cast entry).
+3. **File the four upstream issues, on the user's okay.** Drafts and scripts are in
    `runs/2026-10-30-trainium-upstream/`. They go to `aws-neuron/aws-neuron-sdk`, which is public. Then
    wait about a week for a response.
-3. **Benchmark a full stock-JAX run on real Imagenette, alone on the box.** This is the cheapest
+4. **Benchmark a full stock-JAX run on real Imagenette, alone on the box.** This is the cheapest
    win: if the repo's own JAX trainer trains at ~80 ms/step on Trainium, the JAX path is the
    platform's fast path today. `runs/2026-10-30-trainium-imagenette/jax/generated_vit_tiny.py` with
    `JAX_BATCH=32 JAX_EPOCHS=1`, then a few epochs if it holds.
@@ -49,11 +64,11 @@ Item 1 runs on atlas, so no instance is needed. Item 3 is the first thing to do 
    - Record epoch time, accuracy and ms/step next to the verified ViT's 1,281 and the 4060 Ti's 61.
    - Then try both cores: the trainer shards over every visible device.
    - ViT only for now. The CNN trainers' max-pool backward is broken on Neuron (issue 1).
-4. **Use both cores.** `neuron_warm.c` compiles for one device, so `vit_adamdp_train_step` (all_reduce)
+5. **Use both cores.** `neuron_warm.c` compiles for one device, so `vit_adamdp_train_step` (all_reduce)
    fails to parse there. Add a two-replica compile, warm it, and time ViT on 2 cores.
-5. **CIFAR workaround (lower priority while the upstream bugs are open):** use the `dot_general`
+6. **CIFAR workaround (lower priority while the upstream bugs are open):** use the `dot_general`
    upsample only at small spatial sizes. The full v2 rewrite never finished compiling.
-6. **ResNet-34 batch 16:** if Trainium stays, give `resnet34_adam16{,bf16}` real `#eval` lines in
+7. **ResNet-34 batch 16:** if Trainium stays, give `resnet34_adam16{,bf16}` real `#eval` lines in
    `ResNet34RenderB.lean`. Otherwise delete the scratch renders.
 
 ## 3. How to run a session

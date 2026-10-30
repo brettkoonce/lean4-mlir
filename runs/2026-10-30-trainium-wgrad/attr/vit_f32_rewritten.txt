@@ -1,0 +1,48 @@
+
+## neff_wgB
+hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
+TOTAL                       24903      24694     436014      73983       3571      81540      38382
+?                            4111       4075     245481       6733        443      31436      11948
+multiply                     7532       7482        438      19731       1013      17068      12029
+add                          4769       4681        797      13136        122      11155       7678
+dot                           664        664     181696       8454        172      17319        984
+?add                         3511       3511          0          0          0          0          0
+divide                       2622       2622          0       1718          0        406       4344
+reduce                        983        983       4805      13573          0        833       1295
+?dot_general                  616        616          0          0          0          0          0
+subtract                       35         23        672       7857        519         66         62
+parameter                      22          0       1344          0        986        134         31
+broadcast                       0          0          0       2755        234          0          0
+?multiply                      32         32          0          0          0          0          0
+tanh                            0          0          0          0          0       1469          0
+exponential                     0          0          0          0          0       1200          0
+convolution                     0          0        772          0          0          0          0
+sqrt                            0          0          0          0          0        439          0
+concatenate                     5          4          9         25          1         14          9
+rsqrt                           0          0          0          0         80          0          0
+log                             1          1          0          0          0          1          2
+negate                          0          0          0          1          1          0          0
+
+## neff_wgC
+hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
+TOTAL                       24360      24148     435339      74073       3845      81321      38357
+?                            4124       4087     245340       6715        475      31392      12031
+multiply                     7296       7243        436      19690        994      16934      11958
+add                          4263       4168        790      13096        134      11132       7189
+dot                           519        519     180417       8416        173      17234        773
+?add                         3661       3661          0          0          0          0          0
+divide                       2686       2686          0       1797          0        417       4651
+reduce                       1002       1002       4806      13636          0        830       1291
+?dot_general                  444        444          0          0          0          0          0
+convolution                   303        303       1668        157          0         85        422
+subtract                       15          2        624       7767        563         60         23
+broadcast                       0          0          0       2761        404          0          0
+parameter                      13          0       1248          5       1019        128         16
+?multiply                      32         32          0          0          0          0          0
+tanh                            0          0          0          0          0       1460          0
+exponential                     0          0          0          0          0       1214          0
+sqrt                            0          0          0          0          0        431          0
+concatenate                     1          0         10         32          2          3          1
+rsqrt                           0          0          0          0         80          0          0
+log                             1          1          0          0          0          1          2
+negate                          0          0          0          1          1          0          0

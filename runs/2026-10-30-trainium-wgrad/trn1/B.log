@@ -1,0 +1,22 @@
+== B: variant adamwgB NEURON_CC_FLAGS=--auto-cast=none 15:51:33
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/vit_adamwgB_train_step.mlir (@vit_adamwgB_train_step, 603 outputs, 1 replica) in 6709 ms
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 438 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adamwgB_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adamwgB (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adamwgB_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.351305
+  step 1/295: loss=3.004615
+  step 2/295: loss=2.555267
+  step 100/295: loss=2.180400
+  PROBE: 71 ms/step (median of 100 steps 61..160, ViT-Tiny)
+  PROBE-SPREAD: min=70 med=71 p90=72 mean=71 ms/step (starvation wait = med-min = 1 ms)
+  PROBE-DUMP: 100 steps → /home/ubuntu/wgrad/B-probe.tsv
+EXIT 0 15:52:17

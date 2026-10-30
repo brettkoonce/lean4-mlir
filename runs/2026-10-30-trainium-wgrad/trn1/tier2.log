@@ -1,0 +1,9 @@
+neuron vit_adam_train_step 16:01:36
+compile 58739 ms, first call 1318 ms
+OK attention/f32: median 4.5e-07 (≤0.003), p90 4.9e-06 (≤0.005), max 7.2e-01 at output 200
+neuron vit_adamwgB_train_step 16:02:37
+compile 33169 ms, first call 116 ms
+OK attention/f32: median 1.3e-06 (≤0.003), p90 9.1e-06 (≤0.005), max 7.4e-05 at output 166
+neuron vit_adamwgC_train_step 16:03:11
+compile 11845 ms, first call 110 ms
+OK attention/f32: median 5.9e-07 (≤0.003), p90 5.6e-06 (≤0.005), max 6.3e-05 at output 209

@@ -1,0 +1,8 @@
+vit_adam_train_step form C: rewrote 1 weight-grad conv(s); 209x209 left: 0
+  outputs 603; bit-identical outputs: 600/603
+  out 200 shape (192, 3, 16, 16): max abs diff 2.072e-08 rel 2.9e-06 differing elems 143564
+  out 0 shape (192, 3, 16, 16): max abs diff 2.049e-08 rel 8.3e-08 differing elems 65725
+  out 400 shape (192, 3, 16, 16): max abs diff 5.960e-08 rel 6.0e-08 differing elems 1
+  out 602 shape (): max abs diff 0.000e+00 rel 0.0e+00 differing elems 0
+form C: 25.40 s 10953444 KB
+exit 0
