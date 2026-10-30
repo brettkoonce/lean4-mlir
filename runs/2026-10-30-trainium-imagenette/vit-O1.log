@@ -1,0 +1,28 @@
+== vit-O1: NEURON_CC_FLAGS=--auto-cast=none -O1 (NEURON_CC_FLAGS=--auto-cast=none -O1)
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 49123 ms
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 486 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.351305
+  step 1/295: loss=3.005073
+  step 2/295: loss=2.555297
+  step 100/295: loss=2.263773
+  step 200/295: loss=2.162656
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.152877 lr=0.000060
+  epoch 1: val_acc = 1359/3925 = 34.624204%  top5 = 3066/3925 = 78.114650%  [95% CI 33.15–36.13]
+done (trained ViT-Tiny adam + cosine/warmup via packed threading).
+EXIT 0
+  PROBE: 1288 ms/step (median of 100 steps 61..160, ViT-Tiny)
+  PROBE-SPREAD: min=1286 med=1288 p90=1290 mean=1288 ms/step (starvation wait = med-min = 2 ms)
+  PROBE-DUMP: 100 steps → runs/2026-10-30-trainium-imagenette/vit-O1-probe.tsv
+DONE

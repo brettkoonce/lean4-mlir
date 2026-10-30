@@ -1,0 +1,1 @@
+conv3x3 N=16 C=64 H=W=28  flags="--auto-cast=matmult --auto-cast-type=tf32"  COMPILER CRASH NCC_IBCG901

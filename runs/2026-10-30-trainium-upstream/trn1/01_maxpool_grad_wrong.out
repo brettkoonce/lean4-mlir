@@ -1,0 +1,12 @@
+jax 0.10.0, NeuronCore(id=0, process_index=0, local_id=0)
+WRONG (8, 8, 8, 8)  rel err 1.18e+00  nonzeros cpu 1024 neuron 1024  (windows 1024)
+WRONG (32, 16, 16, 16)  rel err 1.23e+00  nonzeros cpu 32768 neuron 32768  (windows 32768)
+WRONG (128, 16, 32, 32)  rel err 1.35e+00  nonzeros cpu 524288 neuron 1193084  (windows 524288)
+Traceback (most recent call last):
+  File "/home/ubuntu/01_maxpool_grad_wrong.py", line 23, in <module>
+    '\n  neuron grad', np.asarray(jax.jit(grad, device=neu)(jax.device_put(x, neu), jax.device_put(g, neu)))[0, 0].tolist())
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jax.errors.JaxRuntimeError: INTERNAL: .
+[libneuronxla ]
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.

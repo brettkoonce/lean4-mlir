@@ -1,0 +1,7 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+/home/ubuntu/jax_lane.sh: line 8:  4058 Killed                  python $R/jax/generated_vit_tiny.py
+
+real	0m16.195s
+user	0m3.976s
+sys	0m11.636s
+DONE

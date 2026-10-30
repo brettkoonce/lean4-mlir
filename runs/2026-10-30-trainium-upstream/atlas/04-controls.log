@@ -1,0 +1,2 @@
+conv3x3 N=16 C=64 H=W=56  flags="--auto-cast=none"  compiled (load failed: fake device)
+conv3x3 N=16 C=64 H=W=56  flags="--auto-cast=matmult --auto-cast-type=bf16"  compiled (load failed: fake device)

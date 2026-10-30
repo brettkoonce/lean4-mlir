@@ -1,0 +1,3 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+jax 0.10.0, device NeuronCore(id=0, process_index=0, local_id=0), batch 32, bfloat16
+after 664s: JaxRuntimeError: INVALID_ARGUMENT:  [General]: [NRT_INVALID] status_code=2. NRT rejected an invalid runtime object, operation descriptor, or input. For more details check stderr, or system logs for neuron messages. https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-troubleshoot.html#nrt-troubleshooting

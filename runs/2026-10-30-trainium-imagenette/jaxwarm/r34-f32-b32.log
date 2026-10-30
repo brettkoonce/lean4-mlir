@@ -1,0 +1,6 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+2026-Oct-30 13:34:21.156850 2974694:2974694  WARN   NRT:nrt_config_parse_init_config            H2D DMA notification capture is not supported by the installed driver; disabling it. Please upgrade to a newer driver.
+r34 f32 B=32 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+2026-Oct-30 13:34:38.433999 2974694:2974694 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:34:38.434172 2974694:2974694 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+WARM compile ended after 716s: INTERNAL: ....................................(Load: maximum.17.copy.22674_d2dtranspose_25518_local_30015_i5_Remat_92561_ShrinkedCopy_partial_ReloadPartial), tensorizer(output tensor: float32<32 x 512

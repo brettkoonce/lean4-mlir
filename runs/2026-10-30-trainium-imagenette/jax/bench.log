@@ -1,0 +1,21 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+vit f32 B=32 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+first step (compile+run) 343.3s loss 6.892
+RESULT vit f32 B=32 82.5 ms/step  2.58 ms/img  loss 1.024
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+vit bf16 B=32 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+first step (compile+run) 326.8s loss 6.892
+RESULT vit bf16 B=32 63.8 ms/step  1.99 ms/img  loss 1.024
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+r34 f32 B=16 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+first step (compile+run) 409.9s loss 7.042
+RESULT r34 f32 B=16 348.7 ms/step  21.79 ms/img  loss 2.537
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+r34 bf16 B=16 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+first step (compile+run) 412.6s loss 7.042
+RESULT r34 bf16 B=16 404.6 ms/step  25.29 ms/img  loss 2.534
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jax.errors.JaxRuntimeError: INTERNAL: Load: error condition true: Nrt::Load failed on NeuronCores 0-0:  [General]: [NRT_FAILURE] status_code=1. Operation failed due to an unspecified error condition in the runtime system. For more details check stderr, or system logs for neuron messages. https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-troubleshoot.html#nrt-troubleshooting
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+DONE

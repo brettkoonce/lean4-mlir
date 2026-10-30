@@ -1,0 +1,55 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+2026-Oct-30 13:57:54.825601 2986070:2986070  WARN   NRT:nrt_config_parse_init_config            H2D DMA notification capture is not supported by the installed driver; disabling it. Please upgrade to a newer driver.
+jax 0.10.0, NeuronCore(id=0, process_index=0, local_id=0), NEURON_CC_FLAGS=--auto-cast=matmult --auto-cast-type=tf32
+2026-Oct-30 13:57:54.878089 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:57:54.878281 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:57:56.871964 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:57:56.872299 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:57:56.872586 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:57:56.872877 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+matmul 128x192 @ 192x768                 ok (compiled; load failed on the fake device)
+2026-Oct-30 13:57:56.901903 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:57:56.902272 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:57:58.707857 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:57:58.708213 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:57:58.708505 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:57:58.708776 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+matmul grad (dw) 6304x192, 6304x768      ok (compiled; load failed on the fake device)
+2026-Oct-30 13:57:58.734855 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:57:58.735230 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:58:00.733776 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:58:00.734132 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:58:00.734430 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:58:00.734698 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+attention scores 32x3x197x64             ok (compiled; load failed on the fake device)
+2026-Oct-30 13:58:00.758628 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:58:00.759011 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:58:07.631081 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:58:07.631441 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:58:07.631726 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:58:07.632029 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+patch conv 16x16/16, 3->192              ok (compiled; load failed on the fake device)
+2026-Oct-30 13:58:07.655929 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:58:07.656286 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+conv 3x3 64->64 @56                      COMPILER ERROR NCC_IBCG901
+2026-Oct-30 13:58:09.434628 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:58:09.435011 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:59:23.000703 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:59:23.000993 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:59:23.001177 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:59:23.001344 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+conv 3x3 grad (dx,dw) 64->64 @56         ok (compiled; load failed on the fake device)
+2026-Oct-30 13:59:23.039521 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:59:23.039914 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:59:41.940364 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:59:41.940718 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:59:41.941059 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:59:41.941367 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+conv 7x7/2 grad 3->64 @224               ok (compiled; load failed on the fake device)
+2026-Oct-30 13:59:41.981224 2986070:2986070 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:59:41.981561 2986070:2986070 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 14:00:32.951818 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 14:00:32.952120 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 14:00:32.952362 2986070:2986324 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 14:00:32.952585 2986070:2986324 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+conv 3x3/2 grad 64->128 @56              ok (compiled; load failed on the fake device)

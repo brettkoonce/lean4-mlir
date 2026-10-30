@@ -1,0 +1,10 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+2026-Oct-30 13:34:21.100607 2974687:2974687  WARN   NRT:nrt_config_parse_init_config            H2D DMA notification capture is not supported by the installed driver; disabling it. Please upgrade to a newer driver.
+vit f32 B=32 backend=neuron device=NeuronCore(id=0, process_index=0, local_id=0) NEURON_CC_FLAGS=--auto-cast=none
+2026-Oct-30 13:34:29.361774 2974687:2974687 ERROR  TDRV:db_get_mla_from_device_id               TDRV not initialized!
+2026-Oct-30 13:34:29.361960 2974687:2974687 ERROR   NRT:nrt_get_vnc_memory_stats                Failed to get memory stats
+2026-Oct-30 13:43:33.594785 2974687:2975569 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:43:33.594990 2974687:2975569 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+2026-Oct-30 13:43:33.595183 2974687:2975569 ERROR  TDRV:vtpb_get_virtual_core                   Invalid lnc index 4294967295. Number of LNCs 1
+2026-Oct-30 13:43:33.595334 2974687:2975569 ERROR   NRT:nrta_tensor_write_legacy                Failed to find logical core (lnc_idx=4294967295) for tensor _unknown_
+WARM compile ended after 546s: INVALID_ARGUMENT:  [General]: [NRT_INVALID] status_code=2. NRT rejected an invalid runtime object, operation descriptor, or input. For more details check stderr, or system logs for neuron messages. ht

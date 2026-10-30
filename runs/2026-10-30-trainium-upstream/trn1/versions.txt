@@ -1,0 +1,9 @@
+jax                 0.10.0
+jax_neuronx         0.10.0.1.0.14198+40d442c2
+jaxlib              0.10.0
+libneuronxla        3.0.10135.0+7d133f20
+neuronx-cc          2.28.7631.0+8f7b0cf5
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+aws-neuronx-collectives 2.35.43.0-354ad3064
+aws-neuronx-dkms 2.31.7.0
+aws-neuronx-runtime-lib 2.35.30.0-d2725ccb8

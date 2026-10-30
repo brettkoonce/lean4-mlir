@@ -1,0 +1,7 @@
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+jax 0.10.0, device NeuronCore(id=0, process_index=0, local_id=0), batch 32, float32
+after 519s: JaxRuntimeError ['NCC_IBIR243']
+INTERNAL: ..........................(Load: maximum.17.copy.15777_d2dtranspose_18443_local_21855_i4_Remat_89801_ShrinkedCopy_partial_ReloadPartial), tensorizer(output tensor: float32<32 x 512> $47026[i6734_17649_21867, c2_21847_0, p_35151, c1_21846, c3_21848], id: 26423 output tensor: float32<32 x 76
+...
+code 1 and stderr: (Load: maximum.17.copy.15777_d2dtranspose_18443_local_21855_i4_Remat_89801_ShrinkedCopy_partial_ReloadPartial), tensorizer(output tensor: float32<32 x 512> $47026[i6734_17649_21867, c2_21847_0, p_35151, c1_21846, c3_21848], id: 26423 output tensor: float32<32 x 768> $47027[i6734_17649_21867, c2_21847_0, p_35151, c1_21846, c3_21848], id: 26423 output tensor: float32<32 x 512> $47028[i6734_17649_21867, c2_21847_0, p_35151, c1_21846, c3_21848], id: 26423 output tensor: float32<32 x 256> $47029[i6734_17649_21867, c2_21847_0, p_35151, c1_21846, c3_21848], id: 26423) [INTERNAL_ERROR] [NCC_IBIR243] Access pattern out of bounds. Pattern: [[50176,32],[1,768]] - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables.
+[libneuronxla ]

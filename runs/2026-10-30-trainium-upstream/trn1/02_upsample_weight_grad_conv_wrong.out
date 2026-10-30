@@ -1,0 +1,7 @@
+WRONG N=128 C=32 H=W= 4  rel err 7.10e-01
+WRONG N=128 C=32 H=W= 8  rel err 7.32e-01
+WRONG N=128 C=16 H=W=16  rel err 5.64e-01
+WRONG N= 32 C=32 H=W= 4  rel err 7.13e-01
+WRONG N=  8 C= 8 H=W= 4  rel err 7.06e-01
+ok    N=128 C=32 H=W= 2  rel err 1.47e-07
+control (upsample on host): rel err 3.71e-07

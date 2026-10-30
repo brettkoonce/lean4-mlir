@@ -1,0 +1,44 @@
+== r34-b32-O1: NEURON_CC_FLAGS=--auto-cast=none -O1 (NEURON_CC_FLAGS=--auto-cast=none -O1)
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+2026-Oct-30 13:41:25.035688  3752:3757  ERROR  TDRV:vring_allocate_next_desc                Descriptor limit reached. Descriptors in vring 16777200, Max allowed 16777200
+2026-Oct-30 13:41:25.042252  3752:3757  ERROR   HAL:al_udma_m2m_build_packet                failed to get new tx descriptor for packet
+2026-Oct-30 13:41:25.047880  3752:3757  ERROR  TDRV:vring_add_dma_packet_v2                 Failed to build packet for vring qSPSpillReload0_defId_2_1 err 2
+2026-Oct-30 13:41:25.053934  3752:3757  ERROR  TDRV:dma_util_vring_append_descs             Failed to create desc -  for ring: qSPSpillReload0_defId_2_1
+2026-Oct-30 13:41:25.059896  3752:3757  ERROR  TDRV:drs_expand_data_desc_model              Failed to process dma block: 113128
+2026-Oct-30 13:41:25.188445  3752:3757  ERROR  TDRV:kbl_model_add                           create_data_refill_rings() error
+2026-Oct-30 13:41:25.280368  3752:3757  ERROR  NMGR:dlr_kelf_stage                          Failed to load subgraph
+2026-Oct-30 13:41:25.285684  3752:3757  ERROR  NMGR:kmgr_load_nn_internal_v2                Failed to stage graph to NeuronCore
+2026-Oct-30 13:41:25.408681  3752:3757  ERROR  NMGR:kmgr_load_nn_post_metrics               Failed to load NN: /tmp/skoonce/neuroncc_compile_workdir/9d3fe831b0a11f355fdf992d7d193dcf/MODULE_canonical_module_14595070131249893491.neff, err: 1
+2026-Oct-30 13:41:25.417959  3752:3757  ERROR   NRT:nrt_infodump                            Neuron runtime information - please include in any support request:
+2026-Oct-30 13:41:25.424068  3752:3757  ERROR   NRT:nrt_infodump                            ------------->8------------[ cut here ]------------>8-------------
+2026-Oct-30 13:41:25.430145  3752:3757  ERROR   NRT:nrt_infodump                            NRT version: 2.35.30.0 (d2725ccb85ec45a12a6cda21994562156f6e1c23)
+2026-Oct-30 13:41:25.436186  3752:3757  ERROR   NRT:nrt_infodump                            Embedded FW version: 1.25.36.0 (862ff86bbfacf42a954a4d280d1508fbbaf2c561) loaded from "libnrtucode_extisa.so"
+2026-Oct-30 13:41:25.444625  3752:3757  ERROR   NRT:nrt_infodump                            CCOM version: 0.35.43.0-"354ad3064" (compat 93)
+2026-Oct-30 13:41:25.450341  3752:3757  ERROR   NRT:nrt_infodump                            NCFW version: 2.35.12.0 (0cd410fb83c08e6964e981b2fdc1f50713297caa)
+2026-Oct-30 13:41:25.456406  3752:3757  ERROR   NRT:nrt_infodump                            Instance ID: i-07ab710f38e5acdcf
+2026-Oct-30 13:41:25.461792  3752:3757  ERROR   NRT:nrt_infodump                            Cluster ID: N/A
+2026-Oct-30 13:41:25.466860  3752:3757  ERROR   NRT:nrt_infodump                            Kernel: Linux 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026
+2026-Oct-30 13:41:25.474904  3752:3757  ERROR   NRT:nrt_infodump                            Nodename: ip-172-31-36-145
+2026-Oct-30 13:41:25.480214  3752:3757  ERROR   NRT:nrt_infodump                            Driver version: 2.31.7.0
+
+2026-Oct-30 13:41:25.487245  3752:3757  ERROR   NRT:nrt_infodump                            Failure: NRT_FAILURE in nrt_load_util
+2026-Oct-30 13:41:25.492727  3752:3757  ERROR   NRT:nrt_infodump                            Visible cores: 1
+2026-Oct-30 13:41:25.497788  3752:3757  ERROR   NRT:nrt_infodump                            Environment:
+2026-Oct-30 13:41:25.502780  3752:3757  ERROR   NRT:nrt_infodump                                NEURON_INTERNAL_PJRT_C_API_VERSION=0.90
+2026-Oct-30 13:41:25.508391  3752:3757  ERROR   NRT:nrt_infodump                                NEURON_CC_FLAGS=--auto-cast=none -O1
+2026-Oct-30 13:41:25.513964  3752:3757  ERROR   NRT:nrt_infodump                                NEURON_RT_ROOT_COMM_ID=localhost:33381
+2026-Oct-30 13:41:25.519589  3752:3757  ERROR   NRT:nrt_infodump                            -------------8<-----------[ cut to here ]-----------8<------------
+2026-Oct-30 13:41:26.224184  3752:3757  ERROR   NRT:nrt_load                                Failed to load nrt model
+[pjrt_ffi] Client_Compile: Load: error condition true: Nrt::Load failed on NeuronCores 0-0:  [General]: [NRT_FAILURE] status_code=1. Operation failed due to an unspecified error condition in the runtime system. For more details check stderr, or system logs for neuron messages. https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-troubleshoot.html#nrt-troubleshooting
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
+uncaught exception: iree_ffi_session_create failed (see stderr)
+EXIT 0
+2026-Oct-30 13:42:26.500692  3937:3942  ERROR  TDRV:kbl_model_add                           create_data_refill_rings() error
+[pjrt_ffi] Client_Compile: Load: error condition true: Nrt::Load failed on NeuronCores 0-0:  [General]: [NRT_FAILURE] status_code=1. Operation failed due to an unspecified error condition in the runtime system. For more details check stderr, or system logs for neuron messages. https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-runtime/nrt-troubleshoot.html#nrt-troubleshooting
+DONE
