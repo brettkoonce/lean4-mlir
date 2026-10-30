@@ -1,0 +1,4 @@
+neuronx-cc	2.28.7631.0+8f7b0cf5
+flags	--auto-cast=matmult --auto-cast-type=tf32
+plugin	adbda5ce6af40e4bdcf606310349bd3b
+cache	/var/tmp/neuron-flags/tf32 (1 entries)

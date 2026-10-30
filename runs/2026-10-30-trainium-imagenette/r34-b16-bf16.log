@@ -1,0 +1,34 @@
+== r34-b16-bf16: LEAN_MLIR_VARIANT=adam16bf16 LEAN_MLIR_BATCH=16 (NEURON_CC_FLAGS=--auto-cast=none)
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/resnet34_adam16bf16_train_step.mlir (@resnet34_adam16bf16_train_step, 405 outputs, 1 replica) in 33185 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir (@resnet34_fwd, 1 outputs, 1 replica) in 62180 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir (@resnet34_fwd_eval, 1 outputs, 1 replica) in 2071 ms
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam16bf16_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 16, ResNet-34 adam16bf16 (cosine+warmup 3ep, baseLR 0.001000), He init
+  eval batch 32 (the batch @resnet34_fwd_eval was RENDERED at) != train batch 16 — sound because eval is class-batch-independent
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @resnet34_adam16bf16_train_step holds 330 parameter tensors (243.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/300: loss=3.433685
+  step 1/300: loss=3.870749
+  step 2/300: loss=4.207471
+  step 100/300: loss=1.817480
+  step 200/300: loss=2.097608
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.202412 lr=0.000333
+  epoch 1: val_acc = 847/3925 = 21.579618%  top5 = 2575/3925 = 65.605096%  [95% CI 20.32–22.89]
+    BN companion -> .lake/build/resnet34_adam16bf16_ckpt_xla.bin.bn (17024 floats x 2, hash 14883296968174684501)
+done (trained ResNet-34 adam16bf16 + cosine/warmup via packed threading).
+EXIT 0
+  PROBE: 435 ms/step (median of 100 steps 61..160, ResNet-34)
+  PROBE-SPREAD: min=430 med=435 p90=440 mean=435 ms/step (starvation wait = med-min = 5 ms)
+  PROBE-DUMP: 100 steps → runs/2026-10-30-trainium-imagenette/r34-b16-bf16-probe.tsv
+DONE

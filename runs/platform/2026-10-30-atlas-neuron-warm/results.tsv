@@ -1,0 +1,5 @@
+render	status	seconds
+resnet34_fwd_eval	CACHED	49.8
+resnet50_acc2x16_train_step	CACHED	2051.3
+resnet50_fwd	CACHED	126.2
+resnet50_fwd_eval	CACHED	84.2

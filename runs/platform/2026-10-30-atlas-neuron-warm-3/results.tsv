@@ -1,0 +1,3 @@
+render	status	seconds
+resnet34_adam16bf16_train_step	CACHED	560.4
+resnet34_adam16_train_step	CACHED	1027.2

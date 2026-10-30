@@ -1,0 +1,5 @@
+render	status	seconds
+resnet34_adam16_train_step	CACHED	962.3
+resnet34_fwd_eval	CACHED	60.3
+vit_adam_train_step	CACHED	2156.1
+vit_fwd	CACHED	67.1

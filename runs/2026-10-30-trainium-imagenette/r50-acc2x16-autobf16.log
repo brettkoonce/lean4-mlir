@@ -1,0 +1,33 @@
+== r50-acc2x16-autobf16: LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 NEURON_CC_FLAGS=--auto-cast=matmult --auto-cast-type=bf16 (NEURON_CC_FLAGS=--auto-cast=matmult --auto-cast-type=bf16)
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/resnet50_acc2x16_train_step.mlir (@resnet50_acc2x16_train_step, 755 outputs, 1 replica) in 39773 ms
+[pjrt_ffi] compiled verified_mlir/resnet50_fwd.mlir (@resnet50_fwd, 1 outputs, 1 replica) in 96219 ms
+[pjrt_ffi] compiled verified_mlir/resnet50_fwd_eval.mlir (@resnet50_fwd_eval, 1 outputs, 1 replica) in 1104 ms
+ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet50_acc2x16_train_step.mlir
+  xla/pjrt verified_mlir/resnet50_fwd.mlir
+  xla/pjrt verified_mlir/resnet50_fwd_eval.mlir
+  train 9469, val 3925; bs 16, ResNet-50 (Imagenette) acc2x16 (cosine+warmup 3ep, baseLR 0.001000), He init
+  ▸ GRADIENT ACCUMULATION: k = 2, blob region 3 of 4 [θ|m|v|G]. Micro-batch 16 x 2 = EFFECTIVE BATCH 32. 300 micro-batches/epoch = 150 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+     ⚠ This is AdamW at that batch, NOT rsb-faithful — LAMB and BCE-with-logits still absent.
+  eval batch 32 (the batch @resnet50_fwd_eval was RENDERED at) != train batch 16 — sound because eval is class-batch-independent
+  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.005013 = 1 − 0.990000^(1/2), compensated for grad-accum
+[pjrt_ffi] RESIDENT: @resnet50_acc2x16_train_step holds 644 parameter tensors (359.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/300: loss=3.213145
+  step 1/300: loss=3.602909
+  step 2/300: loss=2.894527
+  step 100/300: loss=2.038305
+  step 200/300: loss=2.519801
+[pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.333259 lr=0.000333
+  epoch 1: val_acc = 525/3925 = 13.375796%  top5 = 2267/3925 = 57.757962%  [95% CI 12.35–14.48]
+    BN companion -> .lake/build/resnet50_acc2x16_ckpt_xla.bin.bn (53120 floats x 2, hash 12343307952728020457)
+done (trained ResNet-50 (Imagenette) acc2x16 + cosine/warmup via packed threading).
+EXIT 0
+DONE

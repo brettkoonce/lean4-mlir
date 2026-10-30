@@ -1,0 +1,8 @@
+O1	--auto-cast=none -O1	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-4
+O3	--auto-cast=none -O3	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-5
+tf32	--auto-cast=matmult --auto-cast-type=tf32	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-6
+bf16O3	--auto-cast=matmult --auto-cast-type=bf16 -O3	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-7
+xf	--auto-cast=none --model-type=transformer	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-8
+xfbf16	--auto-cast=matmult --auto-cast-type=bf16 --model-type=transformer	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-9
+dp	--auto-cast=none	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-10
+dpbf16	--auto-cast=matmult --auto-cast-type=bf16	/home/skoonce/lean/lean4-mlir/runs/platform/2026-10-30-atlas-neuron-warm-11
