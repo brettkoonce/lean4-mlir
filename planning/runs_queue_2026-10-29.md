@@ -135,6 +135,19 @@ pool backward and join this tier. If Tier 1a holds, they do not.
   precisions × arms × five seeds). Covered by Tier 1a's R34 check; re-run the ablation only if
   that check fails.
 
+## Landed
+
+- **2026-10-30, Tier 1 (mars, 4× 3060).** 1b: `runs/2026-10-29-small-seeds/`,
+  `runs/2026-10-29-nobnprec-seeds/`; every arm's median inside its 09-01 range, so the two 09-01
+  rows of `tab:cifar_optimizers` hold. One no-BN Nesterov seed never trained (10.00, range cell
+  would read 10.00–74.00); no-BN AdamW `loss=NaN` in 4/5, 4/5, 3/5 with test accuracy intact.
+  1a: `runs/2026-10-29-imagenette-seeds/`; B0 and both ResNets hold (the Tier 3 conditional does not
+  fire), ConvNeXt's median is 83.75 against the shipped 82.27 (a low draw on a two-point seed spread),
+  MNv2 88.87 against 89.25. Book not edited; the ConvNeXt row and its ch 8 transcript need a decision.
+- **Tier 2 queued** by `runs/2026-10-30-r50-a3-seeds/queue.sh`: seeds 2 and 3 per arm, JAX s2
+  launched 2026-10-30 08:54 UTC. Both confs take `RUN_SEED`; the JAX emitter reads
+  `LEAN_MLIR_SEED_OFFSET`.
+
 ## After each run
 
 RESULTS.md in the run directory (the `bbn-seeds` one is the shape); the caption's run directory

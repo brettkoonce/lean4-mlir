@@ -1,0 +1,72 @@
+[00:39:05] sweep start: SUITE=imagenette, 35 jobs, GPUs 0,1,2,3, seeds [1 2 3 4 5] -> runs/2026-10-29-imagenette-seeds
+[00:39:05] gpu0  resnet34_s1  start  (resnet34-verified-adam)
+[00:39:05] gpu1  resnet34_s2  start  (resnet34-verified-adam)
+[00:39:05] gpu2  resnet34_s3  start  (resnet34-verified-adam)
+[00:39:05] gpu3  resnet34_s4  start  (resnet34-verified-adam)
+[01:30:59] gpu2  resnet34_s3  OK   51m54s  89.681529%
+[01:30:59] gpu2  resnet34_s5  start  (resnet34-verified-adam)
+[01:31:33] gpu0  resnet34_s1  OK   52m28s  89.681529%
+[01:31:33] gpu0  resnet50_s1  start  (resnet50-verified-adam)
+[01:31:36] gpu1  resnet34_s2  OK   52m31s  90.114650%
+[01:31:36] gpu1  resnet50_s2  start  (resnet50-verified-adam)
+[01:31:43] gpu3  resnet34_s4  OK   52m38s  89.783439%
+[01:31:43] gpu3  resnet50_s3  start  (resnet50-verified-adam)
+[02:21:56] gpu2  resnet34_s5  OK   50m57s  90.216561%
+[02:21:56] gpu2  resnet50_s4  start  (resnet50-verified-adam)
+[02:51:45] gpu0  resnet50_s1  OK   80m12s  89.630573%
+[02:51:45] gpu0  resnet50_s5  start  (resnet50-verified-adam)
+[02:51:51] gpu1  resnet50_s2  OK   80m15s  90.063694%
+[02:51:51] gpu1  convnext_s1  start  (convnext-verified-adam)
+[02:52:16] gpu3  resnet50_s3  OK   80m33s  89.273885%
+[02:52:16] gpu3  convnext_s2  start  (convnext-verified-adam)
+[03:40:31] gpu2  resnet50_s4  OK   78m35s  90.012739%
+[03:40:31] gpu2  convnext_s3  start  (convnext-verified-adam)
+[04:11:10] gpu0  resnet50_s5  OK   79m25s  89.401274%
+[04:11:10] gpu0  convnext_s4  start  (convnext-verified-adam)
+[04:21:47] gpu1  convnext_s1  OK   89m56s  82.038217%
+[04:21:47] gpu1  convnext_s5  start  (convnext-verified-adam)
+[04:22:34] gpu3  convnext_s2  OK   90m18s  83.745223%
+[04:22:34] gpu3  efficientnet_s1  start  (efficientnet-verified-adam)
+[05:04:17] gpu3  efficientnet_s1  OK   41m43s  89.656051%
+[05:04:17] gpu3  efficientnet_s2  start  (efficientnet-verified-adam)
+[05:08:22] gpu2  convnext_s3  OK   87m51s  82.904459%
+[05:08:22] gpu2  efficientnet_s3  start  (efficientnet-verified-adam)
+[05:41:12] gpu0  convnext_s4  OK   90m2s  83.796178%
+[05:41:12] gpu0  efficientnet_s4  start  (efficientnet-verified-adam)
+[05:46:15] gpu3  efficientnet_s2  OK   41m58s  89.401274%
+[05:46:15] gpu3  efficientnet_s5  start  (efficientnet-verified-adam)
+[05:50:19] gpu2  efficientnet_s3  OK   41m57s  90.089172%
+[05:50:19] gpu2  mobilenetv4_s1  start  (mobilenetv4-verified-adam)
+[05:51:42] gpu1  convnext_s5  OK   89m55s  84.025478%
+[05:51:42] gpu1  mobilenetv4_s2  start  (mobilenetv4-verified-adam)
+[06:24:17] gpu0  efficientnet_s4  OK   43m5s  89.961783%
+[06:24:17] gpu0  mobilenetv4_s3  start  (mobilenetv4-verified-adam)
+[06:29:32] gpu3  efficientnet_s5  OK   43m17s  90.038217%
+[06:29:32] gpu3  mobilenetv4_s4  start  (mobilenetv4-verified-adam)
+[06:33:38] gpu2  mobilenetv4_s1  OK   43m19s  85.961783%
+[06:33:38] gpu2  mobilenetv4_s5  start  (mobilenetv4-verified-adam)
+[06:35:03] gpu1  mobilenetv4_s2  OK   43m21s  86.267516%
+[06:35:03] gpu1  mobilenetv2_s1  start  (mobilenetv2-verified-adam)
+[07:06:43] gpu0  mobilenetv4_s3  OK   42m26s  85.885350%
+[07:06:43] gpu0  mobilenetv2_s2  start  (mobilenetv2-verified-adam)
+[07:11:14] gpu1  mobilenetv2_s1  OK   36m11s  88.993631%
+[07:11:14] gpu1  mobilenetv2_s3  start  (mobilenetv2-verified-adam)
+[07:12:12] gpu3  mobilenetv4_s4  OK   42m40s  85.707006%
+[07:12:12] gpu3  mobilenetv2_s4  start  (mobilenetv2-verified-adam)
+[07:16:05] gpu2  mobilenetv4_s5  OK   42m27s  86.038217%
+[07:16:05] gpu2  mobilenetv2_s5  start  (mobilenetv2-verified-adam)
+[07:44:36] gpu0  mobilenetv2_s2  OK   37m53s  88.738854%
+[07:44:36] gpu0  vit_s1  start  (vit-verified-adam)
+[07:49:13] gpu1  mobilenetv2_s3  OK   37m59s  89.121019%
+[07:49:13] gpu1  vit_s2  start  (vit-verified-adam)
+[07:50:16] gpu3  mobilenetv2_s4  OK   38m4s  88.764331%
+[07:50:16] gpu3  vit_s3  start  (vit-verified-adam)
+[07:53:56] gpu2  mobilenetv2_s5  OK   37m51s  88.866242%
+[07:53:56] gpu2  vit_s4  start  (vit-verified-adam)
+[08:19:11] gpu0  vit_s1  OK   34m35s  68.611465%
+[08:19:11] gpu0  vit_s5  start  (vit-verified-adam)
+[08:23:57] gpu1  vit_s2  OK   34m44s  68.993631%
+[08:25:02] gpu3  vit_s3  OK   34m46s  68.000000%
+[08:28:31] gpu2  vit_s4  OK   34m35s  68.815287%
+[08:52:31] gpu0  vit_s5  OK   33m20s  67.872611%
+[08:52:31] sweep complete: 35/35 jobs done

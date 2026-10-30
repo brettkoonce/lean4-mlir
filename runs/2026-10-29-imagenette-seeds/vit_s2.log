@@ -1,0 +1,775 @@
+I1030 07:49:13.305247    5035 service.cc:154] XLA service 0x7b717c052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1030 07:49:13.305316    5035 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1030 07:49:13.306598    5035 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1030 07:49:13.306654    5035 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1030 07:49:13.395260    5035 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1030 07:49:15.478821    5035 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I1030 07:49:16.359010    5054 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_964', 88 bytes spill stores, 56 bytes spill loads
+
+I1030 07:49:16.554115    5050 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 64 bytes spill stores, 64 bytes spill loads
+
+I1030 07:49:16.652477    5056 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 9124 bytes spill stores, 9032 bytes spill loads
+
+I1030 07:49:17.151896    5061 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I1030 07:49:17.198065    5059 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 100 bytes spill stores, 64 bytes spill loads
+
+I1030 07:49:17.375575    5072 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_580', 12 bytes spill stores, 12 bytes spill loads
+
+I1030 07:49:17.488949    5050 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I1030 07:49:17.511854    5056 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I1030 07:49:17.958990    5049 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 64 bytes spill stores, 64 bytes spill loads
+
+I1030 07:49:17.970063    5066 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 100 bytes spill stores, 72 bytes spill loads
+
+I1030 07:49:18.004885    5065 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_966', 112 bytes spill stores, 80 bytes spill loads
+
+I1030 07:49:18.370006    5068 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_965', 32 bytes spill stores, 32 bytes spill loads
+
+I1030 07:49:18.646398    5059 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9932 bytes spill stores, 9872 bytes spill loads
+
+I1030 07:49:18.708687    5058 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 100 bytes spill stores, 64 bytes spill loads
+
+I1030 07:49:19.206132    5060 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 4 bytes spill stores, 4 bytes spill loads
+
+I1030 07:49:19.308432    5051 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_963', 252 bytes spill stores, 188 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 7619 ms
+I1030 07:49:22.105692    5051 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I1030 07:49:22.182899    5069 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I1030 07:49:22.328554    5065 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_85', 12 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 2039 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.147270
+  step 1/295: loss=3.058253
+  step 2/295: loss=3.217033
+  step 100/295: loss=2.299572
+  step 200/295: loss=1.946377
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.115805 lr=0.000060
+  epoch 1: val_acc = 1438/3925 = 36.636943%  top5 = 3184/3925 = 81.121019%  [95% CI 35.14–38.16]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e1.bin (3925 bytes)
+  step 0/295: loss=1.955868
+  step 1/295: loss=1.771427
+  step 2/295: loss=1.926096
+  step 100/295: loss=1.867856
+  step 200/295: loss=1.773555
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.879918 lr=0.000120
+  epoch 2: val_acc = 1592/3925 = 40.560510%  top5 = 3376/3925 = 86.012739%  [95% CI 39.03–42.11]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e2.bin (3925 bytes)
+  step 0/295: loss=1.874923
+  step 1/295: loss=1.973818
+  step 2/295: loss=1.782022
+  step 100/295: loss=1.715776
+  step 200/295: loss=1.601920
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.747498 lr=0.000180
+  epoch 3: val_acc = 1777/3925 = 45.273885%  top5 = 3436/3925 = 87.541401%  [95% CI 43.72–46.83]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e3.bin (3925 bytes)
+  step 0/295: loss=1.836393
+  step 1/295: loss=1.679392
+  step 2/295: loss=1.853235
+  step 100/295: loss=1.561771
+  step 200/295: loss=1.762814
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.662025 lr=0.000240
+  epoch 4: val_acc = 1813/3925 = 46.191083%  top5 = 3487/3925 = 88.840764%  [95% CI 44.64–47.75]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e4.bin (3925 bytes)
+  step 0/295: loss=1.349381
+  step 1/295: loss=1.701605
+  step 2/295: loss=1.581704
+  step 100/295: loss=1.811438
+  step 200/295: loss=1.659912
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.613652 lr=0.000300
+  epoch 5: val_acc = 2008/3925 = 51.159236%  top5 = 3528/3925 = 89.885350%  [95% CI 49.60–52.72]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e5.bin (3925 bytes)
+  step 0/295: loss=1.620061
+  step 1/295: loss=1.270567
+  step 2/295: loss=1.529645
+  step 100/295: loss=1.482814
+  step 200/295: loss=1.942745
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.530600 lr=0.000300
+  epoch 6: val_acc = 2108/3925 = 53.707006%  top5 = 3583/3925 = 91.286624%  [95% CI 52.14–55.26]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e6.bin (3925 bytes)
+  step 0/295: loss=1.465559
+  step 1/295: loss=1.591853
+  step 2/295: loss=1.549249
+  step 100/295: loss=1.501676
+  step 200/295: loss=1.608440
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.497860 lr=0.000299
+  epoch 7: val_acc = 2122/3925 = 54.063694%  top5 = 3600/3925 = 91.719745%  [95% CI 52.50–55.62]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e7.bin (3925 bytes)
+  step 0/295: loss=1.278781
+  step 1/295: loss=1.433321
+  step 2/295: loss=1.702201
+  step 100/295: loss=1.603345
+  step 200/295: loss=1.371793
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.453293 lr=0.000299
+  epoch 8: val_acc = 2118/3925 = 53.961783%  top5 = 3520/3925 = 89.681529%  [95% CI 52.40–55.52]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e8.bin (3925 bytes)
+  step 0/295: loss=1.308551
+  step 1/295: loss=1.670547
+  step 2/295: loss=1.637557
+  step 100/295: loss=1.398887
+  step 200/295: loss=1.351651
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.424708 lr=0.000298
+  epoch 9: val_acc = 2361/3925 = 60.152866%  top5 = 3657/3925 = 93.171975%  [95% CI 58.61–61.67]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e9.bin (3925 bytes)
+  step 0/295: loss=1.148685
+  step 1/295: loss=1.384969
+  step 2/295: loss=1.400054
+  step 100/295: loss=1.467093
+  step 200/295: loss=1.461062
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.383583 lr=0.000297
+  epoch 10: val_acc = 2323/3925 = 59.184713%  top5 = 3658/3925 = 93.197452%  [95% CI 57.64–60.71]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e10.bin (3925 bytes)
+  step 0/295: loss=1.438313
+  step 1/295: loss=0.928335
+  step 2/295: loss=1.226083
+  step 100/295: loss=1.657385
+  step 200/295: loss=1.302238
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=1.371894 lr=0.000295
+  epoch 11: val_acc = 2360/3925 = 60.127389%  top5 = 3680/3925 = 93.757962%  [95% CI 58.59–61.65]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e11.bin (3925 bytes)
+  step 0/295: loss=1.345689
+  step 1/295: loss=1.512321
+  step 2/295: loss=1.326145
+  step 100/295: loss=1.332154
+  step 200/295: loss=1.053876
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=1.346538 lr=0.000294
+  epoch 12: val_acc = 2416/3925 = 61.554140%  top5 = 3669/3925 = 93.477707%  [95% CI 60.02–63.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e12.bin (3925 bytes)
+  step 0/295: loss=1.602696
+  step 1/295: loss=1.194261
+  step 2/295: loss=1.248504
+  step 100/295: loss=1.352033
+  step 200/295: loss=1.567307
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=1.328063 lr=0.000292
+  epoch 13: val_acc = 2419/3925 = 61.630573%  top5 = 3677/3925 = 93.681529%  [95% CI 60.10–63.14]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e13.bin (3925 bytes)
+  step 0/295: loss=1.227274
+  step 1/295: loss=1.260929
+  step 2/295: loss=1.133937
+  step 100/295: loss=1.418788
+  step 200/295: loss=1.486388
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=1.304871 lr=0.000289
+  epoch 14: val_acc = 2428/3925 = 61.859873%  top5 = 3645/3925 = 92.866242%  [95% CI 60.33–63.37]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e14.bin (3925 bytes)
+  step 0/295: loss=1.333685
+  step 1/295: loss=1.596506
+  step 2/295: loss=1.112948
+  step 100/295: loss=1.101371
+  step 200/295: loss=1.546167
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=1.276992 lr=0.000287
+  epoch 15: val_acc = 2286/3925 = 58.242038%  top5 = 3626/3925 = 92.382166%  [95% CI 56.69–59.78]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e15.bin (3925 bytes)
+  step 0/295: loss=1.447115
+  step 1/295: loss=1.268412
+  step 2/295: loss=1.245823
+  step 100/295: loss=1.390209
+  step 200/295: loss=1.376632
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=1.274059 lr=0.000284
+  epoch 16: val_acc = 2466/3925 = 62.828025%  top5 = 3705/3925 = 94.394904%  [95% CI 61.30–64.33]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e16.bin (3925 bytes)
+  step 0/295: loss=1.179605
+  step 1/295: loss=1.581135
+  step 2/295: loss=1.227259
+  step 100/295: loss=1.037474
+  step 200/295: loss=1.425682
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=1.253369 lr=0.000281
+  epoch 17: val_acc = 2428/3925 = 61.859873%  top5 = 3699/3925 = 94.242038%  [95% CI 60.33–63.37]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e17.bin (3925 bytes)
+  step 0/295: loss=1.099965
+  step 1/295: loss=0.999302
+  step 2/295: loss=1.277376
+  step 100/295: loss=1.219451
+  step 200/295: loss=0.875944
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=1.233152 lr=0.000278
+  epoch 18: val_acc = 2562/3925 = 65.273885%  top5 = 3717/3925 = 94.700637%  [95% CI 63.77–66.75]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e18.bin (3925 bytes)
+  step 0/295: loss=1.222396
+  step 1/295: loss=1.114247
+  step 2/295: loss=1.296938
+  step 100/295: loss=1.161457
+  step 200/295: loss=1.189350
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=1.201326 lr=0.000275
+  epoch 19: val_acc = 2498/3925 = 63.643312%  top5 = 3692/3925 = 94.063694%  [95% CI 62.13–65.13]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e19.bin (3925 bytes)
+  step 0/295: loss=1.126073
+  step 1/295: loss=1.303843
+  step 2/295: loss=1.339186
+  step 100/295: loss=1.170357
+  step 200/295: loss=1.214105
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=1.187365 lr=0.000271
+  epoch 20: val_acc = 2542/3925 = 64.764331%  top5 = 3693/3925 = 94.089172%  [95% CI 63.26–66.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e20.bin (3925 bytes)
+  step 0/295: loss=1.268492
+  step 1/295: loss=1.103996
+  step 2/295: loss=1.028048
+  step 100/295: loss=1.068818
+  step 200/295: loss=1.195735
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=1.184549 lr=0.000268
+  epoch 21: val_acc = 2421/3925 = 61.681529%  top5 = 3662/3925 = 93.299363%  [95% CI 60.15–63.19]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e21.bin (3925 bytes)
+  step 0/295: loss=1.313101
+  step 1/295: loss=1.432530
+  step 2/295: loss=0.949591
+  step 100/295: loss=1.496701
+  step 200/295: loss=1.165580
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=1.167449 lr=0.000264
+  epoch 22: val_acc = 2587/3925 = 65.910828%  top5 = 3718/3925 = 94.726115%  [95% CI 64.41–67.38]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e22.bin (3925 bytes)
+  step 0/295: loss=1.092057
+  step 1/295: loss=1.163746
+  step 2/295: loss=0.885251
+  step 100/295: loss=1.196051
+  step 200/295: loss=1.318126
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=1.132678 lr=0.000259
+  epoch 23: val_acc = 2539/3925 = 64.687898%  top5 = 3683/3925 = 93.834395%  [95% CI 63.18–66.17]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e23.bin (3925 bytes)
+  step 0/295: loss=1.200493
+  step 1/295: loss=1.312129
+  step 2/295: loss=1.154203
+  step 100/295: loss=1.265023
+  step 200/295: loss=1.380554
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=1.127803 lr=0.000255
+  epoch 24: val_acc = 2603/3925 = 66.318471%  top5 = 3718/3925 = 94.726115%  [95% CI 64.82–67.78]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e24.bin (3925 bytes)
+  step 0/295: loss=0.907626
+  step 1/295: loss=1.288071
+  step 2/295: loss=0.996377
+  step 100/295: loss=1.145712
+  step 200/295: loss=0.945590
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=1.103476 lr=0.000250
+  epoch 25: val_acc = 2586/3925 = 65.885350%  top5 = 3719/3925 = 94.751592%  [95% CI 64.39–67.35]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e25.bin (3925 bytes)
+  step 0/295: loss=0.946829
+  step 1/295: loss=0.925723
+  step 2/295: loss=1.023823
+  step 100/295: loss=1.083760
+  step 200/295: loss=1.272085
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=1.085795 lr=0.000246
+  epoch 26: val_acc = 2663/3925 = 67.847134%  top5 = 3708/3925 = 94.471338%  [95% CI 66.37–69.29]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e26.bin (3925 bytes)
+  step 0/295: loss=1.169101
+  step 1/295: loss=0.876254
+  step 2/295: loss=0.937059
+  step 100/295: loss=0.833953
+  step 200/295: loss=1.092349
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=1.060574 lr=0.000241
+  epoch 27: val_acc = 2629/3925 = 66.980892%  top5 = 3713/3925 = 94.598726%  [95% CI 65.49–68.43]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e27.bin (3925 bytes)
+  step 0/295: loss=0.848575
+  step 1/295: loss=1.062279
+  step 2/295: loss=1.158381
+  step 100/295: loss=1.183249
+  step 200/295: loss=1.169715
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=1.047645 lr=0.000236
+  epoch 28: val_acc = 2583/3925 = 65.808917%  top5 = 3704/3925 = 94.369427%  [95% CI 64.31–67.28]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e28.bin (3925 bytes)
+  step 0/295: loss=0.854940
+  step 1/295: loss=0.949392
+  step 2/295: loss=0.956696
+  step 100/295: loss=1.067873
+  step 200/295: loss=0.804587
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=1.026790 lr=0.000230
+  epoch 29: val_acc = 2629/3925 = 66.980892%  top5 = 3688/3925 = 93.961783%  [95% CI 65.49–68.43]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e29.bin (3925 bytes)
+  step 0/295: loss=1.127017
+  step 1/295: loss=1.088636
+  step 2/295: loss=1.103615
+  step 100/295: loss=1.009808
+  step 200/295: loss=0.998451
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=1.005092 lr=0.000225
+  epoch 30: val_acc = 2585/3925 = 65.859873%  top5 = 3682/3925 = 93.808917%  [95% CI 64.36–67.33]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e30.bin (3925 bytes)
+  step 0/295: loss=1.041141
+  step 1/295: loss=0.854285
+  step 2/295: loss=1.081131
+  step 100/295: loss=0.686158
+  step 200/295: loss=1.114814
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.982340 lr=0.000220
+  epoch 31: val_acc = 2649/3925 = 67.490446%  top5 = 3703/3925 = 94.343949%  [95% CI 66.01–68.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e31.bin (3925 bytes)
+  step 0/295: loss=0.811541
+  step 1/295: loss=1.057756
+  step 2/295: loss=0.929119
+  step 100/295: loss=0.820701
+  step 200/295: loss=0.925725
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.957644 lr=0.000214
+  epoch 32: val_acc = 2632/3925 = 67.057325%  top5 = 3705/3925 = 94.394904%  [95% CI 65.57–68.51]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e32.bin (3925 bytes)
+  step 0/295: loss=0.898684
+  step 1/295: loss=0.706330
+  step 2/295: loss=0.870934
+  step 100/295: loss=0.968153
+  step 200/295: loss=1.138916
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.935438 lr=0.000208
+  epoch 33: val_acc = 2657/3925 = 67.694268%  top5 = 3687/3925 = 93.936306%  [95% CI 66.21–69.14]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e33.bin (3925 bytes)
+  step 0/295: loss=0.780521
+  step 1/295: loss=0.980490
+  step 2/295: loss=0.679985
+  step 100/295: loss=0.827844
+  step 200/295: loss=0.806556
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.905069 lr=0.000202
+  epoch 34: val_acc = 2627/3925 = 66.929936%  top5 = 3682/3925 = 93.808917%  [95% CI 65.44–68.38]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e34.bin (3925 bytes)
+  step 0/295: loss=0.952547
+  step 1/295: loss=0.899935
+  step 2/295: loss=0.832082
+  step 100/295: loss=0.807441
+  step 200/295: loss=0.818823
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.890249 lr=0.000196
+  epoch 35: val_acc = 2627/3925 = 66.929936%  top5 = 3699/3925 = 94.242038%  [95% CI 65.44–68.38]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e35.bin (3925 bytes)
+  step 0/295: loss=0.822667
+  step 1/295: loss=0.859884
+  step 2/295: loss=0.740392
+  step 100/295: loss=0.814977
+  step 200/295: loss=1.089399
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.863726 lr=0.000190
+  epoch 36: val_acc = 2618/3925 = 66.700637%  top5 = 3677/3925 = 93.681529%  [95% CI 65.21–68.16]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e36.bin (3925 bytes)
+  step 0/295: loss=1.109044
+  step 1/295: loss=0.877181
+  step 2/295: loss=0.823859
+  step 100/295: loss=0.922936
+  step 200/295: loss=1.160580
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.846144 lr=0.000184
+  epoch 37: val_acc = 2648/3925 = 67.464968%  top5 = 3673/3925 = 93.579618%  [95% CI 65.98–68.91]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e37.bin (3925 bytes)
+  step 0/295: loss=0.804517
+  step 1/295: loss=0.795879
+  step 2/295: loss=0.700533
+  step 100/295: loss=0.806054
+  step 200/295: loss=0.841622
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.835712 lr=0.000178
+  epoch 38: val_acc = 2647/3925 = 67.439490%  top5 = 3678/3925 = 93.707006%  [95% CI 65.96–68.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e38.bin (3925 bytes)
+  step 0/295: loss=0.595439
+  step 1/295: loss=0.769859
+  step 2/295: loss=0.782965
+  step 100/295: loss=0.888996
+  step 200/295: loss=0.936928
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.798162 lr=0.000172
+  epoch 39: val_acc = 2619/3925 = 66.726115%  top5 = 3669/3925 = 93.477707%  [95% CI 65.24–68.18]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e39.bin (3925 bytes)
+  step 0/295: loss=0.906518
+  step 1/295: loss=0.788519
+  step 2/295: loss=0.819063
+  step 100/295: loss=0.938160
+  step 200/295: loss=0.813693
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.787982 lr=0.000166
+  epoch 40: val_acc = 2663/3925 = 67.847134%  top5 = 3647/3925 = 92.917197%  [95% CI 66.37–69.29]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e40.bin (3925 bytes)
+  step 0/295: loss=0.692083
+  step 1/295: loss=0.694320
+  step 2/295: loss=0.826198
+  step 100/295: loss=0.625629
+  step 200/295: loss=0.609498
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.764648 lr=0.000159
+  epoch 41: val_acc = 2640/3925 = 67.261146%  top5 = 3651/3925 = 93.019108%  [95% CI 65.78–68.71]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e41.bin (3925 bytes)
+  step 0/295: loss=0.784687
+  step 1/295: loss=0.668268
+  step 2/295: loss=0.873372
+  step 100/295: loss=0.803482
+  step 200/295: loss=0.762228
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.752094 lr=0.000153
+  epoch 42: val_acc = 2698/3925 = 68.738854%  top5 = 3651/3925 = 93.019108%  [95% CI 67.27–70.17]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e42.bin (3925 bytes)
+  step 0/295: loss=0.704585
+  step 1/295: loss=0.699805
+  step 2/295: loss=0.646015
+  step 100/295: loss=0.719955
+  step 200/295: loss=0.881342
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.733313 lr=0.000147
+  epoch 43: val_acc = 2609/3925 = 66.471338%  top5 = 3667/3925 = 93.426752%  [95% CI 64.98–67.93]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e43.bin (3925 bytes)
+  step 0/295: loss=0.668422
+  step 1/295: loss=0.625599
+  step 2/295: loss=0.580698
+  step 100/295: loss=0.612466
+  step 200/295: loss=0.820904
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.712749 lr=0.000141
+  epoch 44: val_acc = 2661/3925 = 67.796178%  top5 = 3616/3925 = 92.127389%  [95% CI 66.32–69.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e44.bin (3925 bytes)
+  step 0/295: loss=0.635457
+  step 1/295: loss=0.614026
+  step 2/295: loss=0.631438
+  step 100/295: loss=0.800296
+  step 200/295: loss=0.694492
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.696275 lr=0.000134
+  epoch 45: val_acc = 2660/3925 = 67.770701%  top5 = 3645/3925 = 92.866242%  [95% CI 66.29–69.21]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e45.bin (3925 bytes)
+  step 0/295: loss=0.689675
+  step 1/295: loss=0.805417
+  step 2/295: loss=0.655611
+  step 100/295: loss=0.623842
+  step 200/295: loss=0.711070
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.685959 lr=0.000128
+  epoch 46: val_acc = 2681/3925 = 68.305732%  top5 = 3639/3925 = 92.713376%  [95% CI 66.83–69.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e46.bin (3925 bytes)
+  step 0/295: loss=0.600753
+  step 1/295: loss=0.629163
+  step 2/295: loss=0.955527
+  step 100/295: loss=0.728478
+  step 200/295: loss=0.579586
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.664649 lr=0.000122
+  epoch 47: val_acc = 2667/3925 = 67.949045%  top5 = 3620/3925 = 92.229299%  [95% CI 66.47–69.39]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e47.bin (3925 bytes)
+  step 0/295: loss=0.613445
+  step 1/295: loss=0.574497
+  step 2/295: loss=0.611590
+  step 100/295: loss=0.596844
+  step 200/295: loss=0.581517
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.652271 lr=0.000116
+  epoch 48: val_acc = 2718/3925 = 69.248408%  top5 = 3639/3925 = 92.713376%  [95% CI 67.79–70.67]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e48.bin (3925 bytes)
+  step 0/295: loss=0.670253
+  step 1/295: loss=0.635211
+  step 2/295: loss=0.734984
+  step 100/295: loss=0.664133
+  step 200/295: loss=0.723448
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.648009 lr=0.000110
+  epoch 49: val_acc = 2705/3925 = 68.917197%  top5 = 3613/3925 = 92.050955%  [95% CI 67.45–70.35]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e49.bin (3925 bytes)
+  step 0/295: loss=0.573698
+  step 1/295: loss=0.683409
+  step 2/295: loss=0.547573
+  step 100/295: loss=0.536109
+  step 200/295: loss=0.671251
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.623192 lr=0.000104
+  epoch 50: val_acc = 2688/3925 = 68.484076%  top5 = 3617/3925 = 92.152866%  [95% CI 67.01–69.92]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e50.bin (3925 bytes)
+  step 0/295: loss=0.611314
+  step 1/295: loss=0.689063
+  step 2/295: loss=0.550931
+  step 100/295: loss=0.605840
+  step 200/295: loss=0.680022
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.621852 lr=0.000098
+  epoch 51: val_acc = 2678/3925 = 68.229299%  top5 = 3614/3925 = 92.076433%  [95% CI 66.76–69.67]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e51.bin (3925 bytes)
+  step 0/295: loss=0.564827
+  step 1/295: loss=0.661621
+  step 2/295: loss=0.679058
+  step 100/295: loss=0.670844
+  step 200/295: loss=0.583316
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.605696 lr=0.000092
+  epoch 52: val_acc = 2682/3925 = 68.331210%  top5 = 3589/3925 = 91.439490%  [95% CI 66.86–69.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e52.bin (3925 bytes)
+  step 0/295: loss=0.635304
+  step 1/295: loss=0.573606
+  step 2/295: loss=0.555783
+  step 100/295: loss=0.586990
+  step 200/295: loss=0.658673
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.599676 lr=0.000086
+  epoch 53: val_acc = 2654/3925 = 67.617834%  top5 = 3591/3925 = 91.490446%  [95% CI 66.14–69.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e53.bin (3925 bytes)
+  step 0/295: loss=0.617555
+  step 1/295: loss=0.555161
+  step 2/295: loss=0.553649
+  step 100/295: loss=0.687118
+  step 200/295: loss=0.553184
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.596777 lr=0.000081
+  epoch 54: val_acc = 2666/3925 = 67.923567%  top5 = 3587/3925 = 91.388535%  [95% CI 66.45–69.37]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e54.bin (3925 bytes)
+  step 0/295: loss=0.555280
+  step 1/295: loss=0.550876
+  step 2/295: loss=0.591697
+  step 100/295: loss=0.601412
+  step 200/295: loss=0.590748
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.579966 lr=0.000075
+  epoch 55: val_acc = 2660/3925 = 67.770701%  top5 = 3580/3925 = 91.210191%  [95% CI 66.29–69.21]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e55.bin (3925 bytes)
+  step 0/295: loss=0.519422
+  step 1/295: loss=0.567187
+  step 2/295: loss=0.548636
+  step 100/295: loss=0.608152
+  step 200/295: loss=0.525317
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.578550 lr=0.000070
+  epoch 56: val_acc = 2701/3925 = 68.815287%  top5 = 3600/3925 = 91.719745%  [95% CI 67.35–70.25]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e56.bin (3925 bytes)
+  step 0/295: loss=0.538248
+  step 1/295: loss=0.542179
+  step 2/295: loss=0.548904
+  step 100/295: loss=0.707597
+  step 200/295: loss=0.550214
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.568028 lr=0.000064
+  epoch 57: val_acc = 2659/3925 = 67.745223%  top5 = 3576/3925 = 91.108280%  [95% CI 66.27–69.19]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e57.bin (3925 bytes)
+  step 0/295: loss=0.585470
+  step 1/295: loss=0.560652
+  step 2/295: loss=0.536197
+  step 100/295: loss=0.565313
+  step 200/295: loss=0.572857
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.566902 lr=0.000059
+  epoch 58: val_acc = 2676/3925 = 68.178344%  top5 = 3581/3925 = 91.235669%  [95% CI 66.70–69.62]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e58.bin (3925 bytes)
+  step 0/295: loss=0.516938
+  step 1/295: loss=0.515639
+  step 2/295: loss=0.581619
+  step 100/295: loss=0.580204
+  step 200/295: loss=0.558692
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.556747 lr=0.000054
+  epoch 59: val_acc = 2662/3925 = 67.821656%  top5 = 3570/3925 = 90.955414%  [95% CI 66.34–69.27]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e59.bin (3925 bytes)
+  step 0/295: loss=0.537455
+  step 1/295: loss=0.557588
+  step 2/295: loss=0.550999
+  step 100/295: loss=0.647463
+  step 200/295: loss=0.556123
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.547766 lr=0.000050
+  epoch 60: val_acc = 2684/3925 = 68.382166%  top5 = 3556/3925 = 90.598726%  [95% CI 66.91–69.82]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e60.bin (3925 bytes)
+  step 0/295: loss=0.526449
+  step 1/295: loss=0.606674
+  step 2/295: loss=0.543819
+  step 100/295: loss=0.518494
+  step 200/295: loss=0.511691
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.547322 lr=0.000045
+  epoch 61: val_acc = 2684/3925 = 68.382166%  top5 = 3554/3925 = 90.547771%  [95% CI 66.91–69.82]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e61.bin (3925 bytes)
+  step 0/295: loss=0.550006
+  step 1/295: loss=0.525446
+  step 2/295: loss=0.555991
+  step 100/295: loss=0.521199
+  step 200/295: loss=0.516139
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.540361 lr=0.000041
+  epoch 62: val_acc = 2658/3925 = 67.719745%  top5 = 3540/3925 = 90.191083%  [95% CI 66.24–69.16]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e62.bin (3925 bytes)
+  step 0/295: loss=0.547751
+  step 1/295: loss=0.535433
+  step 2/295: loss=0.513331
+  step 100/295: loss=0.513722
+  step 200/295: loss=0.529489
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.540003 lr=0.000036
+  epoch 63: val_acc = 2671/3925 = 68.050955%  top5 = 3569/3925 = 90.929936%  [95% CI 66.58–69.49]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e63.bin (3925 bytes)
+  step 0/295: loss=0.514672
+  step 1/295: loss=0.511825
+  step 2/295: loss=0.566092
+  step 100/295: loss=0.520938
+  step 200/295: loss=0.552256
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.540297 lr=0.000032
+  epoch 64: val_acc = 2707/3925 = 68.968153%  top5 = 3566/3925 = 90.853503%  [95% CI 67.50–70.40]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e64.bin (3925 bytes)
+  step 0/295: loss=0.569231
+  step 1/295: loss=0.591542
+  step 2/295: loss=0.538885
+  step 100/295: loss=0.521825
+  step 200/295: loss=0.513964
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.534664 lr=0.000029
+  epoch 65: val_acc = 2711/3925 = 69.070064%  top5 = 3562/3925 = 90.751592%  [95% CI 67.61–70.50]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e65.bin (3925 bytes)
+  step 0/295: loss=0.521883
+  step 1/295: loss=0.511453
+  step 2/295: loss=0.507614
+  step 100/295: loss=0.516548
+  step 200/295: loss=0.533231
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.528729 lr=0.000025
+  epoch 66: val_acc = 2716/3925 = 69.197452%  top5 = 3552/3925 = 90.496815%  [95% CI 67.73–70.62]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e66.bin (3925 bytes)
+  step 0/295: loss=0.670648
+  step 1/295: loss=0.510357
+  step 2/295: loss=0.526586
+  step 100/295: loss=0.563455
+  step 200/295: loss=0.531380
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.527366 lr=0.000022
+  epoch 67: val_acc = 2697/3925 = 68.713376%  top5 = 3546/3925 = 90.343949%  [95% CI 67.25–70.15]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e67.bin (3925 bytes)
+  step 0/295: loss=0.511918
+  step 1/295: loss=0.587416
+  step 2/295: loss=0.553839
+  step 100/295: loss=0.511703
+  step 200/295: loss=0.519445
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.524749 lr=0.000019
+  epoch 68: val_acc = 2700/3925 = 68.789809%  top5 = 3555/3925 = 90.573248%  [95% CI 67.32–70.22]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e68.bin (3925 bytes)
+  step 0/295: loss=0.543829
+  step 1/295: loss=0.516255
+  step 2/295: loss=0.507922
+  step 100/295: loss=0.511778
+  step 200/295: loss=0.509423
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.525529 lr=0.000016
+  epoch 69: val_acc = 2691/3925 = 68.560510%  top5 = 3546/3925 = 90.343949%  [95% CI 67.09–69.99]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e69.bin (3925 bytes)
+  step 0/295: loss=0.544806
+  step 1/295: loss=0.506643
+  step 2/295: loss=0.521449
+  step 100/295: loss=0.509491
+  step 200/295: loss=0.526681
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.524611 lr=0.000013
+  epoch 70: val_acc = 2707/3925 = 68.968153%  top5 = 3539/3925 = 90.165605%  [95% CI 67.50–70.40]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e70.bin (3925 bytes)
+  step 0/295: loss=0.504928
+  step 1/295: loss=0.541720
+  step 2/295: loss=0.518356
+  step 100/295: loss=0.507231
+  step 200/295: loss=0.507553
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.520239 lr=0.000011
+  epoch 71: val_acc = 2713/3925 = 69.121019%  top5 = 3550/3925 = 90.445860%  [95% CI 67.66–70.55]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e71.bin (3925 bytes)
+  step 0/295: loss=0.525241
+  step 1/295: loss=0.510750
+  step 2/295: loss=0.509078
+  step 100/295: loss=0.511138
+  step 200/295: loss=0.508112
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.520115 lr=0.000008
+  epoch 72: val_acc = 2710/3925 = 69.044586%  top5 = 3536/3925 = 90.089172%  [95% CI 67.58–70.47]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e72.bin (3925 bytes)
+  step 0/295: loss=0.508672
+  step 1/295: loss=0.506168
+  step 2/295: loss=0.508312
+  step 100/295: loss=0.506935
+  step 200/295: loss=0.535580
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.520189 lr=0.000006
+  epoch 73: val_acc = 2715/3925 = 69.171975%  top5 = 3533/3925 = 90.012739%  [95% CI 67.71–70.60]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e73.bin (3925 bytes)
+  step 0/295: loss=0.509263
+  step 1/295: loss=0.505750
+  step 2/295: loss=0.508222
+  step 100/295: loss=0.513760
+  step 200/295: loss=0.519749
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.518089 lr=0.000005
+  epoch 74: val_acc = 2720/3925 = 69.299363%  top5 = 3537/3925 = 90.114650%  [95% CI 67.84–70.72]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e74.bin (3925 bytes)
+  step 0/295: loss=0.518182
+  step 1/295: loss=0.529009
+  step 2/295: loss=0.506604
+  step 100/295: loss=0.513288
+  step 200/295: loss=0.507424
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.516313 lr=0.000003
+  epoch 75: val_acc = 2720/3925 = 69.299363%  top5 = 3525/3925 = 89.808917%  [95% CI 67.84–70.72]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e75.bin (3925 bytes)
+  step 0/295: loss=0.516609
+  step 1/295: loss=0.516995
+  step 2/295: loss=0.510882
+  step 100/295: loss=0.511914
+  step 200/295: loss=0.504302
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.518739 lr=0.000002
+  epoch 76: val_acc = 2722/3925 = 69.350318%  top5 = 3530/3925 = 89.936306%  [95% CI 67.89–70.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e76.bin (3925 bytes)
+  step 0/295: loss=0.511236
+  step 1/295: loss=0.513144
+  step 2/295: loss=0.521439
+  step 100/295: loss=0.506943
+  step 200/295: loss=0.509339
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.518598 lr=0.000001
+  epoch 77: val_acc = 2715/3925 = 69.171975%  top5 = 3533/3925 = 90.012739%  [95% CI 67.71–70.60]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e77.bin (3925 bytes)
+  step 0/295: loss=0.510896
+  step 1/295: loss=0.515096
+  step 2/295: loss=0.513462
+  step 100/295: loss=0.519542
+  step 200/295: loss=0.505956
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.515519 lr=0.000001
+  epoch 78: val_acc = 2709/3925 = 69.019108%  top5 = 3531/3925 = 89.961783%  [95% CI 67.55–70.45]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e78.bin (3925 bytes)
+  step 0/295: loss=0.509682
+  step 1/295: loss=0.512423
+  step 2/295: loss=0.514828
+  step 100/295: loss=0.517553
+  step 200/295: loss=0.508650
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.517105 lr=0.000000
+  epoch 79: val_acc = 2708/3925 = 68.993631%  top5 = 3535/3925 = 90.063694%  [95% CI 67.53–70.42]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e79.bin (3925 bytes)
+  step 0/295: loss=0.504999
+  step 1/295: loss=0.506388
+  step 2/295: loss=0.514766
+  step 100/295: loss=0.510819
+  step 200/295: loss=0.580773
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.517716 lr=0.000000
+  epoch 80: val_acc = 2708/3925 = 68.993631%  top5 = 3534/3925 = 90.038217%  [95% CI 67.53–70.42]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/vit_s2_adam_e80.bin (3925 bytes)
+done (trained ViT-Tiny adam + cosine/warmup via packed threading).

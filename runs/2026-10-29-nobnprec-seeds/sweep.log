@@ -1,0 +1,22 @@
+[00:30:20] sweep start: SUITE=nobnprec, 10 jobs, GPUs 0,1,2,3, seeds [1 2 3 4 5] -> runs/2026-10-29-nobnprec-seeds
+[00:30:20] gpu0  cifar8wb_f32_s1  start  (cifar8wb-ablation)
+[00:30:20] gpu1  cifar8wb_f32_s2  start  (cifar8wb-ablation)
+[00:30:20] gpu3  cifar8wb_f32_s3  start  (cifar8wb-ablation)
+[00:30:20] gpu2  cifar8wb_f32_s4  start  (cifar8wb-ablation)
+[00:33:33] gpu2  cifar8wb_f32_s4  OK   3m13s  70.110000% / 73.920000% / 72.960000%
+[00:33:33] gpu2  cifar8wb_f32_s5  start  (cifar8wb-ablation)
+[00:33:34] gpu0  cifar8wb_f32_s1  OK   3m14s  69.410000% / 74.520000% / 73.960000%
+[00:33:34] gpu0  cifar8wb_bf16_s1  start  (cifar8wb-bf16-ablation)
+[00:33:36] gpu1  cifar8wb_f32_s2  OK   3m16s  70.360000% / 73.370000% / 74.470000%
+[00:33:36] gpu1  cifar8wb_bf16_s2  start  (cifar8wb-bf16-ablation)
+[00:33:38] gpu3  cifar8wb_f32_s3  OK   3m18s  69.560000% / 72.900000% / 72.600000%
+[00:33:38] gpu3  cifar8wb_bf16_s3  start  (cifar8wb-bf16-ablation)
+[00:36:21] gpu0  cifar8wb_bf16_s1  OK   2m47s  71.440000% / 72.860000% / 73.370000%
+[00:36:21] gpu0  cifar8wb_bf16_s4  start  (cifar8wb-bf16-ablation)
+[00:36:23] gpu1  cifar8wb_bf16_s2  OK   2m47s  69.470000% / 73.860000% / 73.130000%
+[00:36:23] gpu1  cifar8wb_bf16_s5  start  (cifar8wb-bf16-ablation)
+[00:36:26] gpu3  cifar8wb_bf16_s3  OK   2m48s  70.680000% / 74.480000% / 72.930000%
+[00:36:46] gpu2  cifar8wb_f32_s5  OK   3m13s  69.880000% / 72.520000% / 73.670000%
+[00:39:03] gpu0  cifar8wb_bf16_s4  OK   2m42s  69.880000% / 71.930000% / 73.550000%
+[00:39:05] gpu1  cifar8wb_bf16_s5  OK   2m42s  70.840000% / 73.450000% / 74.480000%
+[00:39:05] sweep complete: 10/10 jobs done

@@ -80,31 +80,31 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cifar8w_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 26 |
-| `cifar8w_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 26 |
-| `cifar8w_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 26 |
-| `cifar8w_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 26 |
+| `cifar8w_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 31 |
+| `cifar8w_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 31 |
+| `cifar8w_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 31 |
+| `cifar8w_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 31 |
 
 ## `cifar8w_bn` — 4 artifacts, 0.4 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cifar8w_bn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 20 |
-| `cifar8w_bn_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |
-| `cifar8w_bn_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |
-| `cifar8w_bn_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |
+| `cifar8w_bn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 25 |
+| `cifar8w_bn_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 25 |
+| `cifar8w_bn_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 25 |
+| `cifar8w_bn_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 25 |
 
 ## `cifar8wb` — 7 artifacts, 0.4 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cifar8wb_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
-| `cifar8wb_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
-| `cifar8wb_bf16adam_train_step.mlir` | train_step | `bf16adam` | AdamW, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
-| `cifar8wb_bf16mom_train_step.mlir` | train_step | `bf16mom` | momentum, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
-| `cifar8wb_bf16sgd_train_step.mlir` | train_step | `bf16sgd` | SGD, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
-| `cifar8wb_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
-| `cifar8wb_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 5 |
+| `cifar8wb_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |
+| `cifar8wb_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
+| `cifar8wb_bf16adam_train_step.mlir` | train_step | `bf16adam` | AdamW, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
+| `cifar8wb_bf16mom_train_step.mlir` | train_step | `bf16mom` | momentum, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
+| `cifar8wb_bf16sgd_train_step.mlir` | train_step | `bf16sgd` | SGD, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
+| `cifar8wb_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
+| `cifar8wb_sgd_train_step.mlir` | train_step | `sgd` | SGD | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 10 |
 
 ## `cifar8wb_bbn` — 8 artifacts, 1.0 MB
 
@@ -135,17 +135,17 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 49 |
-| `cnn_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 47 |
+| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 54 |
+| `cnn_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 52 |
 
 ## `convnext` — 11 artifacts, 9.2 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `convnext_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 11 |
+| `convnext_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 16 |
 | `convnext_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnext_train_step.mlir` | train_step | `—` | — | 0.5 | `LeanMlir/Proofs/Codegen/ConvNeXtRender.lean` | — |
-| `convnext_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.0 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 12 |
+| `convnext_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.0 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 17 |
 | `convnext_adamclip_train_step.mlir` | train_step | `adamclip` | AdamW, grad clip | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnext_adamdp_train_step.mlir` | train_step | `adamdp` | AdamW, data-parallel | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
 | `convnext_adamdpdrop_train_step.mlir` | train_step | `adamdpdrop` | AdamW, data-parallel, stochastic depth | 1.1 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
@@ -247,14 +247,14 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `efficientnet_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 9 |
+| `efficientnet_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 14 |
 | `efficientnet_do_fwd.mlir` | fwd | `do` | classifier dropout | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 | `efficientnet_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
-| `efficientnet_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 9 |
+| `efficientnet_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 14 |
 | `efficientnet_do_fwd_eval.mlir` | fwd_eval | `do` | classifier dropout | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 | `efficientnet_drop_fwd_eval.mlir` | fwd_eval | `drop` | stochastic depth | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 | `efficientnet_train_step.mlir` | train_step | `—` | — | 0.6 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
-| `efficientnet_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 9 |
+| `efficientnet_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 14 |
 | `efficientnet_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 | `efficientnet_adambf16_train_step.mlir` | train_step | `adambf16` | AdamW, bf16 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 | `efficientnet_adamdo_train_step.mlir` | train_step | `adamdo` | AdamW, classifier dropout | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
@@ -294,23 +294,23 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `linear_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 46 |
-| `linear_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 46 |
+| `linear_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 51 |
+| `linear_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 51 |
 
 ## `mlp` — 2 artifacts, 0.0 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mlp_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 46 |
-| `mlp_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/MlpArtifacts.lean` | 46 |
+| `mlp_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 51 |
+| `mlp_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/MlpArtifacts.lean` | 51 |
 
 ## `mnv4` — 3 artifacts, 1.9 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mnv4_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 8 |
-| `mnv4_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 8 |
-| `mnv4_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.5 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 8 |
+| `mnv4_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 13 |
+| `mnv4_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 13 |
+| `mnv4_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.5 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 13 |
 
 ## `mnv4in` — 11 artifacts, 14.4 MB
 
@@ -342,9 +342,9 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mobilenetv2_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 9 |
-| `mobilenetv2_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 9 |
-| `mobilenetv2_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.0 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 9 |
+| `mobilenetv2_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 14 |
+| `mobilenetv2_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 14 |
+| `mobilenetv2_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.0 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 14 |
 | `mobilenetv2_adamdp_train_step.mlir` | train_step | `adamdp` | AdamW, data-parallel | 1.2 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
 | `mobilenetv2_rms_train_step.mlir` | train_step | `rms` | RMSProp | 0.9 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
 
@@ -371,9 +371,9 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet34_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 98 |
-| `resnet34_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 98 |
-| `resnet34_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 29 |
+| `resnet34_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 103 |
+| `resnet34_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 103 |
+| `resnet34_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 34 |
 | `resnet34_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | — |
 | `resnet34_adam256_train_step.mlir` | train_step | `adam256` | AdamW, batch 256 | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | — |
 | `resnet34_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | — |
@@ -407,10 +407,10 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet50_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 7 |
-| `resnet50_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 7 |
+| `resnet50_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
+| `resnet50_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
 | `resnet50_acc2x16_train_step.mlir` | train_step | `acc2x16` | AdamW, grad-accum ×2, micro-batch 16 | 1.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
-| `resnet50_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 7 |
+| `resnet50_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
 
 ## `resnet50in` — 27 artifacts, 33.1 MB
 
@@ -468,10 +468,10 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `vit_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 10 |
+| `vit_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 15 |
 | `vit_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vit_train_step.mlir` | train_step | `—` | — | 0.7 | `LeanMlir/Proofs/Codegen/ViTRender.lean` | — |
-| `vit_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 10 |
+| `vit_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 15 |
 | `vit_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vit_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vit_adamclip_train_step.mlir` | train_step | `adamclip` | AdamW, grad clip | 1.4 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |

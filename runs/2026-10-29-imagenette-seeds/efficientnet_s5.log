@@ -1,0 +1,830 @@
+I1030 05:46:15.674599 4148814 service.cc:154] XLA service 0x7e60a0008500 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1030 05:46:15.674653 4148814 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1030 05:46:15.675820 4148814 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1030 05:46:15.675868 4148814 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1030 05:46:15.769740 4148814 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1030 05:46:17.808776 4148814 cuda_dnn.cc:442] Loaded cuDNN version 92400
+W1030 05:46:18.153067 4148832 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 05:46:19.124394 4148831 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 05:46:19.316502 4148844 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1030 05:46:19.461812 4148844 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_283', 12 bytes spill stores, 12 bytes spill loads
+
+W1030 05:46:19.495848 4148848 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 05:46:20.414990 4148829 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1030 05:46:20.577980 4148843 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_255', 12 bytes spill stores, 12 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 15317 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 837 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 549 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.325197
+  step 1/295: loss=2.320676
+  step 2/295: loss=2.480217
+  step 100/295: loss=2.166268
+  step 200/295: loss=1.701217
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.021075 lr=0.000333
+  epoch 1: val_acc = 833/3925 = 21.222930%  top5 = 2806/3925 = 71.490446%  [95% CI 19.97–22.53]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e1.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 5495404278240454220)
+  step 0/295: loss=1.822012
+  step 1/295: loss=1.691390
+  step 2/295: loss=1.408806
+  step 100/295: loss=1.654953
+  step 200/295: loss=1.300883
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.614108 lr=0.000667
+  epoch 2: val_acc = 1188/3925 = 30.267516%  top5 = 2919/3925 = 74.369427%  [95% CI 28.85–31.72]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e2.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 263726330960368863)
+  step 0/295: loss=1.524398
+  step 1/295: loss=2.023348
+  step 2/295: loss=1.469014
+  step 100/295: loss=1.442753
+  step 200/295: loss=1.291518
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.414265 lr=0.001000
+  epoch 3: val_acc = 2070/3925 = 52.738854%  top5 = 3381/3925 = 86.140127%  [95% CI 51.18–54.30]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e3.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2553592469364355944)
+  step 0/295: loss=1.405938
+  step 1/295: loss=1.013055
+  step 2/295: loss=1.197947
+  step 100/295: loss=1.248965
+  step 200/295: loss=1.423091
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.286151 lr=0.001000
+  epoch 4: val_acc = 2540/3925 = 64.713376%  top5 = 3644/3925 = 92.840764%  [95% CI 63.20–66.19]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e4.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13251986613955768817)
+  step 0/295: loss=1.202480
+  step 1/295: loss=1.307870
+  step 2/295: loss=1.073126
+  step 100/295: loss=1.369321
+  step 200/295: loss=1.307829
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.175529 lr=0.000998
+  epoch 5: val_acc = 2374/3925 = 60.484076%  top5 = 3609/3925 = 91.949045%  [95% CI 58.95–62.00]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e5.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 4482043633194099497)
+  step 0/295: loss=1.127851
+  step 1/295: loss=1.081785
+  step 2/295: loss=1.096706
+  step 100/295: loss=1.161919
+  step 200/295: loss=1.354376
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.099233 lr=0.000996
+  epoch 6: val_acc = 2793/3925 = 71.159236%  top5 = 3741/3925 = 95.312102%  [95% CI 69.72–72.56]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e6.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 18330595709537692940)
+  step 0/295: loss=1.094724
+  step 1/295: loss=1.133330
+  step 2/295: loss=1.150289
+  step 100/295: loss=1.127776
+  step 200/295: loss=1.170485
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.060657 lr=0.000993
+  epoch 7: val_acc = 2829/3925 = 72.076433%  top5 = 3750/3925 = 95.541401%  [95% CI 70.65–73.46]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e7.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 711783471763834227)
+  step 0/295: loss=0.964891
+  step 1/295: loss=1.038280
+  step 2/295: loss=1.326824
+  step 100/295: loss=1.063605
+  step 200/295: loss=1.154067
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.010692 lr=0.000990
+  epoch 8: val_acc = 2938/3925 = 74.853503%  top5 = 3811/3925 = 97.095541%  [95% CI 73.47–76.19]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e8.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 9239742944237434497)
+  step 0/295: loss=0.927320
+  step 1/295: loss=0.908860
+  step 2/295: loss=0.940624
+  step 100/295: loss=0.971486
+  step 200/295: loss=1.058453
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=0.985638 lr=0.000985
+  epoch 9: val_acc = 2916/3925 = 74.292994%  top5 = 3781/3925 = 96.331210%  [95% CI 72.90–75.64]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e9.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2659540494091314643)
+  step 0/295: loss=1.068370
+  step 1/295: loss=0.902603
+  step 2/295: loss=0.784145
+  step 100/295: loss=1.089265
+  step 200/295: loss=0.891876
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=0.956259 lr=0.000980
+  epoch 10: val_acc = 2947/3925 = 75.082803%  top5 = 3796/3925 = 96.713376%  [95% CI 73.71–76.41]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e10.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1674688719797408578)
+  step 0/295: loss=0.915358
+  step 1/295: loss=0.719952
+  step 2/295: loss=0.874508
+  step 100/295: loss=1.133323
+  step 200/295: loss=0.800489
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.919229 lr=0.000974
+  epoch 11: val_acc = 3144/3925 = 80.101911%  top5 = 3787/3925 = 96.484076%  [95% CI 78.82–81.32]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e11.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 11223213388144675383)
+  step 0/295: loss=0.929134
+  step 1/295: loss=0.811937
+  step 2/295: loss=0.852150
+  step 100/295: loss=0.757367
+  step 200/295: loss=0.754116
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.884776 lr=0.000967
+  epoch 12: val_acc = 3130/3925 = 79.745223%  top5 = 3825/3925 = 97.452229%  [95% CI 78.46–80.97]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e12.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 15281990599238297249)
+  step 0/295: loss=0.982149
+  step 1/295: loss=0.977451
+  step 2/295: loss=0.937129
+  step 100/295: loss=0.783173
+  step 200/295: loss=0.824966
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.862503 lr=0.000959
+  epoch 13: val_acc = 3088/3925 = 78.675159%  top5 = 3782/3925 = 96.356688%  [95% CI 77.37–79.93]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e13.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 7116412962671773535)
+  step 0/295: loss=0.752613
+  step 1/295: loss=0.861457
+  step 2/295: loss=0.730921
+  step 100/295: loss=0.749084
+  step 200/295: loss=0.770126
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.847215 lr=0.000951
+  epoch 14: val_acc = 3169/3925 = 80.738854%  top5 = 3818/3925 = 97.273885%  [95% CI 79.48–81.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e14.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 683742896907601863)
+  step 0/295: loss=0.933603
+  step 1/295: loss=0.834306
+  step 2/295: loss=0.759432
+  step 100/295: loss=0.695634
+  step 200/295: loss=0.685754
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.819245 lr=0.000941
+  epoch 15: val_acc = 3265/3925 = 83.184713%  top5 = 3829/3925 = 97.554140%  [95% CI 81.98–84.32]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e15.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 11076431939983977737)
+  step 0/295: loss=0.946613
+  step 1/295: loss=0.771569
+  step 2/295: loss=0.611732
+  step 100/295: loss=0.936976
+  step 200/295: loss=0.711363
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.809223 lr=0.000931
+  epoch 16: val_acc = 3028/3925 = 77.146497%  top5 = 3812/3925 = 97.121019%  [95% CI 75.81–78.43]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e16.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1308720039489838020)
+  step 0/295: loss=0.658605
+  step 1/295: loss=0.853645
+  step 2/295: loss=0.772689
+  step 100/295: loss=0.608132
+  step 200/295: loss=1.026778
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.788055 lr=0.000921
+  epoch 17: val_acc = 3266/3925 = 83.210191%  top5 = 3842/3925 = 97.885350%  [95% CI 82.01–84.35]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e17.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 14663842153576377684)
+  step 0/295: loss=0.784973
+  step 1/295: loss=0.606362
+  step 2/295: loss=0.711966
+  step 100/295: loss=0.679275
+  step 200/295: loss=0.815594
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.758749 lr=0.000909
+  epoch 18: val_acc = 3284/3925 = 83.668790%  top5 = 3840/3925 = 97.834395%  [95% CI 82.48–84.79]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e18.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 11246969286074084532)
+  step 0/295: loss=0.699301
+  step 1/295: loss=0.590659
+  step 2/295: loss=0.740976
+  step 100/295: loss=0.597416
+  step 200/295: loss=0.835239
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.752119 lr=0.000897
+  epoch 19: val_acc = 3224/3925 = 82.140127%  top5 = 3821/3925 = 97.350318%  [95% CI 80.91–83.31]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e19.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 10220507019243030674)
+  step 0/295: loss=0.757120
+  step 1/295: loss=0.918721
+  step 2/295: loss=0.829075
+  step 100/295: loss=0.737222
+  step 200/295: loss=0.708004
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.736817 lr=0.000885
+  epoch 20: val_acc = 3247/3925 = 82.726115%  top5 = 3829/3925 = 97.554140%  [95% CI 81.51–83.88]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e20.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 10572590437459117620)
+  step 0/295: loss=0.710684
+  step 1/295: loss=0.575120
+  step 2/295: loss=0.639211
+  step 100/295: loss=0.558817
+  step 200/295: loss=0.709690
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.726469 lr=0.000871
+  epoch 21: val_acc = 3278/3925 = 83.515924%  top5 = 3833/3925 = 97.656051%  [95% CI 82.32–84.64]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e21.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 18307524903902991057)
+  step 0/295: loss=0.768367
+  step 1/295: loss=0.622491
+  step 2/295: loss=0.746370
+  step 100/295: loss=0.825171
+  step 200/295: loss=0.696057
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.704828 lr=0.000857
+  epoch 22: val_acc = 3284/3925 = 83.668790%  top5 = 3832/3925 = 97.630573%  [95% CI 82.48–84.79]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e22.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13102007040479870225)
+  step 0/295: loss=0.736692
+  step 1/295: loss=0.567407
+  step 2/295: loss=0.678938
+  step 100/295: loss=0.734938
+  step 200/295: loss=0.762934
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.692615 lr=0.000843
+  epoch 23: val_acc = 3322/3925 = 84.636943%  top5 = 3847/3925 = 98.012739%  [95% CI 83.48–85.73]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e23.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13638489106875587968)
+  step 0/295: loss=0.794065
+  step 1/295: loss=0.697162
+  step 2/295: loss=0.645524
+  step 100/295: loss=0.745832
+  step 200/295: loss=0.743801
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.682067 lr=0.000827
+  epoch 24: val_acc = 3376/3925 = 86.012739%  top5 = 3857/3925 = 98.267516%  [95% CI 84.89–87.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e24.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 8886770998822213301)
+  step 0/295: loss=0.659060
+  step 1/295: loss=0.772494
+  step 2/295: loss=0.581071
+  step 100/295: loss=0.597075
+  step 200/295: loss=0.631711
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.668200 lr=0.000812
+  epoch 25: val_acc = 3193/3925 = 81.350318%  top5 = 3843/3925 = 97.910828%  [95% CI 80.10–82.54]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e25.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 16178522087760196086)
+  step 0/295: loss=0.617682
+  step 1/295: loss=0.758549
+  step 2/295: loss=0.701223
+  step 100/295: loss=0.559488
+  step 200/295: loss=0.679906
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.645091 lr=0.000796
+  epoch 26: val_acc = 3260/3925 = 83.057325%  top5 = 3835/3925 = 97.707006%  [95% CI 81.85–84.20]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e26.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 10438632636638183001)
+  step 0/295: loss=0.634407
+  step 1/295: loss=0.559478
+  step 2/295: loss=0.619472
+  step 100/295: loss=0.644204
+  step 200/295: loss=0.598396
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.652698 lr=0.000779
+  epoch 27: val_acc = 3283/3925 = 83.643312%  top5 = 3817/3925 = 97.248408%  [95% CI 82.45–84.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e27.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1877348517490784100)
+  step 0/295: loss=0.546558
+  step 1/295: loss=0.552900
+  step 2/295: loss=0.634631
+  step 100/295: loss=0.746234
+  step 200/295: loss=0.582027
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.623444 lr=0.000762
+  epoch 28: val_acc = 3358/3925 = 85.554140%  top5 = 3855/3925 = 98.216561%  [95% CI 84.42–86.62]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e28.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2357267184331908337)
+  step 0/295: loss=0.640534
+  step 1/295: loss=0.567513
+  step 2/295: loss=0.535052
+  step 100/295: loss=0.649348
+  step 200/295: loss=0.590455
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.626356 lr=0.000744
+  epoch 29: val_acc = 3332/3925 = 84.891720%  top5 = 3852/3925 = 98.140127%  [95% CI 83.74–85.98]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e29.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13467351033528015219)
+  step 0/295: loss=0.544697
+  step 1/295: loss=0.603653
+  step 2/295: loss=0.634353
+  step 100/295: loss=0.535319
+  step 200/295: loss=0.624733
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.614877 lr=0.000726
+  epoch 30: val_acc = 3386/3925 = 86.267516%  top5 = 3850/3925 = 98.089172%  [95% CI 85.16–87.31]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e30.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 7568996590033891129)
+  step 0/295: loss=0.596477
+  step 1/295: loss=0.778751
+  step 2/295: loss=0.698223
+  step 100/295: loss=0.757316
+  step 200/295: loss=0.587431
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.608630 lr=0.000708
+  epoch 31: val_acc = 3297/3925 = 84.000000%  top5 = 3842/3925 = 97.885350%  [95% CI 82.82–85.11]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e31.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1875630290508987282)
+  step 0/295: loss=0.668009
+  step 1/295: loss=0.648372
+  step 2/295: loss=0.643978
+  step 100/295: loss=0.518952
+  step 200/295: loss=0.526762
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.593400 lr=0.000689
+  epoch 32: val_acc = 3326/3925 = 84.738854%  top5 = 3839/3925 = 97.808917%  [95% CI 83.58–85.83]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e32.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 10907475808727414649)
+  step 0/295: loss=0.539501
+  step 1/295: loss=0.575313
+  step 2/295: loss=0.644582
+  step 100/295: loss=0.574236
+  step 200/295: loss=0.722625
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.601427 lr=0.000670
+  epoch 33: val_acc = 3363/3925 = 85.681529%  top5 = 3834/3925 = 97.681529%  [95% CI 84.55–86.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e33.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 9989719677278744643)
+  step 0/295: loss=0.566132
+  step 1/295: loss=0.675601
+  step 2/295: loss=0.531817
+  step 100/295: loss=0.593895
+  step 200/295: loss=0.622999
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.586818 lr=0.000651
+  epoch 34: val_acc = 3331/3925 = 84.866242%  top5 = 3832/3925 = 97.630573%  [95% CI 83.71–85.95]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e34.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13761385183082245824)
+  step 0/295: loss=0.519230
+  step 1/295: loss=0.557421
+  step 2/295: loss=0.535403
+  step 100/295: loss=0.580261
+  step 200/295: loss=0.570831
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.586296 lr=0.000631
+  epoch 35: val_acc = 3371/3925 = 85.885350%  top5 = 3831/3925 = 97.605096%  [95% CI 84.76–86.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e35.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2227978927488320282)
+  step 0/295: loss=0.594724
+  step 1/295: loss=0.532790
+  step 2/295: loss=0.572187
+  step 100/295: loss=0.570101
+  step 200/295: loss=0.515856
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.576586 lr=0.000611
+  epoch 36: val_acc = 3383/3925 = 86.191083%  top5 = 3852/3925 = 98.140127%  [95% CI 85.08–87.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e36.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 454105702228148183)
+  step 0/295: loss=0.517369
+  step 1/295: loss=0.532227
+  step 2/295: loss=0.514717
+  step 100/295: loss=0.594231
+  step 200/295: loss=0.567981
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.566300 lr=0.000591
+  epoch 37: val_acc = 3395/3925 = 86.496815%  top5 = 3832/3925 = 97.630573%  [95% CI 85.39–87.53]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e37.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3856179936098674734)
+  step 0/295: loss=0.572221
+  step 1/295: loss=0.569797
+  step 2/295: loss=0.545060
+  step 100/295: loss=0.529426
+  step 200/295: loss=0.522208
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.566014 lr=0.000571
+  epoch 38: val_acc = 3400/3925 = 86.624204%  top5 = 3839/3925 = 97.808917%  [95% CI 85.52–87.65]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e38.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3229098328136793671)
+  step 0/295: loss=0.513616
+  step 1/295: loss=0.530789
+  step 2/295: loss=0.533277
+  step 100/295: loss=0.551856
+  step 200/295: loss=0.593443
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.564703 lr=0.000551
+  epoch 39: val_acc = 3391/3925 = 86.394904%  top5 = 3839/3925 = 97.808917%  [95% CI 85.29–87.43]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e39.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 10869561000822516792)
+  step 0/295: loss=0.528947
+  step 1/295: loss=0.521445
+  step 2/295: loss=0.522598
+  step 100/295: loss=0.513960
+  step 200/295: loss=0.519376
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.552739 lr=0.000531
+  epoch 40: val_acc = 3432/3925 = 87.439490%  top5 = 3842/3925 = 97.885350%  [95% CI 86.37–88.44]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e40.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 15200771368206716585)
+  step 0/295: loss=0.519978
+  step 1/295: loss=0.520535
+  step 2/295: loss=0.524118
+  step 100/295: loss=0.516561
+  step 200/295: loss=0.589328
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.553609 lr=0.000510
+  epoch 41: val_acc = 3411/3925 = 86.904459%  top5 = 3845/3925 = 97.961783%  [95% CI 85.81–87.92]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e41.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3509935971120951004)
+  step 0/295: loss=0.538675
+  step 1/295: loss=0.548073
+  step 2/295: loss=0.516671
+  step 100/295: loss=0.518738
+  step 200/295: loss=0.513458
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.548175 lr=0.000490
+  epoch 42: val_acc = 3419/3925 = 87.108280%  top5 = 3846/3925 = 97.987261%  [95% CI 86.02–88.12]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e42.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 15688725099270717655)
+  step 0/295: loss=0.598385
+  step 1/295: loss=0.611134
+  step 2/295: loss=0.510449
+  step 100/295: loss=0.518516
+  step 200/295: loss=0.521551
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.545770 lr=0.000469
+  epoch 43: val_acc = 3405/3925 = 86.751592%  top5 = 3831/3925 = 97.605096%  [95% CI 85.65–87.78]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e43.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 6258316521844627617)
+  step 0/295: loss=0.523588
+  step 1/295: loss=0.525289
+  step 2/295: loss=0.516258
+  step 100/295: loss=0.524039
+  step 200/295: loss=0.506385
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.540204 lr=0.000449
+  epoch 44: val_acc = 3452/3925 = 87.949045%  top5 = 3842/3925 = 97.885350%  [95% CI 86.89–88.93]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e44.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2162576708565979210)
+  step 0/295: loss=0.508186
+  step 1/295: loss=0.528501
+  step 2/295: loss=0.539317
+  step 100/295: loss=0.522636
+  step 200/295: loss=0.508044
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.533210 lr=0.000429
+  epoch 45: val_acc = 3442/3925 = 87.694268%  top5 = 3845/3925 = 97.961783%  [95% CI 86.63–88.69]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e45.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 6229435970688397232)
+  step 0/295: loss=0.590832
+  step 1/295: loss=0.513545
+  step 2/295: loss=0.507477
+  step 100/295: loss=0.526327
+  step 200/295: loss=0.576033
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.539149 lr=0.000409
+  epoch 46: val_acc = 3388/3925 = 86.318471%  top5 = 3847/3925 = 98.012739%  [95% CI 85.21–87.36]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e46.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1589210880029863477)
+  step 0/295: loss=0.520528
+  step 1/295: loss=0.550305
+  step 2/295: loss=0.579468
+  step 100/295: loss=0.507629
+  step 200/295: loss=0.509100
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.527820 lr=0.000389
+  epoch 47: val_acc = 3462/3925 = 88.203822%  top5 = 3855/3925 = 98.216561%  [95% CI 87.16–89.18]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e47.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3084814430302708138)
+  step 0/295: loss=0.567067
+  step 1/295: loss=0.513843
+  step 2/295: loss=0.571700
+  step 100/295: loss=0.512316
+  step 200/295: loss=0.598739
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.527736 lr=0.000369
+  epoch 48: val_acc = 3465/3925 = 88.280255%  top5 = 3856/3925 = 98.242038%  [95% CI 87.24–89.25]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e48.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 16419336368917308847)
+  step 0/295: loss=0.510844
+  step 1/295: loss=0.506932
+  step 2/295: loss=0.518594
+  step 100/295: loss=0.529027
+  step 200/295: loss=0.508898
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.531550 lr=0.000349
+  epoch 49: val_acc = 3475/3925 = 88.535032%  top5 = 3864/3925 = 98.445860%  [95% CI 87.50–89.49]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e49.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 12786588129997726136)
+  step 0/295: loss=0.505577
+  step 1/295: loss=0.611948
+  step 2/295: loss=0.523962
+  step 100/295: loss=0.506208
+  step 200/295: loss=0.519918
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.524129 lr=0.000330
+  epoch 50: val_acc = 3477/3925 = 88.585987%  top5 = 3854/3925 = 98.191083%  [95% CI 87.55–89.54]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e50.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3279960408623349598)
+  step 0/295: loss=0.586829
+  step 1/295: loss=0.520434
+  step 2/295: loss=0.506760
+  step 100/295: loss=0.509554
+  step 200/295: loss=0.527444
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.522440 lr=0.000311
+  epoch 51: val_acc = 3467/3925 = 88.331210%  top5 = 3849/3925 = 98.063694%  [95% CI 87.29–89.30]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e51.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3067679156661385129)
+  step 0/295: loss=0.524242
+  step 1/295: loss=0.511136
+  step 2/295: loss=0.523757
+  step 100/295: loss=0.509187
+  step 200/295: loss=0.522902
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.521830 lr=0.000292
+  epoch 52: val_acc = 3511/3925 = 89.452229%  top5 = 3863/3925 = 98.420382%  [95% CI 88.45–90.37]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e52.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 15508495417025014140)
+  step 0/295: loss=0.507762
+  step 1/295: loss=0.512213
+  step 2/295: loss=0.505369
+  step 100/295: loss=0.569876
+  step 200/295: loss=0.508369
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.521023 lr=0.000274
+  epoch 53: val_acc = 3502/3925 = 89.222930%  top5 = 3852/3925 = 98.140127%  [95% CI 88.21–90.15]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e53.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 6925890216680055482)
+  step 0/295: loss=0.551118
+  step 1/295: loss=0.593258
+  step 2/295: loss=0.511667
+  step 100/295: loss=0.506768
+  step 200/295: loss=0.511381
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.517537 lr=0.000256
+  epoch 54: val_acc = 3503/3925 = 89.248408%  top5 = 3850/3925 = 98.089172%  [95% CI 88.24–90.18]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e54.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 14103203589824252147)
+  step 0/295: loss=0.571606
+  step 1/295: loss=0.511014
+  step 2/295: loss=0.525688
+  step 100/295: loss=0.507100
+  step 200/295: loss=0.505402
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.514231 lr=0.000238
+  epoch 55: val_acc = 3456/3925 = 88.050955%  top5 = 3847/3925 = 98.012739%  [95% CI 87.00–89.03]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e55.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 14014831941132062680)
+  step 0/295: loss=0.621633
+  step 1/295: loss=0.510767
+  step 2/295: loss=0.505884
+  step 100/295: loss=0.509047
+  step 200/295: loss=0.534978
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.515773 lr=0.000221
+  epoch 56: val_acc = 3483/3925 = 88.738854%  top5 = 3850/3925 = 98.089172%  [95% CI 87.71–89.69]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e56.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 7942084145936416314)
+  step 0/295: loss=0.503643
+  step 1/295: loss=0.505070
+  step 2/295: loss=0.505700
+  step 100/295: loss=0.533711
+  step 200/295: loss=0.507427
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.514930 lr=0.000205
+  epoch 57: val_acc = 3494/3925 = 89.019108%  top5 = 3855/3925 = 98.216561%  [95% CI 88.00–89.96]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e57.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 7497475935095445154)
+  step 0/295: loss=0.575256
+  step 1/295: loss=0.509419
+  step 2/295: loss=0.505232
+  step 100/295: loss=0.529329
+  step 200/295: loss=0.504357
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.516030 lr=0.000188
+  epoch 58: val_acc = 3464/3925 = 88.254777%  top5 = 3858/3925 = 98.292994%  [95% CI 87.21–89.22]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e58.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1033736196351859266)
+  step 0/295: loss=0.504613
+  step 1/295: loss=0.529554
+  step 2/295: loss=0.534852
+  step 100/295: loss=0.513203
+  step 200/295: loss=0.506676
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.514665 lr=0.000173
+  epoch 59: val_acc = 3479/3925 = 88.636943%  top5 = 3866/3925 = 98.496815%  [95% CI 87.61–89.59]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e59.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 759777963878321946)
+  step 0/295: loss=0.505640
+  step 1/295: loss=0.534426
+  step 2/295: loss=0.518593
+  step 100/295: loss=0.509453
+  step 200/295: loss=0.507495
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.511539 lr=0.000157
+  epoch 60: val_acc = 3524/3925 = 89.783439%  top5 = 3864/3925 = 98.445860%  [95% CI 88.80–90.69]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e60.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13059602096296577031)
+  step 0/295: loss=0.505028
+  step 1/295: loss=0.505062
+  step 2/295: loss=0.505476
+  step 100/295: loss=0.504786
+  step 200/295: loss=0.508078
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.509776 lr=0.000143
+  epoch 61: val_acc = 3504/3925 = 89.273885%  top5 = 3860/3925 = 98.343949%  [95% CI 88.27–90.20]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e61.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 9363804827017057793)
+  step 0/295: loss=0.506091
+  step 1/295: loss=0.507578
+  step 2/295: loss=0.504734
+  step 100/295: loss=0.504217
+  step 200/295: loss=0.513770
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.509886 lr=0.000129
+  epoch 62: val_acc = 3516/3925 = 89.579618%  top5 = 3860/3925 = 98.343949%  [95% CI 88.58–90.50]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e62.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 16563759934116183682)
+  step 0/295: loss=0.505149
+  step 1/295: loss=0.503570
+  step 2/295: loss=0.505257
+  step 100/295: loss=0.509644
+  step 200/295: loss=0.507572
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.508565 lr=0.000116
+  epoch 63: val_acc = 3498/3925 = 89.121019%  top5 = 3862/3925 = 98.394904%  [95% CI 88.11–90.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e63.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 574243447505716634)
+  step 0/295: loss=0.505842
+  step 1/295: loss=0.520786
+  step 2/295: loss=0.504489
+  step 100/295: loss=0.506271
+  step 200/295: loss=0.506577
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.507261 lr=0.000103
+  epoch 64: val_acc = 3514/3925 = 89.528662%  top5 = 3858/3925 = 98.292994%  [95% CI 88.53–90.45]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e64.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2021089405805451917)
+  step 0/295: loss=0.504851
+  step 1/295: loss=0.509058
+  step 2/295: loss=0.504408
+  step 100/295: loss=0.508196
+  step 200/295: loss=0.502765
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.506429 lr=0.000091
+  epoch 65: val_acc = 3520/3925 = 89.681529%  top5 = 3860/3925 = 98.343949%  [95% CI 88.69–90.59]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e65.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 18437340355241607764)
+  step 0/295: loss=0.503425
+  step 1/295: loss=0.510574
+  step 2/295: loss=0.502367
+  step 100/295: loss=0.503071
+  step 200/295: loss=0.503463
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.507407 lr=0.000079
+  epoch 66: val_acc = 3526/3925 = 89.834395%  top5 = 3857/3925 = 98.267516%  [95% CI 88.85–90.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e66.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 2227303604353819814)
+  step 0/295: loss=0.505545
+  step 1/295: loss=0.505208
+  step 2/295: loss=0.503829
+  step 100/295: loss=0.504533
+  step 200/295: loss=0.506293
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.506638 lr=0.000069
+  epoch 67: val_acc = 3531/3925 = 89.961783%  top5 = 3866/3925 = 98.496815%  [95% CI 88.98–90.86]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e67.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 8712275585110520980)
+  step 0/295: loss=0.504422
+  step 1/295: loss=0.503480
+  step 2/295: loss=0.505182
+  step 100/295: loss=0.507150
+  step 200/295: loss=0.505133
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.507144 lr=0.000059
+  epoch 68: val_acc = 3528/3925 = 89.885350%  top5 = 3851/3925 = 98.114650%  [95% CI 88.90–90.79]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e68.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 11356900763018005521)
+  step 0/295: loss=0.506857
+  step 1/295: loss=0.522469
+  step 2/295: loss=0.506546
+  step 100/295: loss=0.504085
+  step 200/295: loss=0.503790
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.506268 lr=0.000050
+  epoch 69: val_acc = 3526/3925 = 89.834395%  top5 = 3865/3925 = 98.471338%  [95% CI 88.85–90.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e69.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3501265087124242589)
+  step 0/295: loss=0.505149
+  step 1/295: loss=0.502407
+  step 2/295: loss=0.502838
+  step 100/295: loss=0.504817
+  step 200/295: loss=0.503031
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.505780 lr=0.000041
+  epoch 70: val_acc = 3523/3925 = 89.757962%  top5 = 3855/3925 = 98.216561%  [95% CI 88.77–90.67]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e70.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 6741006601924735683)
+  step 0/295: loss=0.502879
+  step 1/295: loss=0.505731
+  step 2/295: loss=0.507214
+  step 100/295: loss=0.508956
+  step 200/295: loss=0.503796
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.505898 lr=0.000033
+  epoch 71: val_acc = 3526/3925 = 89.834395%  top5 = 3854/3925 = 98.191083%  [95% CI 88.85–90.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e71.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 1520921532015850131)
+  step 0/295: loss=0.503604
+  step 1/295: loss=0.507104
+  step 2/295: loss=0.505706
+  step 100/295: loss=0.504938
+  step 200/295: loss=0.506957
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.505804 lr=0.000026
+  epoch 72: val_acc = 3532/3925 = 89.987261%  top5 = 3859/3925 = 98.318471%  [95% CI 89.01–90.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e72.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 603925826917442598)
+  step 0/295: loss=0.505740
+  step 1/295: loss=0.503570
+  step 2/295: loss=0.504542
+  step 100/295: loss=0.510910
+  step 200/295: loss=0.503353
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.505047 lr=0.000020
+  epoch 73: val_acc = 3537/3925 = 90.114650%  top5 = 3859/3925 = 98.318471%  [95% CI 89.14–91.01]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e73.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 11548416871534944688)
+  step 0/295: loss=0.504267
+  step 1/295: loss=0.503567
+  step 2/295: loss=0.502129
+  step 100/295: loss=0.505301
+  step 200/295: loss=0.504914
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.505255 lr=0.000015
+  epoch 74: val_acc = 3527/3925 = 89.859873%  top5 = 3862/3925 = 98.394904%  [95% CI 88.88–90.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e74.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 12096689262851947540)
+  step 0/295: loss=0.502413
+  step 1/295: loss=0.502701
+  step 2/295: loss=0.502149
+  step 100/295: loss=0.503944
+  step 200/295: loss=0.504127
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.505040 lr=0.000010
+  epoch 75: val_acc = 3538/3925 = 90.140127%  top5 = 3862/3925 = 98.394904%  [95% CI 89.17–91.03]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e75.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 12361779485028226268)
+  step 0/295: loss=0.503747
+  step 1/295: loss=0.504310
+  step 2/295: loss=0.502851
+  step 100/295: loss=0.509662
+  step 200/295: loss=0.501563
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.504768 lr=0.000007
+  epoch 76: val_acc = 3541/3925 = 90.216561%  top5 = 3861/3925 = 98.369427%  [95% CI 89.25–91.11]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e76.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 13436403535423283700)
+  step 0/295: loss=0.502540
+  step 1/295: loss=0.503921
+  step 2/295: loss=0.503348
+  step 100/295: loss=0.508561
+  step 200/295: loss=0.513689
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.505249 lr=0.000004
+  epoch 77: val_acc = 3535/3925 = 90.063694%  top5 = 3864/3925 = 98.445860%  [95% CI 89.09–90.96]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e77.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 12598033051058559505)
+  step 0/295: loss=0.502748
+  step 1/295: loss=0.504837
+  step 2/295: loss=0.504066
+  step 100/295: loss=0.503581
+  step 200/295: loss=0.505978
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.504681 lr=0.000002
+  epoch 78: val_acc = 3534/3925 = 90.038217%  top5 = 3862/3925 = 98.394904%  [95% CI 89.06–90.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e78.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3718135438703982100)
+  step 0/295: loss=0.506904
+  step 1/295: loss=0.503148
+  step 2/295: loss=0.504576
+  step 100/295: loss=0.501819
+  step 200/295: loss=0.504155
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.505241 lr=0.000000
+  epoch 79: val_acc = 3534/3925 = 90.038217%  top5 = 3863/3925 = 98.420382%  [95% CI 89.06–90.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e79.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 7007852920733081039)
+  step 0/295: loss=0.505258
+  step 1/295: loss=0.502919
+  step 2/295: loss=0.507129
+  step 100/295: loss=0.503586
+  step 200/295: loss=0.510705
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.505353 lr=0.000000
+  epoch 80: val_acc = 3534/3925 = 90.038217%  top5 = 3863/3925 = 98.420382%  [95% CI 89.06–90.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/efficientnet_s5_adam_e80.bin (3925 bytes)
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_s5.bin.bn (42016 floats x 2, hash 3667587019866931652)
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).

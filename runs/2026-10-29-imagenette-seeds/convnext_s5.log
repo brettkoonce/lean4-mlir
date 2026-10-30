@@ -1,0 +1,741 @@
+I1030 04:21:47.615367 4118195 service.cc:154] XLA service 0x71a2bc052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1030 04:21:47.615431 4118195 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I1030 04:21:47.617043 4118195 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1030 04:21:47.617098 4118195 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1030 04:21:47.684925 4118195 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1030 04:21:48.986671 4118195 cuda_dnn.cc:442] Loaded cuDNN version 92400
+W1030 04:21:49.720175 4118219 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 04:21:50.494331 4118229 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 04:21:51.104617 4118230 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1030 04:21:52.481063 4118212 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir (@convnext_adam_train_step, 549 outputs, 1 replica) in 9192 ms
+[pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir (@convnext_fwd, 1 outputs, 1 replica) in 670 ms
+ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000
+  xla/pjrt verified_mlir/convnext_adam_train_step.mlir
+  xla/pjrt verified_mlir/convnext_fwd.mlir
+  train 9469, val 3925; bs 32, ConvNeXt-T adam (cosine+warmup 3ep, baseLR 0.001000), He init
+[pjrt_ffi] RESIDENT: @convnext_adam_train_step holds 546 parameter tensors (318.5 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.152685
+  step 1/295: loss=3.757751
+  step 2/295: loss=3.648026
+  step 100/295: loss=2.378341
+  step 200/295: loss=2.174529
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.305291 lr=0.000333
+  epoch 1: val_acc = 1081/3925 = 27.541401%  top5 = 2935/3925 = 74.777070%  [95% CI 26.17–28.96]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e1.bin (3925 bytes)
+  step 0/295: loss=2.325273
+  step 1/295: loss=2.077443
+  step 2/295: loss=2.206074
+  step 100/295: loss=2.048965
+  step 200/295: loss=1.805098
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.934699 lr=0.000667
+  epoch 2: val_acc = 1614/3925 = 41.121019%  top5 = 3445/3925 = 87.770701%  [95% CI 39.59–42.67]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e2.bin (3925 bytes)
+  step 0/295: loss=1.751551
+  step 1/295: loss=2.033181
+  step 2/295: loss=1.939105
+  step 100/295: loss=1.730195
+  step 200/295: loss=1.438725
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.672373 lr=0.001000
+  epoch 3: val_acc = 2043/3925 = 52.050955%  top5 = 3584/3925 = 91.312102%  [95% CI 50.49–53.61]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e3.bin (3925 bytes)
+  step 0/295: loss=1.658871
+  step 1/295: loss=1.327054
+  step 2/295: loss=1.618596
+  step 100/295: loss=1.533324
+  step 200/295: loss=1.606639
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.508709 lr=0.001000
+  epoch 4: val_acc = 2215/3925 = 56.433121%  top5 = 3620/3925 = 92.229299%  [95% CI 54.88–57.98]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e4.bin (3925 bytes)
+  step 0/295: loss=1.412878
+  step 1/295: loss=1.591258
+  step 2/295: loss=1.351673
+  step 100/295: loss=1.541343
+  step 200/295: loss=1.244910
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.375281 lr=0.000998
+  epoch 5: val_acc = 2561/3925 = 65.248408%  top5 = 3694/3925 = 94.114650%  [95% CI 63.74–66.72]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e5.bin (3925 bytes)
+  step 0/295: loss=1.385778
+  step 1/295: loss=1.147940
+  step 2/295: loss=1.154548
+  step 100/295: loss=1.089517
+  step 200/295: loss=1.495411
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.256127 lr=0.000996
+  epoch 6: val_acc = 2635/3925 = 67.133758%  top5 = 3722/3925 = 94.828025%  [95% CI 65.65–68.59]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e6.bin (3925 bytes)
+  step 0/295: loss=1.185475
+  step 1/295: loss=1.160478
+  step 2/295: loss=1.049693
+  step 100/295: loss=1.282950
+  step 200/295: loss=1.120439
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.180378 lr=0.000993
+  epoch 7: val_acc = 2758/3925 = 70.267516%  top5 = 3771/3925 = 96.076433%  [95% CI 68.82–71.68]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e7.bin (3925 bytes)
+  step 0/295: loss=1.012155
+  step 1/295: loss=1.192719
+  step 2/295: loss=1.400998
+  step 100/295: loss=1.295882
+  step 200/295: loss=1.090706
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.121617 lr=0.000990
+  epoch 8: val_acc = 2733/3925 = 69.630573%  top5 = 3741/3925 = 95.312102%  [95% CI 68.17–71.05]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e8.bin (3925 bytes)
+  step 0/295: loss=1.058599
+  step 1/295: loss=1.000812
+  step 2/295: loss=1.150371
+  step 100/295: loss=0.976114
+  step 200/295: loss=0.896893
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.069509 lr=0.000985
+  epoch 9: val_acc = 2913/3925 = 74.216561%  top5 = 3780/3925 = 96.305732%  [95% CI 72.82–75.56]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e9.bin (3925 bytes)
+  step 0/295: loss=1.043358
+  step 1/295: loss=0.875317
+  step 2/295: loss=0.882982
+  step 100/295: loss=1.146723
+  step 200/295: loss=0.901114
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.010692 lr=0.000980
+  epoch 10: val_acc = 2900/3925 = 73.885350%  top5 = 3773/3925 = 96.127389%  [95% CI 72.49–75.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e10.bin (3925 bytes)
+  step 0/295: loss=0.998350
+  step 1/295: loss=0.790744
+  step 2/295: loss=0.961462
+  step 100/295: loss=1.300196
+  step 200/295: loss=0.900476
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.965036 lr=0.000974
+  epoch 11: val_acc = 3053/3925 = 77.783439%  top5 = 3816/3925 = 97.222930%  [95% CI 76.46–79.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e11.bin (3925 bytes)
+  step 0/295: loss=1.004864
+  step 1/295: loss=0.888003
+  step 2/295: loss=0.796319
+  step 100/295: loss=0.853424
+  step 200/295: loss=0.736432
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.927855 lr=0.000967
+  epoch 12: val_acc = 3087/3925 = 78.649682%  top5 = 3823/3925 = 97.401274%  [95% CI 77.34–79.90]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e12.bin (3925 bytes)
+  step 0/295: loss=0.999999
+  step 1/295: loss=0.795673
+  step 2/295: loss=0.891970
+  step 100/295: loss=0.912469
+  step 200/295: loss=1.141927
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.881479 lr=0.000959
+  epoch 13: val_acc = 3003/3925 = 76.509554%  top5 = 3796/3925 = 96.713376%  [95% CI 75.16–77.81]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e13.bin (3925 bytes)
+  step 0/295: loss=0.790893
+  step 1/295: loss=0.779132
+  step 2/295: loss=0.820277
+  step 100/295: loss=0.881802
+  step 200/295: loss=0.906319
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.861922 lr=0.000951
+  epoch 14: val_acc = 3029/3925 = 77.171975%  top5 = 3799/3925 = 96.789809%  [95% CI 75.83–78.46]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e14.bin (3925 bytes)
+  step 0/295: loss=0.854542
+  step 1/295: loss=0.758678
+  step 2/295: loss=0.756895
+  step 100/295: loss=0.771188
+  step 200/295: loss=0.874129
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.817942 lr=0.000941
+  epoch 15: val_acc = 3111/3925 = 79.261146%  top5 = 3830/3925 = 97.579618%  [95% CI 77.96–80.50]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e15.bin (3925 bytes)
+  step 0/295: loss=1.066497
+  step 1/295: loss=0.687573
+  step 2/295: loss=0.730627
+  step 100/295: loss=0.679675
+  step 200/295: loss=0.765039
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.785940 lr=0.000931
+  epoch 16: val_acc = 3140/3925 = 80.000000%  top5 = 3820/3925 = 97.324841%  [95% CI 78.72–81.22]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e16.bin (3925 bytes)
+  step 0/295: loss=0.717033
+  step 1/295: loss=0.768809
+  step 2/295: loss=0.642328
+  step 100/295: loss=0.589269
+  step 200/295: loss=0.913258
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.763817 lr=0.000921
+  epoch 17: val_acc = 3068/3925 = 78.165605%  top5 = 3803/3925 = 96.891720%  [95% CI 76.85–79.43]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e17.bin (3925 bytes)
+  step 0/295: loss=0.710332
+  step 1/295: loss=0.612471
+  step 2/295: loss=0.771303
+  step 100/295: loss=0.691687
+  step 200/295: loss=0.633867
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.724242 lr=0.000909
+  epoch 18: val_acc = 3124/3925 = 79.592357%  top5 = 3827/3925 = 97.503185%  [95% CI 78.30–80.82]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e18.bin (3925 bytes)
+  step 0/295: loss=0.572721
+  step 1/295: loss=0.588400
+  step 2/295: loss=0.731187
+  step 100/295: loss=0.585550
+  step 200/295: loss=0.779952
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.701205 lr=0.000897
+  epoch 19: val_acc = 3169/3925 = 80.738854%  top5 = 3823/3925 = 97.401274%  [95% CI 79.48–81.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e19.bin (3925 bytes)
+  step 0/295: loss=0.603555
+  step 1/295: loss=0.661218
+  step 2/295: loss=0.639215
+  step 100/295: loss=0.806221
+  step 200/295: loss=0.760222
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.684468 lr=0.000885
+  epoch 20: val_acc = 3143/3925 = 80.076433%  top5 = 3809/3925 = 97.044586%  [95% CI 78.80–81.30]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e20.bin (3925 bytes)
+  step 0/295: loss=0.640080
+  step 1/295: loss=0.554145
+  step 2/295: loss=0.646129
+  step 100/295: loss=0.564962
+  step 200/295: loss=0.555568
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.663817 lr=0.000871
+  epoch 21: val_acc = 3138/3925 = 79.949045%  top5 = 3806/3925 = 96.968153%  [95% CI 78.67–81.17]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e21.bin (3925 bytes)
+  step 0/295: loss=0.662123
+  step 1/295: loss=0.564989
+  step 2/295: loss=0.730281
+  step 100/295: loss=0.605769
+  step 200/295: loss=0.691212
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.652168 lr=0.000857
+  epoch 22: val_acc = 3098/3925 = 78.929936%  top5 = 3803/3925 = 96.891720%  [95% CI 77.63–80.18]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e22.bin (3925 bytes)
+  step 0/295: loss=0.607954
+  step 1/295: loss=0.592093
+  step 2/295: loss=0.611091
+  step 100/295: loss=0.543280
+  step 200/295: loss=0.625679
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.637757 lr=0.000843
+  epoch 23: val_acc = 3134/3925 = 79.847134%  top5 = 3805/3925 = 96.942675%  [95% CI 78.56–81.07]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e23.bin (3925 bytes)
+  step 0/295: loss=0.580180
+  step 1/295: loss=0.679695
+  step 2/295: loss=0.568555
+  step 100/295: loss=0.676234
+  step 200/295: loss=0.684861
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.609087 lr=0.000827
+  epoch 24: val_acc = 3189/3925 = 81.248408%  top5 = 3809/3925 = 97.044586%  [95% CI 80.00–82.44]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e24.bin (3925 bytes)
+  step 0/295: loss=0.578478
+  step 1/295: loss=0.592910
+  step 2/295: loss=0.618319
+  step 100/295: loss=0.642962
+  step 200/295: loss=0.544499
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.596897 lr=0.000812
+  epoch 25: val_acc = 3148/3925 = 80.203822%  top5 = 3801/3925 = 96.840764%  [95% CI 78.93–81.42]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e25.bin (3925 bytes)
+  step 0/295: loss=0.533382
+  step 1/295: loss=0.580604
+  step 2/295: loss=0.555324
+  step 100/295: loss=0.561960
+  step 200/295: loss=0.774302
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.607548 lr=0.000796
+  epoch 26: val_acc = 3137/3925 = 79.923567%  top5 = 3796/3925 = 96.713376%  [95% CI 78.64–81.15]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e26.bin (3925 bytes)
+  step 0/295: loss=0.617745
+  step 1/295: loss=0.548967
+  step 2/295: loss=0.611559
+  step 100/295: loss=0.580010
+  step 200/295: loss=0.553350
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.584887 lr=0.000779
+  epoch 27: val_acc = 3194/3925 = 81.375796%  top5 = 3825/3925 = 97.452229%  [95% CI 80.13–82.56]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e27.bin (3925 bytes)
+  step 0/295: loss=0.515276
+  step 1/295: loss=0.652771
+  step 2/295: loss=0.593737
+  step 100/295: loss=0.611917
+  step 200/295: loss=0.654884
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.585561 lr=0.000762
+  epoch 28: val_acc = 3184/3925 = 81.121019%  top5 = 3804/3925 = 96.917197%  [95% CI 79.87–82.31]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e28.bin (3925 bytes)
+  step 0/295: loss=0.530459
+  step 1/295: loss=0.527392
+  step 2/295: loss=0.542266
+  step 100/295: loss=0.746379
+  step 200/295: loss=0.519290
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.570226 lr=0.000744
+  epoch 29: val_acc = 3198/3925 = 81.477707%  top5 = 3809/3925 = 97.044586%  [95% CI 80.23–82.66]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e29.bin (3925 bytes)
+  step 0/295: loss=0.513089
+  step 1/295: loss=0.606032
+  step 2/295: loss=0.526127
+  step 100/295: loss=0.514353
+  step 200/295: loss=0.540814
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.563440 lr=0.000726
+  epoch 30: val_acc = 3130/3925 = 79.745223%  top5 = 3799/3925 = 96.789809%  [95% CI 78.46–80.97]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e30.bin (3925 bytes)
+  step 0/295: loss=0.571628
+  step 1/295: loss=0.525049
+  step 2/295: loss=0.518787
+  step 100/295: loss=0.511718
+  step 200/295: loss=0.523419
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.573026 lr=0.000708
+  epoch 31: val_acc = 3164/3925 = 80.611465%  top5 = 3816/3925 = 97.222930%  [95% CI 79.34–81.82]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e31.bin (3925 bytes)
+  step 0/295: loss=0.555828
+  step 1/295: loss=0.559349
+  step 2/295: loss=0.624823
+  step 100/295: loss=0.534731
+  step 200/295: loss=0.518640
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.560860 lr=0.000689
+  epoch 32: val_acc = 3208/3925 = 81.732484%  top5 = 3806/3925 = 96.968153%  [95% CI 80.49–82.91]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e32.bin (3925 bytes)
+  step 0/295: loss=0.522334
+  step 1/295: loss=0.528039
+  step 2/295: loss=0.510752
+  step 100/295: loss=0.531079
+  step 200/295: loss=0.636192
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.547708 lr=0.000670
+  epoch 33: val_acc = 3164/3925 = 80.611465%  top5 = 3810/3925 = 97.070064%  [95% CI 79.34–81.82]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e33.bin (3925 bytes)
+  step 0/295: loss=0.515737
+  step 1/295: loss=0.595547
+  step 2/295: loss=0.513875
+  step 100/295: loss=0.513344
+  step 200/295: loss=0.508593
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.541786 lr=0.000651
+  epoch 34: val_acc = 3176/3925 = 80.917197%  top5 = 3793/3925 = 96.636943%  [95% CI 79.66–82.12]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e34.bin (3925 bytes)
+  step 0/295: loss=0.521048
+  step 1/295: loss=0.510066
+  step 2/295: loss=0.511597
+  step 100/295: loss=0.598949
+  step 200/295: loss=0.509385
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.538723 lr=0.000631
+  epoch 35: val_acc = 3142/3925 = 80.050955%  top5 = 3809/3925 = 97.044586%  [95% CI 78.77–81.27]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e35.bin (3925 bytes)
+  step 0/295: loss=0.527109
+  step 1/295: loss=0.621512
+  step 2/295: loss=0.571773
+  step 100/295: loss=0.508335
+  step 200/295: loss=0.593702
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.546295 lr=0.000611
+  epoch 36: val_acc = 3162/3925 = 80.560510%  top5 = 3806/3925 = 96.968153%  [95% CI 79.29–81.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e36.bin (3925 bytes)
+  step 0/295: loss=0.533807
+  step 1/295: loss=0.513332
+  step 2/295: loss=0.544852
+  step 100/295: loss=0.580953
+  step 200/295: loss=0.556601
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.535283 lr=0.000591
+  epoch 37: val_acc = 3204/3925 = 81.630573%  top5 = 3810/3925 = 97.070064%  [95% CI 80.39–82.81]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e37.bin (3925 bytes)
+  step 0/295: loss=0.507581
+  step 1/295: loss=0.515995
+  step 2/295: loss=0.539562
+  step 100/295: loss=0.528235
+  step 200/295: loss=0.555247
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.533955 lr=0.000571
+  epoch 38: val_acc = 3151/3925 = 80.280255%  top5 = 3786/3925 = 96.458599%  [95% CI 79.01–81.50]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e38.bin (3925 bytes)
+  step 0/295: loss=0.507709
+  step 1/295: loss=0.513840
+  step 2/295: loss=0.509027
+  step 100/295: loss=0.616756
+  step 200/295: loss=0.503265
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.547611 lr=0.000551
+  epoch 39: val_acc = 3155/3925 = 80.382166%  top5 = 3804/3925 = 96.917197%  [95% CI 79.11–81.59]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e39.bin (3925 bytes)
+  step 0/295: loss=0.507508
+  step 1/295: loss=0.511261
+  step 2/295: loss=0.516792
+  step 100/295: loss=0.506486
+  step 200/295: loss=0.516376
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.521135 lr=0.000531
+  epoch 40: val_acc = 3193/3925 = 81.350318%  top5 = 3819/3925 = 97.299363%  [95% CI 80.10–82.54]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e40.bin (3925 bytes)
+  step 0/295: loss=0.504029
+  step 1/295: loss=0.503035
+  step 2/295: loss=0.512830
+  step 100/295: loss=0.630751
+  step 200/295: loss=0.511966
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.516864 lr=0.000510
+  epoch 41: val_acc = 3222/3925 = 82.089172%  top5 = 3817/3925 = 97.248408%  [95% CI 80.86–83.26]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e41.bin (3925 bytes)
+  step 0/295: loss=0.507339
+  step 1/295: loss=0.509096
+  step 2/295: loss=0.504312
+  step 100/295: loss=0.504915
+  step 200/295: loss=0.504524
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.517675 lr=0.000490
+  epoch 42: val_acc = 3207/3925 = 81.707006%  top5 = 3816/3925 = 97.222930%  [95% CI 80.47–82.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e42.bin (3925 bytes)
+  step 0/295: loss=0.509374
+  step 1/295: loss=0.510659
+  step 2/295: loss=0.520371
+  step 100/295: loss=0.506548
+  step 200/295: loss=0.505840
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.512702 lr=0.000469
+  epoch 43: val_acc = 3211/3925 = 81.808917%  top5 = 3811/3925 = 97.095541%  [95% CI 80.57–82.98]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e43.bin (3925 bytes)
+  step 0/295: loss=0.504731
+  step 1/295: loss=0.501910
+  step 2/295: loss=0.510089
+  step 100/295: loss=0.508605
+  step 200/295: loss=0.507445
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.530944 lr=0.000449
+  epoch 44: val_acc = 3202/3925 = 81.579618%  top5 = 3805/3925 = 96.942675%  [95% CI 80.34–82.76]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e44.bin (3925 bytes)
+  step 0/295: loss=0.572973
+  step 1/295: loss=0.503015
+  step 2/295: loss=0.509976
+  step 100/295: loss=0.559520
+  step 200/295: loss=0.588949
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.515846 lr=0.000429
+  epoch 45: val_acc = 3236/3925 = 82.445860%  top5 = 3813/3925 = 97.146497%  [95% CI 81.22–83.60]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e45.bin (3925 bytes)
+  step 0/295: loss=0.505877
+  step 1/295: loss=0.504793
+  step 2/295: loss=0.503055
+  step 100/295: loss=0.506055
+  step 200/295: loss=0.545444
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.517768 lr=0.000409
+  epoch 46: val_acc = 3201/3925 = 81.554140%  top5 = 3796/3925 = 96.713376%  [95% CI 80.31–82.74]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e46.bin (3925 bytes)
+  step 0/295: loss=0.501773
+  step 1/295: loss=0.502317
+  step 2/295: loss=0.520305
+  step 100/295: loss=0.531369
+  step 200/295: loss=0.505064
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.516246 lr=0.000389
+  epoch 47: val_acc = 3214/3925 = 81.885350%  top5 = 3810/3925 = 97.070064%  [95% CI 80.65–83.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e47.bin (3925 bytes)
+  step 0/295: loss=0.503656
+  step 1/295: loss=0.506024
+  step 2/295: loss=0.503071
+  step 100/295: loss=0.502365
+  step 200/295: loss=0.510036
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.513126 lr=0.000369
+  epoch 48: val_acc = 3227/3925 = 82.216561%  top5 = 3812/3925 = 97.121019%  [95% CI 80.99–83.38]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e48.bin (3925 bytes)
+  step 0/295: loss=0.502763
+  step 1/295: loss=0.531770
+  step 2/295: loss=0.504806
+  step 100/295: loss=0.503242
+  step 200/295: loss=0.504337
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.510223 lr=0.000349
+  epoch 49: val_acc = 3252/3925 = 82.853503%  top5 = 3819/3925 = 97.299363%  [95% CI 81.64–84.00]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e49.bin (3925 bytes)
+  step 0/295: loss=0.502171
+  step 1/295: loss=0.502905
+  step 2/295: loss=0.501583
+  step 100/295: loss=0.501806
+  step 200/295: loss=0.502895
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.509493 lr=0.000330
+  epoch 50: val_acc = 3196/3925 = 81.426752%  top5 = 3791/3925 = 96.585987%  [95% CI 80.18–82.61]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e50.bin (3925 bytes)
+  step 0/295: loss=0.504292
+  step 1/295: loss=0.502198
+  step 2/295: loss=0.502263
+  step 100/295: loss=0.501487
+  step 200/295: loss=0.502533
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.506730 lr=0.000311
+  epoch 51: val_acc = 3275/3925 = 83.439490%  top5 = 3812/3925 = 97.121019%  [95% CI 82.24–84.57]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e51.bin (3925 bytes)
+  step 0/295: loss=0.502160
+  step 1/295: loss=0.501193
+  step 2/295: loss=0.501785
+  step 100/295: loss=0.503385
+  step 200/295: loss=0.501023
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.506076 lr=0.000292
+  epoch 52: val_acc = 3234/3925 = 82.394904%  top5 = 3803/3925 = 96.891720%  [95% CI 81.17–83.55]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e52.bin (3925 bytes)
+  step 0/295: loss=0.500822
+  step 1/295: loss=0.503773
+  step 2/295: loss=0.504586
+  step 100/295: loss=0.502928
+  step 200/295: loss=0.500962
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.504504 lr=0.000274
+  epoch 53: val_acc = 3233/3925 = 82.369427%  top5 = 3803/3925 = 96.891720%  [95% CI 81.15–83.53]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e53.bin (3925 bytes)
+  step 0/295: loss=0.501557
+  step 1/295: loss=0.502284
+  step 2/295: loss=0.559434
+  step 100/295: loss=0.500948
+  step 200/295: loss=0.508799
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.505320 lr=0.000256
+  epoch 54: val_acc = 3256/3925 = 82.955414%  top5 = 3799/3925 = 96.789809%  [95% CI 81.75–84.10]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e54.bin (3925 bytes)
+  step 0/295: loss=0.530319
+  step 1/295: loss=0.503036
+  step 2/295: loss=0.501891
+  step 100/295: loss=0.501406
+  step 200/295: loss=0.520467
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.503498 lr=0.000238
+  epoch 55: val_acc = 3273/3925 = 83.388535%  top5 = 3799/3925 = 96.789809%  [95% CI 82.19–84.52]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e55.bin (3925 bytes)
+  step 0/295: loss=0.500865
+  step 1/295: loss=0.500875
+  step 2/295: loss=0.501267
+  step 100/295: loss=0.501447
+  step 200/295: loss=0.501458
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.504308 lr=0.000221
+  epoch 56: val_acc = 3225/3925 = 82.165605%  top5 = 3816/3925 = 97.222930%  [95% CI 80.94–83.33]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e56.bin (3925 bytes)
+  step 0/295: loss=0.501308
+  step 1/295: loss=0.501169
+  step 2/295: loss=0.507964
+  step 100/295: loss=0.501570
+  step 200/295: loss=0.501147
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.506440 lr=0.000205
+  epoch 57: val_acc = 3248/3925 = 82.751592%  top5 = 3814/3925 = 97.171975%  [95% CI 81.54–83.90]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e57.bin (3925 bytes)
+  step 0/295: loss=0.501967
+  step 1/295: loss=0.501952
+  step 2/295: loss=0.500854
+  step 100/295: loss=0.578159
+  step 200/295: loss=0.501804
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.504221 lr=0.000188
+  epoch 58: val_acc = 3274/3925 = 83.414013%  top5 = 3806/3925 = 96.968153%  [95% CI 82.22–84.54]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e58.bin (3925 bytes)
+  step 0/295: loss=0.500900
+  step 1/295: loss=0.501007
+  step 2/295: loss=0.502550
+  step 100/295: loss=0.500705
+  step 200/295: loss=0.500654
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.501798 lr=0.000173
+  epoch 59: val_acc = 3288/3925 = 83.770701%  top5 = 3816/3925 = 97.222930%  [95% CI 82.58–84.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e59.bin (3925 bytes)
+  step 0/295: loss=0.500998
+  step 1/295: loss=0.501022
+  step 2/295: loss=0.500887
+  step 100/295: loss=0.501034
+  step 200/295: loss=0.501087
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.503424 lr=0.000157
+  epoch 60: val_acc = 3291/3925 = 83.847134%  top5 = 3817/3925 = 97.248408%  [95% CI 82.66–84.97]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e60.bin (3925 bytes)
+  step 0/295: loss=0.500689
+  step 1/295: loss=0.501432
+  step 2/295: loss=0.500648
+  step 100/295: loss=0.500974
+  step 200/295: loss=0.500916
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.501844 lr=0.000143
+  epoch 61: val_acc = 3290/3925 = 83.821656%  top5 = 3815/3925 = 97.197452%  [95% CI 82.64–84.94]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e61.bin (3925 bytes)
+  step 0/295: loss=0.501090
+  step 1/295: loss=0.502270
+  step 2/295: loss=0.500896
+  step 100/295: loss=0.501521
+  step 200/295: loss=0.500700
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.500936 lr=0.000129
+  epoch 62: val_acc = 3302/3925 = 84.127389%  top5 = 3813/3925 = 97.146497%  [95% CI 82.95–85.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e62.bin (3925 bytes)
+  step 0/295: loss=0.500627
+  step 1/295: loss=0.500594
+  step 2/295: loss=0.500562
+  step 100/295: loss=0.500766
+  step 200/295: loss=0.500628
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.501085 lr=0.000116
+  epoch 63: val_acc = 3276/3925 = 83.464968%  top5 = 3796/3925 = 96.713376%  [95% CI 82.27–84.59]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e63.bin (3925 bytes)
+  step 0/295: loss=0.500861
+  step 1/295: loss=0.500702
+  step 2/295: loss=0.500874
+  step 100/295: loss=0.500587
+  step 200/295: loss=0.500795
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.501051 lr=0.000103
+  epoch 64: val_acc = 3288/3925 = 83.770701%  top5 = 3802/3925 = 96.866242%  [95% CI 82.58–84.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e64.bin (3925 bytes)
+  step 0/295: loss=0.500784
+  step 1/295: loss=0.500694
+  step 2/295: loss=0.500760
+  step 100/295: loss=0.500822
+  step 200/295: loss=0.500635
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.501310 lr=0.000091
+  epoch 65: val_acc = 3288/3925 = 83.770701%  top5 = 3816/3925 = 97.222930%  [95% CI 82.58–84.89]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e65.bin (3925 bytes)
+  step 0/295: loss=0.500719
+  step 1/295: loss=0.500677
+  step 2/295: loss=0.500508
+  step 100/295: loss=0.500537
+  step 200/295: loss=0.500712
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.501265 lr=0.000079
+  epoch 66: val_acc = 3283/3925 = 83.643312%  top5 = 3807/3925 = 96.993631%  [95% CI 82.45–84.77]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e66.bin (3925 bytes)
+  step 0/295: loss=0.500601
+  step 1/295: loss=0.500493
+  step 2/295: loss=0.500501
+  step 100/295: loss=0.500634
+  step 200/295: loss=0.506568
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.501243 lr=0.000069
+  epoch 67: val_acc = 3294/3925 = 83.923567%  top5 = 3800/3925 = 96.815287%  [95% CI 82.74–85.04]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e67.bin (3925 bytes)
+  step 0/295: loss=0.500705
+  step 1/295: loss=0.500543
+  step 2/295: loss=0.500600
+  step 100/295: loss=0.500538
+  step 200/295: loss=0.500610
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.500783 lr=0.000059
+  epoch 68: val_acc = 3302/3925 = 84.127389%  top5 = 3798/3925 = 96.764331%  [95% CI 82.95–85.24]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e68.bin (3925 bytes)
+  step 0/295: loss=0.500654
+  step 1/295: loss=0.502296
+  step 2/295: loss=0.500642
+  step 100/295: loss=0.500525
+  step 200/295: loss=0.500508
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.500908 lr=0.000050
+  epoch 69: val_acc = 3292/3925 = 83.872611%  top5 = 3804/3925 = 96.917197%  [95% CI 82.69–84.99]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e69.bin (3925 bytes)
+  step 0/295: loss=0.500683
+  step 1/295: loss=0.500501
+  step 2/295: loss=0.500423
+  step 100/295: loss=0.502101
+  step 200/295: loss=0.501650
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.500829 lr=0.000041
+  epoch 70: val_acc = 3301/3925 = 84.101911%  top5 = 3796/3925 = 96.713376%  [95% CI 82.92–85.21]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e70.bin (3925 bytes)
+  step 0/295: loss=0.500761
+  step 1/295: loss=0.500714
+  step 2/295: loss=0.500713
+  step 100/295: loss=0.500715
+  step 200/295: loss=0.500433
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.500732 lr=0.000033
+  epoch 71: val_acc = 3307/3925 = 84.254777%  top5 = 3795/3925 = 96.687898%  [95% CI 83.08–85.36]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e71.bin (3925 bytes)
+  step 0/295: loss=0.500523
+  step 1/295: loss=0.500577
+  step 2/295: loss=0.500563
+  step 100/295: loss=0.500526
+  step 200/295: loss=0.500498
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.500690 lr=0.000026
+  epoch 72: val_acc = 3306/3925 = 84.229299%  top5 = 3796/3925 = 96.713376%  [95% CI 83.06–85.34]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e72.bin (3925 bytes)
+  step 0/295: loss=0.512364
+  step 1/295: loss=0.500629
+  step 2/295: loss=0.500435
+  step 100/295: loss=0.500436
+  step 200/295: loss=0.500543
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.500681 lr=0.000020
+  epoch 73: val_acc = 3295/3925 = 83.949045%  top5 = 3787/3925 = 96.484076%  [95% CI 82.77–85.06]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e73.bin (3925 bytes)
+  step 0/295: loss=0.500513
+  step 1/295: loss=0.500418
+  step 2/295: loss=0.500465
+  step 100/295: loss=0.500432
+  step 200/295: loss=0.500477
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.500568 lr=0.000015
+  epoch 74: val_acc = 3297/3925 = 84.000000%  top5 = 3788/3925 = 96.509554%  [95% CI 82.82–85.11]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e74.bin (3925 bytes)
+  step 0/295: loss=0.500561
+  step 1/295: loss=0.500474
+  step 2/295: loss=0.500478
+  step 100/295: loss=0.500411
+  step 200/295: loss=0.500477
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.500592 lr=0.000010
+  epoch 75: val_acc = 3301/3925 = 84.101911%  top5 = 3789/3925 = 96.535032%  [95% CI 82.92–85.21]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e75.bin (3925 bytes)
+  step 0/295: loss=0.500515
+  step 1/295: loss=0.500557
+  step 2/295: loss=0.500623
+  step 100/295: loss=0.500460
+  step 200/295: loss=0.500480
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.500559 lr=0.000007
+  epoch 76: val_acc = 3301/3925 = 84.101911%  top5 = 3793/3925 = 96.636943%  [95% CI 82.92–85.21]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e76.bin (3925 bytes)
+  step 0/295: loss=0.500443
+  step 1/295: loss=0.500574
+  step 2/295: loss=0.500519
+  step 100/295: loss=0.500682
+  step 200/295: loss=0.500412
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.500631 lr=0.000004
+  epoch 77: val_acc = 3299/3925 = 84.050955%  top5 = 3793/3925 = 96.636943%  [95% CI 82.87–85.16]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e77.bin (3925 bytes)
+  step 0/295: loss=0.500459
+  step 1/295: loss=0.500697
+  step 2/295: loss=0.500941
+  step 100/295: loss=0.500619
+  step 200/295: loss=0.500492
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.500582 lr=0.000002
+  epoch 78: val_acc = 3298/3925 = 84.025478%  top5 = 3792/3925 = 96.611465%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e78.bin (3925 bytes)
+  step 0/295: loss=0.500449
+  step 1/295: loss=0.500514
+  step 2/295: loss=0.500451
+  step 100/295: loss=0.500546
+  step 200/295: loss=0.500498
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.500552 lr=0.000000
+  epoch 79: val_acc = 3298/3925 = 84.025478%  top5 = 3792/3925 = 96.611465%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e79.bin (3925 bytes)
+  step 0/295: loss=0.500459
+  step 1/295: loss=0.500457
+  step 2/295: loss=0.500464
+  step 100/295: loss=0.500494
+  step 200/295: loss=0.500522
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.500563 lr=0.000000
+  epoch 80: val_acc = 3298/3925 = 84.025478%  top5 = 3792/3925 = 96.611465%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-10-29-imagenette-seeds/bitmaps/convnext_s5_adam_e80.bin (3925 bytes)
+done (trained ConvNeXt-T adam + cosine/warmup via packed threading).
