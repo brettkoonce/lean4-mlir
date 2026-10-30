@@ -569,7 +569,13 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
     -- "sample_distorted_bounding_box requires a non-zero seed when determinism is enabled".
     -- Measured, not assumed: without this, two same-seed shim runs hash DIFFERENTLY.
     "_AUG_SEED = os.environ.get('AUG_SEED')\n" ++
-    "_AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None\n\n" ++
+    "_AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None\n" ++
+    -- $LEAN_MLIR_SEED_OFFSET: the REFERENCE trainer's seed sweep (planning/runs_queue_2026-10-29.md
+    -- Tier 2). Added to the config's `seed` (init, drop-path, Mixup/CutMix streams) and to the
+    -- train shuffle's 42/43. Unset = 0 = the numbers every landed run used. A name of its own,
+    -- not LEAN_MLIR_SEED: this block is copied verbatim into the verified shim, whose driver
+    -- sets LEAN_MLIR_SEED and seeds the shim through SHIM_SEED — the shim must not see a second knob.
+    "_SEED_OFF = int(os.environ.get('LEAN_MLIR_SEED_OFFSET', '0'))\n\n" ++
     -- The _aa_* op block (color + geometric) is shared by AutoAugment and the
     -- geometric RandAugment sampler; emit it if either is on.
     (if cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric)
@@ -906,7 +912,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
       "        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()\n") ++
     "        return img, ex['label']\n" ++
     "    if training:\n" ++
-    "        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)\n" ++
+    "        ds = ds.shuffle(8192, seed=42 + _SEED_OFF, reshuffle_each_iteration=True)\n" ++
     "        ds = ds.repeat()\n" ++
     (if cfg.repeatedAug > 1 then
       "        # Repeated Augmentation (RSB-A2 " ++ toString cfg.repeatedAug ++
@@ -922,7 +928,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
         "        # repeatedAugAdjacent: no re-shuffle — the K copies stay adjacent, in one optimizer\n" ++
         "        # step, as timm's RASampler places them (its 3 indices of an image are consecutive).\n"
        else
-        "        ds = ds.shuffle(8192, seed=43, reshuffle_each_iteration=True)\n")
+        "        ds = ds.shuffle(8192, seed=43 + _SEED_OFF, reshuffle_each_iteration=True)\n")
      else "") ++
     "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
     -- `drop_remainder` is TRUE ON TRAIN AND FALSE ON VALIDATION, and the asymmetry is the
@@ -3388,7 +3394,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   let ep := toString cfg.epochs
   let lr := toString cfg.learningRate
   let nParams := toString spec.totalParams
-  let seed := toString cfg.seed
+  let seed := toString cfg.seed ++ " + _SEED_OFF"
   let hasMomentum := cfg.momentum > 0.0
   let warmup := toString cfg.warmupEpochs
   let hasCosine := cfg.cosineDecay
@@ -3636,11 +3642,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
       "            else:\n" ++ decayWarmup
      else decayNoWarmup)
    else "") ++
-  (let mk := "jax.random.fold_in(jax.random.PRNGKey(" ++ toString cfg.seed ++ "), _global_step)"
+  (let mk := "jax.random.fold_in(jax.random.PRNGKey(" ++ toString cfg.seed ++ " + _SEED_OFF), _global_step)"
    if cfg.useMixup && cfg.useCutmix then
      (if cfg.mixSwitchProb > 0.0 then
        "            # timm Mixup(switch_prob): CutMix with probability p per batch, seeded from (seed, step)\n" ++
-       "            if np.random.default_rng([" ++ toString cfg.seed ++ ", _global_step]).random() < " ++
+       "            if np.random.default_rng([" ++ toString cfg.seed ++ " + _SEED_OFF, _global_step]).random() < " ++
          toString cfg.mixSwitchProb ++ ":\n" ++
        "                x, y = _cutmix(x, y, " ++ mk ++ ")\n" ++
        "            else:\n" ++

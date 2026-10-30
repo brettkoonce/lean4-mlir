@@ -49,6 +49,7 @@ _MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float3
 _STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)
 _AUG_SEED = os.environ.get('AUG_SEED')
 _AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None
+_SEED_OFF = int(os.environ.get('LEAN_MLIR_SEED_OFFSET', '0'))
 
 # ════════════════════════════════════════════════════════════════
 #  AutoAugment (ImageNet policy, Cubuk et al. 2018) — pure TF, no tfa.
@@ -340,7 +341,7 @@ def build_imagenet_iter(split, batch_size, training, augment, shard=None):
         img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()
         return img, ex['label']
     if training:
-        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)
+        ds = ds.shuffle(8192, seed=42 + _SEED_OFF, reshuffle_each_iteration=True)
         ds = ds.repeat()
     ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)
     ds = ds.batch(batch_size, drop_remainder=training)

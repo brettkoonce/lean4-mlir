@@ -25,6 +25,7 @@ _MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float3
 _STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)
 _AUG_SEED = os.environ.get('AUG_SEED')
 _AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None
+_SEED_OFF = int(os.environ.get('LEAN_MLIR_SEED_OFFSET', '0'))
 
 # ════════════════════════════════════════════════════════════════
 #  AutoAugment (ImageNet policy, Cubuk et al. 2018) — pure TF, no tfa.
@@ -384,7 +385,7 @@ def build_imagenet_iter(split, batch_size, training, augment, shard=None):
         img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()
         return img, ex['label']
     if training:
-        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)
+        ds = ds.shuffle(8192, seed=42 + _SEED_OFF, reshuffle_each_iteration=True)
         ds = ds.repeat()
         # Repeated Augmentation (RSB-A2 3×; Hoffer et al. 2020 / timm RASampler). flat_map gives K raw copies of
         # each image; _pp below augments each copy independently (its crop/
@@ -1678,7 +1679,7 @@ if __name__ == "__main__":
         print(f'Loading phase-3 init from {_init_load}')
         params = init_params_from_file(_init_load)
     else:
-        params = init_params(random.PRNGKey(314159))
+        params = init_params(random.PRNGKey(314159 + _SEED_OFF))
     params = jax.device_put(params, replicated_sharding)
     WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)
     opt_m = jax.tree.map(jnp.zeros_like, params)
@@ -1701,7 +1702,7 @@ if __name__ == "__main__":
                 'warmup_epochs': 5,
                 'augment': True,
                 'label_smoothing': 0.000000,
-                'seed': 314159,
+                'seed': 314159 + _SEED_OFF,
             },
             'total_params': 25557032,
             'dataset': 'imagenet',
@@ -1727,7 +1728,7 @@ if __name__ == "__main__":
     t0 = time.time()
     ema_params = params  # EMA shadow starts at the (fresh or resumed) weights
     ema_bn = bn_state  # EMA shadow of the BN running buffers — eval pairs EMA weights with EMA-lagged BN stats, avoiding the weights/stats mismatch that blows up early eval
-    _drop_base = random.PRNGKey(314159 + 1)  # stochastic-depth + dropout RNG stream
+    _drop_base = random.PRNGKey(314159 + _SEED_OFF + 1)  # stochastic-depth + dropout RNG stream
     _resume = os.environ.get('LEAN_MLIR_RESUME')
     if _resume:
         _rstate, _global_step = load_train_state(_resume, (params, opt_state, ema_params, ema_bn, bn_state))
@@ -1748,10 +1749,10 @@ if __name__ == "__main__":
         for _ in range(steps_per_epoch):
             x, y = next(train_iter)
             # timm Mixup(switch_prob): CutMix with probability p per batch, seeded from (seed, step)
-            if np.random.default_rng([314159, _global_step]).random() < 0.500000:
-                x, y = _cutmix(x, y, jax.random.fold_in(jax.random.PRNGKey(314159), _global_step))
+            if np.random.default_rng([314159 + _SEED_OFF, _global_step]).random() < 0.500000:
+                x, y = _cutmix(x, y, jax.random.fold_in(jax.random.PRNGKey(314159 + _SEED_OFF), _global_step))
             else:
-                x, y = _mixup(x, y, jax.random.fold_in(jax.random.PRNGKey(314159), _global_step))
+                x, y = _mixup(x, y, jax.random.fold_in(jax.random.PRNGKey(314159 + _SEED_OFF), _global_step))
             params, opt_state, bn_state, loss = train_step(params, opt_state, bn_state, x, y, lr, jax.random.fold_in(_drop_base, _global_step))
             epoch_loss += loss  # jax scalar: defer the device sync to epoch end
             n_batches += 1

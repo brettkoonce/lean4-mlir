@@ -12,6 +12,7 @@
 #   12 -> 40 -> 80 standardised 2026-08-31).
 # SUITE=bnprec — Chapter 4's Lever 3 on the normalized net: `cifar8wb-bn-ablation`, six arms
 #   (SGD/Nesterov/AdamW x f32/bf16) at 40 epochs. planning/archive/bf16_batchnorm.md.
+# SUITE=nobnprec — the same lever on the UN-normalized wide net: `cifar8wb{,-bf16}-ablation`.
 # SUITE=bbn — the same six arms on the BATCH-statistics BN net (`cifar8wb-bbn-ablation`, slug
 #   `cifar8wb_bbn`, running-stat eval). planning/cifar-batch-bn-rerender.md.
 #
@@ -52,6 +53,13 @@
 # Resumable: a job whose done-marker exists is skipped, so a crashed box restarts where it was.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
+# The box's PJRT plugin, from the one place that knows it (scripts/platform/env.sh, as the job
+# confs do). ⛔ Without this the shim's fallback list is ares's repo .venv (xla_cuda12) only, and
+# on the 3060 box every job died at session create in 0 s — 25/25 FAIL, 2026-10-29.
+. scripts/platform/env.sh
+export PJRT_PLUGIN="$PLATFORM_PLUGIN"
+[ -f "$PJRT_PLUGIN" ] || { echo "⛔ no PJRT plugin for this box ($PLATFORM_HOST): '$PJRT_PLUGIN'"; exit 1; }
+for kv in ${PLATFORM_SHIMPY[@]+"${PLATFORM_SHIMPY[@]}"}; do export "$kv"; done
 
 GPUS="${1:-0,1,2,3}"
 SEEDS="${2:-1 2 3}"
@@ -95,6 +103,14 @@ case "$SUITE" in
     NETS=(cifar8wb_bn)
     EXE=( [cifar8wb_bn]=cifar8wb-bn-ablation )
     EPOCHS=( [cifar8wb_bn]=40 ) ;;
+  nobnprec)
+    # Chapter 4's Lever 3 on the UN-normalized wide net: `cifar8wb-ablation` (f32) and
+    # `cifar8wb-bf16-ablation`, three optimizer arms each, ~6 min a seed. The pair
+    # `runs/2026-09-01-cifar8w-6arm-constlr/` ran by hand as `fp32b_s*` / `bf16_s*`;
+    # planning/runs_queue_2026-10-29.md §1b puts it through this driver.
+    NETS=(cifar8wb_f32 cifar8wb_bf16)
+    EXE=( [cifar8wb_f32]=cifar8wb-ablation [cifar8wb_bf16]=cifar8wb-bf16-ablation )
+    EPOCHS=( [cifar8wb_f32]=40 [cifar8wb_bf16]=40 ) ;;
   bbn)
     # The BN net at BATCH statistics (planning/cifar-batch-bn-rerender.md): `cifar8wb-bbn-ablation`
     # with no arm argument runs all SIX arms in sequence (SGD/Nesterov/AdamW x f32/bf16, 40 ep),
@@ -106,7 +122,7 @@ case "$SUITE" in
     NETS=(cifar8wb_bbn)
     EXE=( [cifar8wb_bbn]=cifar8wb-bbn-ablation )
     EPOCHS=( [cifar8wb_bbn]=40 ) ;;
-  *) echo "⛔ unknown SUITE=$SUITE (imagenette|small|bnprec|bbn)"; exit 1 ;;
+  *) echo "⛔ unknown SUITE=$SUITE (imagenette|small|bnprec|nobnprec|bbn)"; exit 1 ;;
 esac
 
 JOBS=()
