@@ -444,22 +444,20 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
 \end{verbatim}
 
   \item \textbf{Get an XLA PJRT plugin}, one prebuilt shared library. It
-    ships under a JAX name because that is the only place XLA's GPU plugins are
-    packaged, but these wheels carry the plugin and nothing else (not
-    \texttt{jax}, not \texttt{jaxlib}), and the shim opens the \texttt{.so}
-    directly through the PJRT C API, so no interpreter runs at training time.
+    ships as a JAX wheel because that is where XLA's GPU plugins are packaged,
+    but the wheel carries the plugin and nothing else, and the shim opens it
+    directly, so no interpreter runs at training time.
 \begin{verbatim}
 python3 -m venv .venv && . .venv/bin/activate
 pip install jax-cuda12-pjrt     # NVIDIA, CUDA 12 -- the PJRT plugin ONLY
 pip install jax-rocm7-pjrt      # AMD            -- no jax, no jaxlib
+pip install jax-oneapi-pjrt 'jax-oneapi-plugin[with-oneapi]'   # Intel Arc
 \end{verbatim}
-    The shim looks under
-    \texttt{.venv/lib/python3.12/site-packages/jax\_plugins/}, which is where
-    that command puts it on a Python 3.12 venv. On any other Python, or for
-    a plugin anywhere else (a CUDA 13 card's \texttt{jax-cuda13-pjrt}, for
-    one), \texttt{\$PJRT\_PLUGIN} names the \texttt{.so} and always wins. The
-    plugin is version-matched to your CUDA/ROCm install: a 500\,MB download,
-    not a build.
+    Match the wheel to your CUDA or ROCm version; the Arc's plugin brings its
+    oneAPI runtime with it, and \texttt{deploy/arc\_setup.sh} does that
+    install end to end. The shim finds the plugin in the repo's
+    \texttt{.venv}; one anywhere else is named by \texttt{\$PJRT\_PLUGIN}
+    (Appendix~\ref{app:getting_started}).
 
   \item \textbf{Build the FFI shim} (needs only libc and \texttt{dlopen}):
 \begin{verbatim}
@@ -863,20 +861,17 @@ lake build mnist-linear-verified
 ./.lake/build/bin/mnist-linear-verified data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-09-01-linear-verified-xla-cuda/}. XLA's startup banner is
-removed and two long lines are wrapped:
+On one RTX 4060 Ti, from
+\texttt{runs/2026-09-01-linear-verified-xla-cuda/}. XLA's banner, the
+compile timings and the artifact list are removed, and two long lines are
+wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/linear_train_step.mlir
-             (@linear_train_step, 2 outputs, 1 replica) in 604 ms
+             (@linear_train_step, 2 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/linear_fwd.mlir
-             (@linear_fwd, 1 outputs, 1 replica) in 116 ms
+             (@linear_fwd, 1 outputs, 1 replica)
 MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/linear_train_step.mlir
-  xla/pjrt verified_mlir/linear_fwd.mlir
   train 60000, test 10000; dense 784->10, bs 128, SGD
   epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (173ms)
   epoch 2: test_acc = 9081/10000 = 90.810000%  [95% CI 90.23–91.36] (175ms)
@@ -2084,10 +2079,9 @@ for epoch = 1 to cfg.epochs:
 \paragraph{The same loop, in Lean.}
 Here is \texttt{VerifiedNet.trainLinear}, the driver that produced the
 run at the top of this chapter. Three things are left out: the
-\texttt{IO.getStdout} flushes, two environment-variable overrides
-(\texttt{LEAN\_MLIR\_PERTURB\_R}, which displaces the initialisation for
-a residency check, and \texttt{LEAN\_MLIR\_MAX\_EPOCHS}, which caps the
-epoch count), and everything after the loop, which dumps the final
+\texttt{IO.getStdout} flushes, two environment overrides (one displaces
+the initialisation for a residency check, one caps the epoch count), and
+everything after the loop, which dumps the final
 parameters so the two lowerers can be diffed tensor by tensor. Two long
 lines are wrapped; every line that computes the answer is here:
 
@@ -2448,20 +2442,17 @@ lake build mnist-mlp-verified
 ./.lake/build/bin/mnist-mlp-verified data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}. XLA's startup banner is
-removed and two long lines are wrapped:
+On one RTX 4060 Ti, from
+\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}. XLA's banner, the
+compile timings and the artifact list are removed, and two long lines are
+wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir
-             (@mlp_train_step, 7 outputs, 1 replica) in 2123 ms
+             (@mlp_train_step, 7 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir
-             (@mlp_fwd, 1 outputs, 1 replica) in 157 ms
+             (@mlp_fwd, 1 outputs, 1 replica)
 MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/mlp_train_step.mlir
-  xla/pjrt verified_mlir/mlp_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats),
     mean-loss SGD lr=0.100000, He init
   epoch 1: loss = 0.413496, test_acc = 9199/10000 = 91.990000%
@@ -2905,11 +2896,10 @@ place of \texttt{.trainLinear}, because the MLP carries six parameter
 tensors packed together rather than a separate \texttt{W0} and
 \texttt{b0}.
 
-The two compile lines in \S\ref{sec:mlp_runit} are where that shows up:
-the train step compiles in 2,123\,ms against the linear step's 604 (its
-transcript in Chapter~\ref{chap:tensor}, from
-\texttt{runs/2026-09-01-linear-verified-xla-cuda/}), which is the cost of six parameter tensors
-and two ReLU subgradients rather than one dense layer.
+The first compile line in \S\ref{sec:mlp_runit} is where that shows up:
+the train step has seven outputs against the linear step's two (its
+transcript in Chapter~\ref{chap:tensor}), the six parameter tensors plus the
+loss it reports.
 
 \subsection*{Results}
 
@@ -3187,20 +3177,17 @@ lake build mnist-cnn-verified
 ./.lake/build/bin/mnist-cnn-verified data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-09-01-cnn-verified-xla-cuda/}. XLA's startup banner is
-removed and one long line is wrapped:
+On one RTX 4060 Ti, from
+\texttt{runs/2026-09-01-cnn-verified-xla-cuda/}. XLA's banner, the
+compile timings and the artifact list are removed, and one long line is
+wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir
-             (@cnn_train_step, 11 outputs, 1 replica) in 2566 ms
+             (@cnn_train_step, 11 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir
-             (@cnn_fwd, 1 outputs, 1 replica) in 210 ms
+             (@cnn_fwd, 1 outputs, 1 replica)
 MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/cnn_train_step.mlir
-  xla/pjrt verified_mlir/cnn_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats),
     mean-loss SGD lr=0.100000, He init
   epoch 1: loss = 0.352314, test_acc = 9295/10000 = 92.950000%
@@ -4406,28 +4393,23 @@ lake build cifar8wb-bbn-ablation
 \begin{sloppypar}
 That one binary runs the same network six times: three optimizers, each
 in fp32 and again in bf16. Here is the first of the six, plain SGD in
-fp32, on one RTX 4060 Ti (CUDA 12.9). The log is
+fp32, on one RTX 4060 Ti. The log is
 \texttt{runs/2026-10-24-cifar8wb-bbn-xla-cuda/cifar8wb-bbn.log}, with
-XLA's startup banner removed, the per-step loss lines dropped, and epochs
-6 through 36 elided:
+XLA's banner, the compile timings and the artifact list removed, the
+per-step loss lines dropped, and epochs 6 through 36 elided:
 \end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_sgd_train_step.mlir
-             (@cifar8wb_bbn_sgd_train_step, 133 outputs, 1 replica) in 2620 ms
+             (@cifar8wb_bbn_sgd_train_step, 133 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_fwd.mlir
-             (@cifar8wb_bbn_fwd, 1 outputs, 1 replica) in 781 ms
+             (@cifar8wb_bbn_fwd, 1 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_fwd_eval.mlir
-             (@cifar8wb_bbn_fwd_eval, 1 outputs, 1 replica) in 198 ms
+             (@cifar8wb_bbn_fwd_eval, 1 outputs, 1 replica)
 ════════ cifar8wb-bbn (batch-statistics BN) f32 — SGD (lr 0.1) ════════
 Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics
   (8 convs, BATCHED op family, d1=512, running-stat eval)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/cifar8wb_bbn_sgd_train_step.mlir
-  xla/pjrt verified_mlir/cifar8wb_bbn_fwd.mlir
-  xla/pjrt verified_mlir/cifar8wb_bbn_fwd_eval.mlir
   train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat sgd
     (constant lr 0.100000), He init
 Epoch 1/40: loss=1.497842 lr=0.100000
@@ -5344,13 +5326,12 @@ from that verified training step running on a GPU.
 \medskip\noindent\textbf{On repeatability.} Convolutional networks do not
 reproduce run to run on CUDA, because XLA selects convolution algorithms
 per process, so two runs of the identical command differ. Every accuracy
-in this section is therefore the median of five runs at seeds 1--5
-(\texttt{LEAN\_MLIR\_SEED}, which moves the initialisation, the shuffle
-and the flips), and each table states the observed range alongside it.
-That spread is seed-to-seed variance plus the nondeterminism: two to
-three points at batch statistics and without normalization, about a
-point per image, which is wide enough to swallow small differences, so
-the text below only ranks gaps that are clearly outside it.
+in this section is therefore the median of five runs at seeds 1--5 (the
+seed moves the initialisation, the shuffle and the flips), and each table
+states the observed range alongside it. That spread is seed-to-seed
+variance plus the nondeterminism, one to three points depending on the
+row, which is wide enough to swallow small differences, so the text below
+only ranks gaps that are clearly outside it.
 
 \subsection*{Architecture}
 
@@ -6089,29 +6070,26 @@ lake build resnet34-verified-adam
 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=4}, the median of the five seeds in
-\texttt{runs/2026-10-29-imagenette-seeds/} (\texttt{resnet34\_s4.log}). XLA's
-startup banner and the resident-parameter
-notices are removed, the network description line is wrapped, each interval is
+\begin{sloppypar}
+On one RTX 3060, this binary's render and recipe at seed 4, the median of
+the five in \texttt{runs/2026-10-29-imagenette-seeds/}; the log is
+\texttt{resnet34\_s4.log}. XLA's
+banner, the compile timings, the artifact list and the resident-parameter
+notice are removed, the network description line is wrapped, each interval is
 wrapped onto an indented continuation, and epochs 5 through 75 are elided:
+\end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir
-             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 8418 ms
+             (@resnet34_adam_train_step, 405 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir
-             (@resnet34_fwd, 1 outputs, 1 replica) in 886 ms
+             (@resnet34_fwd, 1 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir
-             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 318 ms
+             (@resnet34_fwd_eval, 1 outputs, 1 replica)
 Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→
   [3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts,
   no conv biases; 56→28→14→7→GAP→dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
-  xla/pjrt verified_mlir/resnet34_fwd.mlir
-  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
   train 9469, val 3925; bs 32, ResNet-34 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
@@ -7704,16 +7682,11 @@ A3 is LAMB at effective batch
 2048 (accumulated as $4\times512$), BCE over Mixup/CutMix targets binarized
 at \texttt{timm}'s $0.2$ threshold, RandAugment, and train@160 / eval@224.
 On the 2018 recipe the run finished at $\mathbf{77.01\%}$ top-1 and
-$\mathbf{93.51\%}$ top-5, the final checkpoint through an fp32 forward,
-90 epochs in about $22.2$ hours on four RTX 4060 Ti at about $14.8$
-minutes an epoch. On A3 it finished at $\mathbf{77.58\%}$ and
-$\mathbf{93.66\%}$ at \texttt{timm}'s eval resize, 100 epochs in about
-$13.4$ hours at about $8.0$ minutes an epoch.
+$\mathbf{93.51\%}$ top-5, 90 epochs in about $22.2$ hours on four RTX 4060
+Ti; on A3 at $\mathbf{77.58\%}$ and $\mathbf{93.66\%}$, 100 epochs in about
+$13.4$ hours.
 
-That fp32 scoring is how the verified path and \texttt{timm} score; the
-trainers' own evaluation lands within $0.04$ of it (through bf16 on 2018, fp32
-on A3). A3
-normalizes per $512$-image micro-batch because it accumulates
+A3 normalizes per $512$-image micro-batch because it accumulates
 $4 \times 512$ to reach $2048$; the 2018 row is a true global batch of
 $256$. That is \emph{ghost} batch norm (Hoffer, Hubara \& Soudry 2017,
 \href{https://arxiv.org/abs/1705.08741}{arXiv:1705.08741}): the
@@ -7757,11 +7730,9 @@ lake run r50-a3-wxclip4x128-bf16-4gpu
 \end{verbatim}
 
 \noindent On 2018 the run finished at $\mathbf{76.99\%}$ top-1 and
-$\mathbf{93.51\%}$ top-5, the final checkpoint rescored through an fp32
-forward at $224$, 90 epochs in about $30.1$ hours on the same four cards
-at about $20.1$ minutes an epoch. On A3 it finished at $\mathbf{78.05\%}$
-and $\mathbf{93.97\%}$ at \texttt{timm}'s $235$, 100 epochs in about
-$21.9$ hours at about $13.1$ minutes an epoch.
+$\mathbf{93.51\%}$ top-5, 90 epochs in about $30.1$ hours on the same four
+cards; on A3 at $\mathbf{78.05\%}$ and $\mathbf{93.97\%}$, 100 epochs in
+about $21.9$ hours.
 
 \medskip\noindent Both renders all-reduce
 every BatchNorm's mean and variance across the four replicas
@@ -7830,14 +7801,10 @@ RandAugment's fill at the image mean; the BCE targets binarized at $0.2$
 \texttt{cooldown\_epochs 10} at the floor (the paper counts 100 epochs,
 and $10^{-6}$ moves nothing).
 
-\medskip\noindent Both A3 numbers are the final checkpoints rescored
-at \texttt{timm}'s eval resize, the short side at
-$\lfloor 224 / 0.95 \rfloor = 235$ and the long side truncated as
-torchvision's \texttt{Resize} does. The trainers scored them at $236$
-with the long side rounded, $77.61$ / $78.08$; the move is $-13$ and
-$-14$ images on top-1 and $+24$ and $+60$ on top-5, a rounding-sized
-protocol difference, and the pair keeps its order and its gap under
-either.
+\medskip\noindent Both A3 numbers are the final checkpoints rescored at
+\texttt{timm}'s eval resize, the short side at $235$; the trainers' own
+reads at $236$ differ by about a dozen images and keep the pair's order
+and gap.
 
 \medskip\noindent\textbf{The two paths tie on 2018 and part on A3.} On
 2018 the gap is $0.02$ points on top-1 and none on top-5, at one seed per
@@ -8043,13 +8010,9 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \end{tabular}
 \end{table}
 
-\noindent\textbf{[TODO: \texttt{timm}'s index-level \texttt{RASampler} for
-the $3\times$ repeats (both tiers' code places the three copies adjacent in
-one optimizer step; A3 has no repeated augmentation, so no landed run
-carries it);
-neither tier has run ---
-\texttt{r50-a2-bf16-4gpu} / \texttt{r50-a1-bf16-4gpu},
-\texttt{r50-a2accum-jax-4gpu} / \texttt{r50-a1-jax-4gpu}.]}
+\noindent\textbf{[TODO: neither pair has run; the jobs are\\
+\texttt{r50-a2accum-jax-4gpu} / \texttt{r50-a2-bf16-4gpu} and\\
+\texttt{r50-a1-jax-4gpu} / \texttt{r50-a1-bf16-4gpu}.]}
 
 \section{Recap}
 
@@ -8125,30 +8088,26 @@ lake build mobilenetv2-verified-adam
 ./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=5}, the median of the five seeds in
-\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{mobilenetv2\_s5.log}. XLA's startup banner and the
-resident-parameter notice are removed, the network description line is
-wrapped, each interval is wrapped onto an indented continuation, and epochs
-5 through 78 are elided:
+\begin{sloppypar}
+On one RTX 3060, this binary's render and recipe at seed 5, the median of
+the five in \texttt{runs/2026-10-29-imagenette-seeds/}; the log is
+\texttt{mobilenetv2\_s5.log}. XLA's banner, the compile
+timings, the artifact list and the resident-parameter notice are removed, the
+network description line is wrapped, each interval is wrapped onto an indented
+continuation, and epochs 5 through 78 are elided:
+\end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir
              (@mobilenetv2_adam_train_step, 581 outputs, 1 replica)
-             in 10639 ms
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir
-             (@mobilenetv2_fwd, 1 outputs, 1 replica) in 601 ms
+             (@mobilenetv2_fwd, 1 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir
-             (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 304 ms
+             (@mobilenetv2_fwd_eval, 1 outputs, 1 replica)
 MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks,
   full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 →
   head conv-BN-relu6 → GAP → dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
-  xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
-  xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
   train 9469, val 3925; bs 32, MobileNetV2 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
@@ -9073,8 +9032,8 @@ two architectures rather than between two training setups, and it
 is the same move Chapter~\ref{chap:bn} used to compare optimizers against
 one proven gradient. MobileNetV2's own optimizer is RMSProp, which
 \S\ref{sec:mnv2_imagenet} comes back to, and it is rendered at this shape
-too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
-\texttt{mobilenetv2\_rms\_train\_step.mlir} instead.
+too, as \texttt{mobilenetv2\_rms\_train\_step.mlir}; the driver's variant
+switch loads it in place of the AdamW render.
 
 \subsection*{Results}
 \label{sec:mnv2_results}
@@ -9348,9 +9307,8 @@ paper's sentence, so at epoch $420$ the rate is still $0.12 \times
 cosine run gets from annealing to zero comes here from the weight average
 at $0.9999$ that the README scores instead.
 
-The run finished at \textbf{71.84\%} top-1 and \textbf{90.53\%} top-5, the
-weight average at epoch 420 through an fp32 forward, in $48.7$ hours on
-four RTX 4060 Ti. The last $25$ epochs average $71.72\%$, a
+The run finished at \textbf{71.84\%} top-1 and \textbf{90.53\%} top-5 in
+$48.7$ hours on four RTX 4060 Ti. The last $25$ epochs average $71.72\%$, a
 tenth of a point under the endpoint. The paper's figure is $72.0\%$ and the
 README promises ``roughly 72.0''; at $n=50{,}000$ the Wilson 95\% interval
 on this run is $[71.44, 72.23]$, so the README's command is not
@@ -9442,8 +9400,7 @@ lake run mnv2-default-4gpu
 \end{verbatim}
 
 \noindent The run finished at \textbf{71.69\%} top-1 and \textbf{90.52\%}
-top-5, the weight average at epoch 420 through the same fp32 forward, in
-$63.7$ hours on the same four cards.
+top-5 in $63.7$ hours on the same four cards.
 
 \prosesection{The two paths, side by side}
 
@@ -9631,11 +9588,9 @@ which is the \texttt{full} config with \texttt{epochs := 100}: the generated
 trainer differs from \texttt{full}'s in one constant and the shim is
 byte-identical. AdamW at peak $0.004$ for an effective batch of $4096$,
 reached as a $512$-image micro-batch accumulated eight times, so $312$
-optimizer steps an epoch; bf16 convolutions against fp32 master weights; the
-live weights scored every fifth epoch and the last, through an fp32 forward.
-The run finished at \textbf{77.74\%} top-1 and \textbf{93.50\%} top-5,
-the live weights at epoch 100 through an fp32 forward, in about $22.5$ hours
-on four RTX 4060 Ti at about $13.7$ minutes an epoch.
+optimizer steps an epoch; bf16 convolutions against fp32 master weights.
+The run finished at \textbf{77.74\%} top-1 and \textbf{93.50\%} top-5 in
+about $22.5$ hours on four RTX 4060 Ti.
 
 The trainer is feed-bound at this shape, $2.59$\,s an optimizer
 step with the four cards waiting on the input pipeline. Set against
@@ -9739,12 +9694,10 @@ no \texttt{lake} script of its own and launches as:
 scripts/supervise.sh mnv4-full-e100-4gpu
 \end{verbatim}
 
-\noindent The job config is the 500-epoch row's with
-\texttt{LEAN\_MLIR\_EPOCHS=100}, which sets the cosine as well as the loop
-bound, under the run's own checkpoint tag. The run finished at
-\textbf{77.42\%} top-1 and \textbf{93.48\%} top-5, the live weights at epoch
-100 through the same fp32 forward, in about $17.6$ hours on the same four
-cards at about $10.6$ minutes an epoch. It is compute-bound, at
+\noindent The job is the 500-epoch row's config cut to 100 epochs, cosine
+and loop bound together. The run finished at \textbf{77.42\%} top-1 and
+\textbf{93.48\%} top-5 in about $17.6$ hours on the same four cards. It is
+compute-bound, at
 about a quarter of a second a $512$-image micro-step, which is why the proven
 graph finishes five hours ahead of the Python trainer.
 
@@ -9846,9 +9799,8 @@ $\Delta$              & $+1.02$ & $+2.51$ & $-0.69$ & $-0.77$ & $-0.85$ & $-0.35
 \label{fig:mnv4_paths_curve}
 \end{figure}
 
-\medskip\noindent \textbf{[TODO: the schedule. The same two jobs at $500$
-epochs, \texttt{mnv4-full-jax-4gpu} / \texttt{mnv4-full-4gpu},
-${\sim}112 + 88$\,h on the 4060~Ti box, this pair times five, are owed.]}
+\medskip\noindent\textbf{[TODO: the 500-epoch pair has not run; the jobs are
+\texttt{mnv4-full-jax-4gpu} / \texttt{mnv4-full-4gpu}.]}
 
 \section{Recap}
 
@@ -9915,30 +9867,26 @@ lake build efficientnet-verified-adam
 ./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=4}, the median of the five seeds in
-\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{efficientnet\_s4.log}. XLA's startup banner and the
-resident-parameter notice are removed, the network description line is
-wrapped, each interval is wrapped onto an indented continuation, and epochs
-5 through 78 are elided:
+\begin{sloppypar}
+On one RTX 3060, this binary's render and recipe at seed 4, the median of
+the five in \texttt{runs/2026-10-29-imagenette-seeds/}; the log is
+\texttt{efficientnet\_s4.log}. XLA's banner, the compile
+timings, the artifact list and the resident-parameter notice are removed, the
+network description line is wrapped, each interval is wrapped onto an indented
+continuation, and epochs 5 through 78 are elided:
+\end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir
              (@efficientnet_adam_train_step, 740 outputs, 1 replica)
-             in 15122 ms
 [pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir
-             (@efficientnet_fwd, 1 outputs, 1 replica) in 848 ms
+             (@efficientnet_fwd, 1 outputs, 1 replica)
 [pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir
-             (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 529 ms
+             (@efficientnet_fwd_eval, 1 outputs, 1 replica)
 EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k],
   swish + squeeze-excite + batch-norm, 5 downsamples 224→7 →
   head 320→1280 → GAP → dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
-  xla/pjrt verified_mlir/efficientnet_fwd.mlir
-  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
   train 9469, val 3925; bs 32, EfficientNet-B0 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 49 layers, 42016 stat floats
@@ -10840,10 +10788,8 @@ and within $0.1$ on top-5. The run is from scratch at the paper's
 optimizer, learning rate, EMA and activation, with RMSProp at $0.016$,
 AutoAugment, stochastic depth and the exponential staircase, and it
 departs from TensorFlow's code in no line the listing names. It ran
-$42.5$\,hr on four RTX 3060 at $7.3$ minutes per epoch.
-The headline figure is the EMA weights scored through an fp32 forward; the
-same checkpoint's live weights score $76.63\%$ top-1, so the weight average
-is worth $+0.54$ points. The last twenty-five epochs average
+$42.5$ hours on four RTX 3060. The same checkpoint's live weights score
+$76.63\%$ top-1, so the weight average is worth $+0.54$ points. The last twenty-five epochs average
 $77.18\,/\,93.41$, so the final number is the tail's mean, not the top of a
 rise. In four details of the recipe the obvious implementation is not the
 one B0 was trained with.
@@ -10962,8 +10908,7 @@ swish on the stem and the $1\times1$ head. The two paths describe the same
 network.
 
 \medskip\noindent The run finished at $\mathbf{77.21\%}$ top-1 and
-$\mathbf{93.46\%}$ top-5, the EMA weights at epoch 350 through the same
-fp32 forward, in $65.1$ hours on the same four cards.
+$\mathbf{93.46\%}$ top-5 in $65.1$ hours on the same four cards.
 
 \prosesection{The two paths, side by side}
 
@@ -11170,28 +11115,26 @@ lake build convnext-verified-adam
 ./.lake/build/bin/convnext-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=2}, the median of the five seeds in
-\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{convnext\_s2.log}. XLA's
-startup banner and the resident-parameter notices are removed, the network
-description line is wrapped and its trailing LayerNorm note dropped, each
+\begin{sloppypar}
+On one RTX 3060, this binary's render and recipe at seed 2, the median of
+the five in \texttt{runs/2026-10-29-imagenette-seeds/}; the log is
+\texttt{convnext\_s2.log}. XLA's
+banner, the compile timings, the artifact list and the resident-parameter
+notice are removed, the network description line is wrapped and its trailing
+LayerNorm note dropped, each
 interval is wrapped onto an indented continuation, and epochs 5 through 78
 are elided:
+\end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir
              (@convnext_adam_train_step, 549 outputs, 1 replica)
-             in 9362 ms
 [pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir
-             (@convnext_fwd, 1 outputs, 1 replica) in 649 ms
+             (@convnext_fwd, 1 outputs, 1 replica)
 ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN →
   [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN +
   GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/convnext_adam_train_step.mlir
-  xla/pjrt verified_mlir/convnext_fwd.mlir
   train 9469, val 3925; bs 32, ConvNeXt-T adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
 Epoch 1/80: loss=2.294309 lr=0.000333
@@ -12215,9 +12158,7 @@ the inverted-bottleneck $1\times1$s are matmuls that love it. The
 channel LayerNorm and GELU stay in fp32.
 
 The run reached $\mathbf{81.99\%}$ top-1 and
-$\mathbf{95.87\%}$ top-5, the EMA weights at epoch 300 through an fp32
-forward at the paper's protocol, $224$ with a $0.875$ centre crop, in
-$74.1$ hours on four RTX 3060 at $14.8$ minutes an epoch. The same
+$\mathbf{95.87\%}$ top-5 in $74.1$ hours on four RTX 3060. The same
 checkpoint's live weights score $81.92\%$ / $95.74\%$, so weight averaging
 is worth $+0.07$ points at the end of this recipe: the cosine has annealed
 the learning rate to its floor over the final epochs, and weights that have
@@ -12314,9 +12255,8 @@ ran as the chapter's row in \texttt{lake run imagenet}:
 lake run cnx-default-emabf16-4gpu
 \end{verbatim}
 
-\noindent It finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$ top-5, the EMA
-weights at epoch 300 through the same fp32 forward, in $102.7$ hours on the
-same four cards at $20.5$ minutes an epoch. The last twenty-five epochs
+\noindent It finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$
+top-5 in $102.7$ hours on the same four cards. The last twenty-five epochs
 average $82.14$ / $95.93$, so here too the final number is the tail's mean,
 and the same checkpoint's live weights score $81.98\%$, so the average is
 worth $+0.17$ on this path.
@@ -12327,7 +12267,7 @@ Table~\ref{tab:cnx_paths} is the two paths.
 
 \begin{table}[H]
 \centering
-\caption{ConvNeXt-T on ImageNet-1k: the reference and the verified path. Both are the official recipe at 300 epochs, the total batch of $4096$ as sixteen accumulated micro-batches of $4 \times 64$ at $4\mathrm{e}{-3}$, $312$ updates an epoch, no clip, the exact GELU, trunc-normal $0.02$ init, on the same four RTX 3060 cards, the EMA weights at epoch 300 scored over the same $50{,}000$ validation images through an fp32 forward; the rows above the rule are everything that differs.}
+\caption{ConvNeXt-T on ImageNet-1k: the reference and the verified path. Both are the official recipe at 300 epochs, the total batch of $4096$ as sixteen accumulated micro-batches of $4 \times 64$ at $4\mathrm{e}{-3}$, $312$ updates an epoch, no clip, the exact GELU, trunc-normal $0.02$ init, on the same four RTX 3060 cards, the EMA weights at epoch 300 scored over the same $50{,}000$ validation images through an fp32 forward at $224$ with a $0.875$ centre crop; the rows above the rule are everything that differs.}
 \label{tab:cnx_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -12449,15 +12389,12 @@ ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}591{,}464$ & $378.6 \to 158.0$\,ms \
 \end{tabular}
 \end{table}
 
-\noindent Every number in this section was measured on
-4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed at
-$50{,}223{,}688$ and $88{,}591{,}464$, $344$ tensors each, the head
-LayerNorm's $\gamma$ and $\beta$ included.
+\noindent Every number in this section was measured on four RTX 4060 Ti.
 
 \medskip\noindent \textbf{A full schedule.} Table~\ref{tab:cnx_sb_time} is four
 cards, $300$ epochs at the jobs' own shape --- $64$ per replica, sixteen
 micro-batches accumulated to the official $4096$, $312$ updates an epoch ---
-with each path's own trainer timed on real ImageNet (the 2026-10-12 smokes).
+with each path's own trainer timed on real ImageNet.
 
 \begin{table}[H]
 \centering
@@ -12474,23 +12411,13 @@ ConvNeXt-B & $352$ & $151$\,h \;($6.3$\,d) & $491$ & $219$\,h \;($9.1$\,d) \\
 \end{tabular}
 \end{table}
 
-\noindent The verified steps are fed, $3$--$7$\,ms of them waiting on the shim.
-All four are compute-bound.
+\medskip\noindent\textbf{What is queued.} Both pairs exist: ConvNeXt-T's
+recipe as the section above ran it, with drop-path at the paper's $0.4$ for
+S and $0.5$ for B, the EMA weights scored, and a $288$-pixel forward for
+\texttt{timm}'s test protocol.
 
-\medskip\noindent\textbf{What is queued.} Both pairs exist. The verified
-jobs are \texttt{cnx\{s,b\}-default-emabf16-4gpu}, on the renders
-\texttt{convnext\{s,b\}in\_\allowbreak emaaccdp16xwxdroperfbf16}, and their
-references are \texttt{cnx\{s,b\}-default-jax-4gpu}. In:
-ConvNeXt-T's recipe as the section above ran it --- the official batch $4096$ as
-$16$ accumulated micro-batches of $64$ per replica, no clip --- with
-drop-path at the paper's $0.4$ for S and $0.5$ for B, EMA scored,
-\texttt{cnxInit} on both paths, and \texttt{\_fwd\_s288} forwards for
-\texttt{timm}'s test protocol. The accumulation is the recipe's, not
-memory's: at $64$ per replica the accumulating renders peak at $7.21$\,GiB
-for S and $10.42$ for B.
-
-\noindent\textbf{[TODO: as T's; neither has run ---\\
-\texttt{cnxs-default-jax-4gpu} / \texttt{cnxs-default-emabf16-4gpu},\\
+\noindent\textbf{[TODO: neither pair has run; the jobs are\\
+\texttt{cnxs-default-jax-4gpu} / \texttt{cnxs-default-emabf16-4gpu} and\\
 \texttt{cnxb-default-jax-4gpu} / \texttt{cnxb-default-emabf16-4gpu}.]}
 
 \section{Recap}
@@ -12559,31 +12486,26 @@ lake build vit-verified-adam
 ./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
 
-On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=1}, the median of the five seeds in
-\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{vit\_s1.log}. XLA's startup banner is removed, the network
-description line is wrapped, the per-step lines are dropped, each interval
-is wrapped onto an indented continuation, and the middle of the run is
-elided:
+\begin{sloppypar}
+On one RTX 3060, this binary's render and recipe at seed 1, the median of
+the five in \texttt{runs/2026-10-29-imagenette-seeds/}; the log is
+\texttt{vit\_s1.log}. XLA's banner, the compile
+timings, the artifact list and the resident-parameter notice are removed, the
+network description line is wrapped, the per-step lines are dropped, each
+interval is wrapped onto an indented continuation, and the middle of the run
+is elided:
+\end{sloppypar}
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
-[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir
              (@vit_adam_train_step, 603 outputs, 1 replica)
-             in 7710 ms
 [pjrt_ffi] compiled verified_mlir/vit_fwd.mlir
-             (@vit_fwd, 1 outputs, 1 replica) in 2001 ms
+             (@vit_fwd, 1 outputs, 1 replica)
 ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer
   blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10)
   via the VERIFIED renderer → XLA/PJRT → GPU
-  xla/pjrt verified_mlir/vit_adam_train_step.mlir
-  xla/pjrt verified_mlir/vit_fwd.mlir
   train 9469, val 3925; bs 32, ViT-Tiny adam
     (cosine+warmup 5ep, baseLR 0.000300), He init
-[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter
-             tensors (63.2 MB) on 1 device; they stop crossing PCIe
-             from here
 Epoch 1/80: loss=2.127570 lr=0.000060
   epoch 1: val_acc = 1376/3925 = 35.057325%  top5 = 3123/3925 = 79.566879%
     [95% CI 33.58–36.56]
@@ -14525,8 +14447,7 @@ LayerNorm/softmax that bf16 leaves alone. The job is
 \texttt{scripts/jobs/vit-default-jax-4gpu.conf}.
 
 The run finished at $\mathbf{71.64\%}$ top-1 and $\mathbf{90.98\%}$
-top-5, the EMA weights at epoch 300 through an fp32 forward, in $48.3$
-hours on four RTX 3060 at $9.7$ minutes an epoch.
+top-5 in $48.3$ hours on four RTX 3060.
 DeiT-Ti without distillation publishes $72.2\%$ / $91.1\%$ for
 the live weights; this run scores the shadow during training, and its
 live weights, rescored afterwards, are $71.87\%$ / $91.12\%$ (below). At
@@ -14630,9 +14551,8 @@ lake run vit-default-emabf16-4gpu
 \end{verbatim}
 
 \noindent The run finished at $\mathbf{71.61\%}$ top-1 and
-$\mathbf{90.95\%}$ top-5, the EMA weights at epoch 300 through the same
-fp32 forward, in $62.6$ hours on the same four cards at $12.5$ minutes an
-epoch. Rescored at the live region, the final checkpoint
+$\mathbf{90.95\%}$ top-5 in $62.6$ hours on the same four cards. Rescored
+at the live region, the final checkpoint
 gives $71.73\%$ / $91.08\%$.
 
 \prosesection{The two paths, side by side}
@@ -14781,19 +14701,15 @@ ViT-B  & $12$ blocks, $D{=}768$ / 12 heads & $86{,}567{,}656$ & $1295.6 \to 745.
 \end{tabular}
 \end{table}
 
-\noindent Counts \texttt{\#guard} against DeiT-S's $22.05$\,M and DeiT-B's
-$86.57$\,M. The times are at four replicas because S and B have no
-single-device render at all, on the first renders at $128$ per device. The jobs
-of Table~\ref{tab:vit_sb_time} run DeiT's $1024$
-instead --- S as four replicas of $256$ in one shot, B as two accumulated
-micro-batches of $4 \times 128$ --- at the $10^{-3}$ that batch sets, which
-took one renderer feature, the accumulating optimizer tail, beyond the
-\texttt{\#eval} lines.
+\noindent The times are at four replicas because S and B have no
+single-device render. The jobs of Table~\ref{tab:vit_sb_time} run DeiT's
+$1024$, S as four replicas of $256$ and B as two accumulated micro-batches
+of $4 \times 128$.
 
 \medskip\noindent \textbf{A full schedule.} Table~\ref{tab:vit_sb_time} is four
 cards, $300$ epochs at the jobs' own shape --- DeiT's $1024$, $1{,}251$
 optimizer steps an epoch --- with each path's own trainer timed on real
-ImageNet (the 2026-10-11 smokes, on the 4060~Ti box).
+ImageNet.
 
 \begin{table}[H]
 \centering
@@ -14810,34 +14726,13 @@ ViT-B & $1{,}700$ & $180$\,h \;($7.5$\,d) & $1{,}718$ & $187$\,h \;($7.8$\,d) \\
 \end{tabular}
 \end{table}
 
-\noindent The JAX side accumulates two of $512$, and ViT-B's verified render two
-micro-steps of $4 \times 128$ at $859$\,ms each. These are fed steps, not
-graph times, and both verified steps are compute-bound, $9$ and $5$\,ms of
-them waiting on the shim.
+\medskip\noindent\textbf{What is queued.} Both pairs exist: Tiny's recipe
+as \S\ref{sec:vit_imagenet} ran it, at DeiT's $1024$, plus the one row
+Tiny's pair ran without, the patch-embedding bias at PyTorch's
+\texttt{Conv2d} default on both paths.
 
-\medskip\noindent\textbf{What is queued.} Both pairs exist. The verified jobs
-are \texttt{vits-default-emabf16-4gpu} on
-\texttt{vitsin\_\allowbreak emadp256x4\allowbreak wxdropeps0000001smxerfbf16},
-DeiT's $1024$ as four replicas of $256$ in one shot, and
-\texttt{vitb-default-emabf16-4gpu} on
-\texttt{vitbin\_\allowbreak emaaccdp2x128x4\allowbreak wxdropeps0000001smxerfbf16},
-the same $1024$ as two accumulated micro-batches of $4 \times 128$, exact
-under LayerNorm --- Tiny's recipe as \S\ref{sec:vit_imagenet} ran it:
-\texttt{vitInit}, LayerNorm $\varepsilon = 10^{-6}$, the $10^{-5}$
-learning-rate floor, EMA at $0.99996$ constant from step $0$, no clip, the
-exact erf GELU, the softmax max-shifted, bf16 under an fp32 patch embedding
-and head, plus the one row Tiny's pair ran without: the patch-embedding
-bias starts at PyTorch's \texttt{Conv2d} default, $U(\pm 1/\sqrt{768})$,
-on both paths --- and their references are
-\texttt{vits-accum-jax-4gpu} and \texttt{vitb-accum-jax-4gpu}, both
-accumulating $2\times512$ to the same $1024$ (the JAX ViT-S step does not
-fit the arena in one shot where the verified render does). ViT-S's render
-peaks at $10.75$\,GiB of the $11.68$\,GiB default arena; ViT-B's at
-$13.83$\,GiB, so its job raises the allocator fraction to $0.97$
-($15.11$\,GiB).
-
-\noindent\textbf{[TODO: as Tiny's; neither has run ---\\
-\texttt{vits-accum-jax-4gpu} / \texttt{vits-default-emabf16-4gpu},\\
+\noindent\textbf{[TODO: neither pair has run; the jobs are\\
+\texttt{vits-accum-jax-4gpu} / \texttt{vits-default-emabf16-4gpu} and\\
 \texttt{vitb-accum-jax-4gpu} / \texttt{vitb-default-emabf16-4gpu}.]}
 
 \section{Recap}
