@@ -192,7 +192,7 @@ right. That's the pipeline this book is built around.
 \section*{Why image recognition}
 
 Image classification is where a training run can be checked cheaply,
-sharply and legibly. Cheap: every rung up to Imagenette trains in under
+sharply and legibly. Cheap: every rung up to Imagenette trains in about
 an hour on one consumer card, so the ladder below ImageNet is an afternoon
 to rerun, and the ImageNet rungs are there because that is where the
 baselines live. Sharp: those baselines are known to the decimal, so when
@@ -495,15 +495,15 @@ group of verified trainers.
 \begin{verbatim}
 lake run mnist        # verified MNIST: linear, MLP, CNN              (~1 min)
 lake run cifar        # ch.4 cifar8w: SGD/momentum/AdamW x 3 norms   (~13 min)
-lake run imagenette   # the Part-1 nets at 224^2, 80-epoch AdamW      (~6 h)
+lake run imagenette   # the Part-1 nets at 224^2, 80-epoch AdamW      (~6.5 h)
 lake run imagenet     # ImageNet-1k on 4 GPUs: plans; `start` runs it (Appendix C)
 \end{verbatim}
 
-The three times are XLA wall-clocks on one RTX 4060 Ti, resident; the fourth
+The three times are XLA wall-clocks on one consumer card, resident; the fourth
 tier is weeks of four-card time and has Appendix~\ref{app:imagenet_tier} to
 itself. The Imagenette figure is the five chapter nets at their chapters'
-times, about 3.7 hours between them, plus ResNet-50 (about an hour and a
-half) and MobileNetV4 (under an hour), which ride in the same tier. Each
+times, about 4.3 hours between them, plus ResNet-50 (an hour and twenty
+minutes) and MobileNetV4 (about forty-five minutes), which ride in the same tier. Each
 trainer's transcript is teed to \texttt{runs/<date>-<trainer>/}. Each tier
 also has an \texttt{-iree} twin, which is Appendix~\ref{app:getting_started}'s
 business. The tiers bundle these targets, and any one builds on its own:
@@ -5324,11 +5324,11 @@ stated up front so the graphs are no surprise:
   normalized ladder in bf16 leaves the optimizer ordering exactly where it
   was, with medians moving by $-0.21$, $+0.57$ and $+1.02$ --- every one of
   them smaller than the spread between repeated runs of a single
-  configuration. Drop the normalization and bf16 starts to show: the
-  medians move by up to $1.4$ points and one seed collapses. The
-  eight-layer stack is fragile, and the same runs show it, but it is
-  fragile in fp32 too. What breaks the network is depth without
-  normalization, not the number format.
+  configuration. Drop the normalization and the answer is the same: the
+  medians move by under a point, inside the seed ranges. The
+  eight-layer stack is fragile, and the same runs show it, in fp32: one
+  momentum run of the bare net never leaves chance. What breaks the
+  network is depth without normalization, not the number format.
 
 \item \textbf{The head barely matters.} This 2$\times$512 head carries
   about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
@@ -5581,26 +5581,26 @@ the median of five runs each.
 };
 \addlegendentry{BN, batch statistics}
 \addplot[teal!60!black, mark=*, mark options={fill=teal!60!black}] coordinates {
-(1,41.19) (2,52.47) (3,55.65) (4,59.07) (5,64.14) (6,65.53) (7,66.81) (8,68.33) (9,66.86) (10,70.38) (11,71.04) (12,72.00) (13,71.77) (14,71.47) (15,72.30) (16,73.05) (17,72.70) (18,72.85) (19,73.04) (20,73.69) (21,73.64) (22,73.81) (23,74.62) (24,72.84) (25,73.95) (26,73.99) (27,74.04) (28,73.90) (29,74.25) (30,74.75) (31,74.50) (32,75.29) (33,74.77) (34,74.73) (35,74.27) (36,74.04) (37,74.48) (38,74.76) (39,74.78) (40,74.50)
+(1,44.22) (2,53.31) (3,55.74) (4,58.31) (5,64.39) (6,66.18) (7,66.37) (8,68.88) (9,67.22) (10,70.51) (11,71.34) (12,71.54) (13,72.29) (14,72.33) (15,72.37) (16,73.39) (17,73.22) (18,72.28) (19,73.09) (20,74.00) (21,74.53) (22,74.14) (23,74.68) (24,73.39) (25,74.41) (26,74.56) (27,74.65) (28,74.21) (29,74.91) (30,74.95) (31,74.78) (32,75.12) (33,75.19) (34,74.95) (35,74.72) (36,74.21) (37,74.64) (38,75.09) (39,74.81) (40,74.80)
 };
 \addlegendentry{BN, per image}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,13.43) (2,34.55) (3,40.84) (4,43.54) (5,49.04) (6,48.40) (7,53.08) (8,53.52) (9,52.90) (10,58.18) (11,58.84) (12,58.73) (13,60.17) (14,59.54) (15,60.90) (16,64.71) (17,63.81) (18,63.73) (19,65.63) (20,67.15) (21,65.10) (22,65.79) (23,67.21) (24,66.78) (25,66.26) (26,68.24) (27,67.75) (28,68.92) (29,67.95) (30,68.60) (31,69.62) (32,69.24) (33,68.86) (34,69.08) (35,68.34) (36,68.86) (37,68.39) (38,69.48) (39,70.15) (40,68.75)
+(1,16.41) (2,33.89) (3,44.18) (4,47.76) (5,51.79) (6,53.23) (7,54.06) (8,56.46) (9,53.95) (10,59.19) (11,61.85) (12,60.30) (13,62.09) (14,62.53) (15,64.62) (16,64.13) (17,65.59) (18,66.53) (19,67.26) (20,67.76) (21,69.04) (22,67.40) (23,67.14) (24,67.87) (25,68.73) (26,70.22) (27,70.17) (28,70.78) (29,70.67) (30,70.83) (31,69.77) (32,71.38) (33,71.19) (34,70.64) (35,70.64) (36,69.38) (37,70.84) (38,69.73) (39,71.34) (40,69.17)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
-\caption{CIFAR-10 test accuracy per epoch under three normalizations: the wide 8-conv net, plain SGD at a constant lr~0.1 on the shared pipeline, 40 epochs, through the verified renderer, the median of five runs per curve (\texttt{runs/2026-10-24-bbn-seeds/} for batch statistics, \texttt{runs/2026-09-01-cifar8w-6arm-constlr/} for the other two).}
+\caption{CIFAR-10 test accuracy per epoch under three normalizations: the wide 8-conv net, plain SGD at a constant lr~0.1 on the shared pipeline, 40 epochs, through the verified renderer, the median of five runs per curve (\texttt{runs/2026-10-24-bbn-seeds/} for batch statistics, \texttt{runs/2026-10-29-small-seeds/} for the other two).}
 \label{fig:cifar_bn_curves}
 \end{figure}
 
-\noindent The final points span 74.9 to 77.9 at batch statistics, 74.1
-to 75.2 per image, and 68.0 to 70.7 without.
+\noindent The final points span 74.9 to 77.9 at batch statistics, 73.4
+to 75.5 per image, and 69.0 to 72.0 without.
 
 \medskip\noindent Both normalized nets lead from the first epoch --- 44\%
-and 41\% against the bare net's 13\% --- and never give the lead back,
-the batch form finishing 8.0 points up (76.8\% vs 68.8\%) and the
-per-image form 5.8. The un-normalized net traces the same arc roughly ten
+each against the bare net's 16\% --- and never give the lead back,
+the batch form finishing 7.6 points up (76.8\% vs 69.2\%) and the
+per-image form 5.6. The un-normalized net traces the same arc roughly ten
 epochs behind, and the gap never closes: it is still losing at epoch 40
 by more than the spread of any set of runs. The batch curve is also the
 jagged one: its test reads swing where the per-image curve's do not,
@@ -5608,9 +5608,9 @@ because its test forward runs on running statistics that lag the
 weights, while the per-image net evaluates with the statistics it trained
 on.
 
-\medskip\noindent The first epoch is the conditioning on its own. Thirteen
+\medskip\noindent The first epoch is the conditioning on its own. Sixteen
 per cent is barely above chance on ten classes, and the un-normalized net
-spends four epochs getting to where the normalized ones start. That head
+spends three epochs getting to where the normalized ones start. That head
 start is what the three-term backward
 (Theorem~\ref{thm:bnNormalizeHasVJP}) buys, and it is worth more the
 deeper the stack, which is the trend that makes BN standard equipment by
@@ -5626,15 +5626,15 @@ observed range across five runs.
 
 \begin{table}[H]
 \centering
-\caption{Final CIFAR-10 test accuracy by optimizer, without BatchNorm and with it in both forms: the median of five runs, with the range from lowest run to highest in parentheses (\texttt{runs/2026-09-01-cifar8w-6arm-constlr/}, \texttt{runs/2026-10-24-bbn-seeds/}).}
+\caption{Final CIFAR-10 test accuracy by optimizer, without BatchNorm and with it in both forms: the median of five runs, with the range from lowest run to highest in parentheses (\texttt{runs/2026-10-29-small-seeds/}, \texttt{runs/2026-10-24-bbn-seeds/}). $\dagger$: one of the five runs never left chance ($10.0\%$); the range is over the other four.}
 \label{tab:cifar_optimizers}
 \begin{tabular}{l c c c}
 \hline
        & SGD & momentum & AdamW \\
        & (lr 0.1) & ($\mu$ 0.9, lr 0.02) & (lr $10^{-3}$) \\
 \hline
-no BN                & 68.8 {\footnotesize (2.7)} & 72.2 {\footnotesize (3.3)} & 72.8 {\footnotesize (2.8)} \\
-BN, per image        & 74.5 {\footnotesize (1.1)} & 76.3 {\footnotesize (1.0)} & 74.3 {\footnotesize (0.2)} \\
+no BN                & 69.2 {\footnotesize (3.0)} & 73.7 {\footnotesize (1.7)}$^{\dagger}$ & 72.8 {\footnotesize (1.5)} \\
+BN, per image        & 74.8 {\footnotesize (2.1)} & 76.4 {\footnotesize (0.6)} & 74.2 {\footnotesize (1.2)} \\
 BN, batch statistics & 76.8 {\footnotesize (3.0)} & \textbf{77.4 {\footnotesize (2.2)}} & 75.7 {\footnotesize (2.3)} \\
 \hline
 \end{tabular}
@@ -5651,17 +5651,17 @@ conditioning.
 
 \medskip\noindent\textbf{Reading down the columns recovers Lever~1, and
 this time it recovers it everywhere.} Batch statistics are ahead in all
-three --- $+8.0$ under SGD, $+5.2$ under momentum, $+2.9$ under AdamW ---
-and the per-image form by $+5.8$, $+4.2$ and $+1.5$. The benefit shrinks
+three --- $+7.6$ under SGD, $+3.7$ under momentum, $+2.9$ under AdamW ---
+and the per-image form by $+5.6$, $+2.7$ and $+1.4$. The benefit shrinks
 as the optimizer gets stronger, which is the familiar reading: a better
 update rule can partly substitute for better conditioning, and never
 entirely.
 
 \medskip\noindent\textbf{Where the spread is.} Read the parenthesised
-ranges. Without BN, five runs of the same command land 2.7 to 3.3 points
-apart under every optimizer; at batch statistics, 3.0, 2.2 and 2.3; per
-image, 1.1, 1.0 and 0.2. So normalization is not what makes a single
-run's number mean something. What does is where the evaluation's
+ranges. Without BN, five runs of the same command land 1.5 to 3.0 points
+apart, and one momentum run never leaves chance; at batch statistics, 3.0,
+2.2 and 2.3; per image, 2.1, 0.6 and 1.2. So normalization is not what
+makes a single run's number mean something. What does is where the evaluation's
 statistics come from. The per-image net scores each test image with the
 statistics it trained on. The batch-statistics net scores on running
 means and variances, an average over roughly the last hundred steps
@@ -5698,10 +5698,13 @@ proved theorem.
 chapter derives, and they say it in exact real arithmetic. They say
 nothing about whether forty epochs of binary32 updates stay in range,
 and nothing at all about the progress line: the scalar loss it prints is
-a report-only op outside the proven graph, which is exactly where the
-\texttt{NaN} above came from. A verified gradient is not a guarantee of
-numerical stability, and the low-precision seed that collapses to chance
-in the next section is what that distinction looks like when it bites.
+a report-only op outside the proven graph, and four of the five no-BN
+AdamW runs print \texttt{loss=NaN} there in their last ten epochs while
+the test accuracy they report is intact. A verified gradient is not a
+guarantee of numerical stability either, and the momentum run of the bare
+net that sits at chance for all forty epochs, the $\dagger$ in
+Table~\ref{tab:cifar_optimizers}, is what that distinction looks like when
+it bites: the gradient was exact and the loss never left $\ln 10$.
 
 \medskip\noindent\textbf{One caution about what this table measures.} An
 ablation measures the thing you varied only if everything else is held
@@ -5772,24 +5775,21 @@ low bf16 AdamW seeds at $72$ and $73$ make that the widest row on the
 board, and the bf16 momentum row, five seeds within $0.6$ of each other,
 is the narrowest.
 
-\medskip\noindent The un-normalized net answers differently, and the
-difference is the interesting part. Run the same comparison there (the
-\texttt{fp32b} and \texttt{bf16} arms of
-\texttt{runs/2026-09-01-cifar8w-6arm-constlr/}) and the medians move by
-$-1.40$, $-0.56$ and $-0.09$, and one bf16 momentum seed collapses to
-chance where no fp32 seed does. Normalization is doing more
-than accelerating training: it is absorbing the perturbation. A net that
-was already the less repeatable one in fp32 --- the three-point ranges
-of the previous section --- is the one where sixteen fewer mantissa
-bits show up at all.
+\medskip\noindent The un-normalized net answers the same way. Run the
+comparison there (\texttt{runs/2026-10-29-nobnprec-seeds/}, the same three arms
+in fp32 and in bf16, five seeds each) and the medians move by $+0.80$,
+$+0.08$ and $-0.30$, each inside its fp32 row's spread ($0.95$, $2.00$ and
+$1.87$), and all thirty runs train. Sixteen fewer mantissa bits do not
+register on this net at five seeds, with normalization or without it; what
+the bare net is fragile to is the optimizer (above), not the arithmetic.
 
-\medskip\noindent The same pattern holds for a lever we did not mean to
-pull. Changing the op family at fixed fp32 --- per-example to batched, the
-same arithmetic throughout --- moves the un-normalized net by $+2.0$ on
-SGD and $+1.7$ on momentum, which is larger than anything precision does
-to it. On the per-image net the identical change is worth $-0.11$,
-$+0.37$ and $+0.19$. The rendering path is a lever, it is invisible to the
-proofs, and normalization damps it too.
+\medskip\noindent The same holds for a lever we did not mean to pull.
+Changing the op family at fixed fp32 --- per-example to batched, the same
+arithmetic throughout --- moves the un-normalized net by $+0.7$, $-0.3$ and
+$+0.9$ (the no-BN row of Table~\ref{tab:cifar_optimizers} against the fp32
+arms here), inside the seed ranges too. The rendering path is a lever, it
+is invisible to the proofs, and on this net it does not move the number;
+only running both says so.
 
 \medskip\noindent An fp8 (E4M3) arm exists in the repository and is left
 out of this table on purpose: its render rounds the forward convolutions
@@ -5895,8 +5895,8 @@ curves and the table measure.
 The two levers interact, and the momentum column is where that shows.
 Momentum makes each step longer and more consistent, which is why it
 finishes first, and a longer step through eight unnormalized layers is also
-what let one low-precision momentum run collapse to chance. Normalization
-is what makes the aggressive optimizer survivable. That is the standard
+what left one momentum run of the bare net at chance for all forty epochs.
+Normalization is what makes the aggressive optimizer survivable. That is the standard
 account of why the two arrived together, and why every image architecture
 since 2015 bakes a normalization layer in by default. At larger depth
 the effect is stronger still, and it is what opens up the learning rates
@@ -6089,10 +6089,9 @@ lake build resnet34-verified-adam
 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), this binary's render and recipe under
-\texttt{LEAN\_MLIR\_SEED=2}, seed 2 of the five that
-\S\ref{sec:r34_ablation} averages
-(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/full\_s2.log}). XLA's
+On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=4}, the median of the five seeds in
+\texttt{runs/2026-10-29-imagenette-seeds/} (\texttt{resnet34\_s4.log}). XLA's
 startup banner and the resident-parameter
 notices are removed, the network description line is wrapped, each interval is
 wrapped onto an indented continuation, and epochs 5 through 75 are elided:
@@ -6101,11 +6100,11 @@ wrapped onto an indented continuation, and epochs 5 through 75 are elided:
 [pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
 [pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir
-             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 6127 ms
+             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 8418 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir
-             (@resnet34_fwd, 1 outputs, 1 replica) in 596 ms
+             (@resnet34_fwd, 1 outputs, 1 replica) in 886 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir
-             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 293 ms
+             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 318 ms
 Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→
   [3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts,
   no conv biases; 56→28→14→7→GAP→dense)
@@ -6116,35 +6115,36 @@ Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool�
   train 9469, val 3925; bs 32, ResNet-34 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
-Epoch 1/80: loss=1.971035 lr=0.000333
-  epoch 1: val_acc = 1239/3925 = 31.566879%  top5 = 2766/3925 = 70.471338%
-    [95% CI 30.13–33.04]
-Epoch 2/80: loss=1.553382 lr=0.000667
-  epoch 2: val_acc = 1471/3925 = 37.477707%  top5 = 3123/3925 = 79.566879%
-    [95% CI 35.98–39.00]
-Epoch 3/80: loss=1.381944 lr=0.001000
-  epoch 3: val_acc = 1880/3925 = 47.898089%  top5 = 3159/3925 = 80.484076%
-    [95% CI 46.34–49.46]
-Epoch 4/80: loss=1.311593 lr=0.001000
-  epoch 4: val_acc = 1851/3925 = 47.159236%  top5 = 3547/3925 = 90.369427%
-    [95% CI 45.60–48.72]
-Epoch 76/80: loss=0.502131 lr=0.000007
-  epoch 76: val_acc = 3536/3925 = 90.089172%  top5 = 3859/3925 = 98.318471%
-    [95% CI 89.11–90.99]
-Epoch 79/80: loss=0.502245 lr=0.000000
-  epoch 79: val_acc = 3535/3925 = 90.063694%  top5 = 3859/3925 = 98.318471%
-    [95% CI 89.09–90.96]
-Epoch 80/80: loss=0.502085 lr=0.000000
-  epoch 80: val_acc = 3535/3925 = 90.063694%  top5 = 3859/3925 = 98.318471%
-    [95% CI 89.09–90.96]
+Epoch 1/80: loss=1.989044 lr=0.000333
+  epoch 1: val_acc = 1432/3925 = 36.484076%  top5 = 3057/3925 = 77.885350%
+    [95% CI 34.99–38.00]
+Epoch 2/80: loss=1.562169 lr=0.000667
+  epoch 2: val_acc = 1265/3925 = 32.229299%  top5 = 2695/3925 = 68.662420%
+    [95% CI 30.79–33.71]
+Epoch 3/80: loss=1.407459 lr=0.001000
+  epoch 3: val_acc = 1697/3925 = 43.235669%  top5 = 3437/3925 = 87.566879%
+    [95% CI 41.69–44.79]
+Epoch 4/80: loss=1.310393 lr=0.001000
+  epoch 4: val_acc = 2102/3925 = 53.554140%  top5 = 3260/3925 = 83.057325%
+    [95% CI 51.99–55.11]
+Epoch 76/80: loss=0.502007 lr=0.000007
+  epoch 76: val_acc = 3525/3925 = 89.808917%  top5 = 3874/3925 = 98.700637%
+    [95% CI 88.82–90.72]
+Epoch 79/80: loss=0.502074 lr=0.000000
+  epoch 79: val_acc = 3524/3925 = 89.783439%  top5 = 3872/3925 = 98.649682%
+    [95% CI 88.80–90.69]
+Epoch 80/80: loss=0.501840 lr=0.000000
+  epoch 80: val_acc = 3524/3925 = 89.783439%  top5 = 3872/3925 = 98.649682%
+    [95% CI 88.80–90.69]
 done (trained ResNet-34 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 35 seconds each, 47 minutes in all, and
-\textbf{90.06\%} top-1 with \textbf{98.32\%} top-5 on Imagenette's 3,925-image
-validation split. This is one seed of five; the five land at
-$89.99 \pm 0.32$ top-1 (\S\ref{sec:r34_ablation}), and that mean is the
-number every later chapter compares against.
+Eighty epochs at about 40 seconds each, 53 minutes in all, and
+\textbf{89.78\%} top-1 with \textbf{98.65\%} top-5 on Imagenette's 3,925-image
+validation split. This is the median seed of five; the five land between
+$89.68$ and $90.22$ top-1, and the median is the number every later chapter
+compares against. The ablation in \S\ref{sec:r34_ablation} trains its own
+five seeds per arm and takes every difference inside that set.
 
 \prosesection{The residual block: ask for the difference, not the function}
 
@@ -6893,14 +6893,14 @@ post-2015 vision architecture in the bestiary.
 \subsection*{Results}
 \label{sec:r34_results}
 
-\S\ref{sec:r34_runit} has the run, and its five-seed $89.99 \pm 0.32$ is the
+\S\ref{sec:r34_runit} has the run, and its five-seed median of $89.78$ is the
 first row of Table~\ref{tab:imagenette_five}: the column
 Chapters~\ref{chap:depthwise} through~\ref{chap:attention} fill in, one network
 a chapter, on the same data, the same eighty epochs and the same card. That is
 the going rate for a scratch-trained ResNet-34 at this resolution and data
 size.
 
-\medskip\noindent\textbf{Where the time goes.} A step is about 120\,ms at
+\medskip\noindent\textbf{Where the time goes.} A step is about 134\,ms at
 batch 32, 295 steps to the epoch, and the four \texttt{.residualStage} groups
 are most of it. The first stage alone, at 64 channels on the $56 \times 56$
 grid, is $3 \times 3 \times 64 \times 64$ multiply-accumulates per output
@@ -8116,7 +8116,7 @@ efficiency without losing much expressive power.
 \label{sec:mnv2_runit}
 
 Before the factorization, train the factorized network. Four commands,
-and about thirty-five minutes of GPU time:
+and under forty minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
@@ -8125,44 +8125,57 @@ lake build mobilenetv2-verified-adam
 ./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-12-mnv2-imagenette-xla-cuda/}. XLA's startup banner
-is removed, the network description line is wrapped, and the middle of
-the run is elided:
+On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=5}, the median of the five seeds in
+\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{mobilenetv2\_s5.log}. XLA's startup banner and the
+resident-parameter notice are removed, the network description line is
+wrapped, each interval is wrapped onto an indented continuation, and epochs
+5 through 78 are elided:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir
-             (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 8101 ms
+             (@mobilenetv2_adam_train_step, 581 outputs, 1 replica)
+             in 10639 ms
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir
-             (@mobilenetv2_fwd, 1 outputs, 1 replica) in 665 ms
+             (@mobilenetv2_fwd, 1 outputs, 1 replica) in 601 ms
 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir
-             (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 250 ms
+             (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 304 ms
 MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks,
   full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 →
   head conv-BN-relu6 → GAP → dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
   train 9469, val 3925; bs 32, MobileNetV2 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
-Epoch 1/80: loss=2.121050 lr=0.000333
-  epoch 1: val_acc = 947/3925 = 24.127389%  top5 = 2392/3925 = 60.942675%
-Epoch 2/80: loss=1.784318 lr=0.000667
-  epoch 2: val_acc = 680/3925 = 17.324841%  top5 = 2357/3925 = 60.050955%
-Epoch 3/80: loss=1.590689 lr=0.001000
-  epoch 3: val_acc = 1596/3925 = 40.662420%  top5 = 3423/3925 = 87.210191%
-Epoch 4/80: loss=1.446373 lr=0.001000
-  epoch 4: val_acc = 1851/3925 = 47.159236%  top5 = 3428/3925 = 87.337580%
-Epoch 79/80: loss=0.517682 lr=0.000000
-  epoch 79: val_acc = 3506/3925 = 89.324841%  top5 = 3874/3925 = 98.700637%
-Epoch 80/80: loss=0.517213 lr=0.000000
-  epoch 80: val_acc = 3503/3925 = 89.248408%  top5 = 3873/3925 = 98.675159%
+Epoch 1/80: loss=2.092185 lr=0.000333
+  epoch 1: val_acc = 931/3925 = 23.719745%  top5 = 2521/3925 = 64.229299%
+    [95% CI 22.42–25.08]
+Epoch 2/80: loss=1.790446 lr=0.000667
+  epoch 2: val_acc = 870/3925 = 22.165605%  top5 = 3026/3925 = 77.095541%
+    [95% CI 20.89–23.49]
+Epoch 3/80: loss=1.607848 lr=0.001000
+  epoch 3: val_acc = 1669/3925 = 42.522293%  top5 = 3184/3925 = 81.121019%
+    [95% CI 40.98–44.08]
+Epoch 4/80: loss=1.458623 lr=0.001000
+  epoch 4: val_acc = 2235/3925 = 56.942675%  top5 = 3566/3925 = 90.853503%
+    [95% CI 55.39–58.48]
+Epoch 79/80: loss=0.515476 lr=0.000000
+  epoch 79: val_acc = 3485/3925 = 88.789809%  top5 = 3870/3925 = 98.598726%
+    [95% CI 87.76–89.74]
+Epoch 80/80: loss=0.515006 lr=0.000000
+  epoch 80: val_acc = 3488/3925 = 88.866242%  top5 = 3869/3925 = 98.573248%
+    [95% CI 87.84–89.81]
 done (trained MobileNetV2 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
-\textbf{89.25\%} top-1 with \textbf{98.68\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $89.32\%$.
+Eighty epochs at about 28 seconds each, thirty-eight minutes in total, and
+\textbf{88.87\%} top-1 with \textbf{98.57\%} top-5 on Imagenette's
+3,925-image validation split.
 \S\ref{sec:mnv2_results} sets that against ResNet-34, which ran the same
 data, the same recipe and the same eighty epochs through $9.5\times$ the
 parameters.
@@ -8282,8 +8295,8 @@ MobileNetV2 stacks 17 inverted-residual blocks across seven stages
 average pool, and a 1280-to-10 dense head. That is the same
 stem-stages-head template as ResNet-34. Total: 2.24M parameters,
 9.5$\times$ fewer than ResNet-34, at a modest accuracy cost
-($89.25\%$ against ResNet-34's $89.99\%$ on Imagenette, both
-measured in this book). For mobile and embedded deployment that
+($88.87\%$ against ResNet-34's $89.78\%$ on Imagenette, both
+measured in this book, five seeds each). For mobile and embedded deployment that
 trade is the whole reason MobileNet exists.
 
 \section{The theorems}
@@ -9066,19 +9079,19 @@ too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
 \subsection*{Results}
 \label{sec:mnv2_results}
 
-Against ResNet-34's $89.99 \pm 0.32$ on the same data, the same recipe and
-the same eighty epochs, MobileNetV2's $89.25\%$ is \textbf{0.74 points of
+Against ResNet-34's $89.78$ on the same data, the same recipe and
+the same eighty epochs, MobileNetV2's $88.87\%$ is \textbf{0.9 points of
 top-1} for \textbf{9.5$\times$ fewer parameters} (2.24M against 21.3M),
-inside one run's own $\pm 0.97$ interval, with a fifth of a point more
-top-5. That is the depthwise-separable trade, and on this evidence it is a
+the two five-seed ranges clear of each other by half a point, and level
+on top-5. That is the depthwise-separable trade, and on this evidence it is a
 better one than the architecture's reputation suggests. It is the second row
 of Table~\ref{tab:imagenette_five}.
 
-\medskip\noindent\textbf{Where the time goes.} A step is about 90\,ms at
-batch 32, against ResNet-34's 120 at the same batch and the same 295 steps to
-the epoch, so the run takes thirty-five minutes rather than forty-seven. That
-is a real $1.3\times$, and it is far short of what the parameter count
-promises: $9.5\times$ fewer weights buys $1.3\times$ the throughput. Depthwise
+\medskip\noindent\textbf{Where the time goes.} A step is about 96\,ms at
+batch 32, against ResNet-34's 134 at the same batch and the same 295 steps to
+the epoch, so the run takes thirty-eight minutes rather than fifty-three. That
+is a real $1.4\times$, and it is far short of what the parameter count
+promises: $9.5\times$ fewer weights buys $1.4\times$ the throughput. Depthwise
 convolution is memory-bound. It does nine multiply-accumulates per output
 element where the standard $3 \times 3$ it replaces does $9 C_\text{in}$, so
 the kernel spends its time moving activations rather than multiplying them,
@@ -9895,7 +9908,7 @@ attention's arrival in vision.
 \label{sec:enet_runit}
 
 Before the attention mechanism, train the network that uses it. Four
-commands, and about forty minutes of GPU time:
+commands, and about forty-five minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
@@ -9904,46 +9917,58 @@ lake build efficientnet-verified-adam
 ./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-12-enet-imagenette-xla-cuda/}. XLA's startup banner
-is removed, the network description line is wrapped, and the middle of
-the run is elided:
+On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=4}, the median of the five seeds in
+\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{efficientnet\_s4.log}. XLA's startup banner and the
+resident-parameter notice are removed, the network description line is
+wrapped, each interval is wrapped onto an indented continuation, and epochs
+5 through 78 are elided:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir
              (@efficientnet_adam_train_step, 740 outputs, 1 replica)
-             in 10603 ms
+             in 15122 ms
 [pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir
-             (@efficientnet_fwd, 1 outputs, 1 replica) in 635 ms
+             (@efficientnet_fwd, 1 outputs, 1 replica) in 848 ms
 [pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir
-             (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 454 ms
+             (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 529 ms
 EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k],
   swish + squeeze-excite + batch-norm, 5 downsamples 224→7 →
   head 320→1280 → GAP → dense)
   via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
   train 9469, val 3925; bs 32, EfficientNet-B0 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 49 layers, 42016 stat floats
     → eval via @efficientnet_fwd_eval
-Epoch 1/80: loss=2.063774 lr=0.000333
-  epoch 1: val_acc = 758/3925 = 19.312102%  top5 = 2630/3925 = 67.006369%
-Epoch 2/80: loss=1.631765 lr=0.000667
-  epoch 2: val_acc = 1216/3925 = 30.980892%  top5 = 2889/3925 = 73.605096%
-Epoch 3/80: loss=1.430369 lr=0.001000
-  epoch 3: val_acc = 1526/3925 = 38.878981%  top5 = 3173/3925 = 80.840764%
-Epoch 4/80: loss=1.294553 lr=0.001000
-  epoch 4: val_acc = 2116/3925 = 53.910828%  top5 = 3521/3925 = 89.707006%
-Epoch 79/80: loss=0.504706 lr=0.000000
-  epoch 79: val_acc = 3535/3925 = 90.063694%  top5 = 3857/3925 = 98.267516%
-Epoch 80/80: loss=0.505049 lr=0.000000
-  epoch 80: val_acc = 3534/3925 = 90.038217%  top5 = 3858/3925 = 98.292994%
+Epoch 1/80: loss=2.053068 lr=0.000333
+  epoch 1: val_acc = 824/3925 = 20.993631%  top5 = 2668/3925 = 67.974522%
+    [95% CI 19.75–22.30]
+Epoch 2/80: loss=1.633671 lr=0.000667
+  epoch 2: val_acc = 1300/3925 = 33.121019%  top5 = 3011/3925 = 76.713376%
+    [95% CI 31.67–34.61]
+Epoch 3/80: loss=1.444375 lr=0.001000
+  epoch 3: val_acc = 2396/3925 = 61.044586%  top5 = 3427/3925 = 87.312102%
+    [95% CI 59.51–62.56]
+Epoch 4/80: loss=1.303511 lr=0.001000
+  epoch 4: val_acc = 2440/3925 = 62.165605%  top5 = 3572/3925 = 91.006369%
+    [95% CI 60.64–63.67]
+Epoch 79/80: loss=0.504875 lr=0.000000
+  epoch 79: val_acc = 3532/3925 = 89.987261%  top5 = 3855/3925 = 98.216561%
+    [95% CI 89.01–90.89]
+Epoch 80/80: loss=0.504833 lr=0.000000
+  epoch 80: val_acc = 3531/3925 = 89.961783%  top5 = 3855/3925 = 98.216561%
+    [95% CI 88.98–90.86]
 done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 30 seconds each, forty-one minutes in total, and
-\textbf{90.04\%} top-1 with \textbf{98.29\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $90.17\%$.
+Eighty epochs at about 32 seconds each, forty-three minutes in total, and
+\textbf{89.96\%} top-1 with \textbf{98.22\%} top-5 on Imagenette's
+3,925-image validation split.
 \S\ref{sec:enet_results} sets it against the two chapters before it.
 
 \prosesection{Three steps, one tensor product}
@@ -10487,14 +10512,15 @@ block itself.
 \subsection*{Results}
 \label{sec:enet_results}
 
-EfficientNet-B0 is level with ResNet-34 on top-1, at $90.04\%$ against
-$89.99 \pm 0.32$, and eight tenths of a point over MobileNetV2's $89.25\%$,
-on the same data, the same recipe and the same eighty epochs. It gets there
-with $5.3\times$ fewer parameters than ResNet-34 and in six fewer minutes;
-MobileNetV2 keeps top-5 by four tenths, the one place the larger model does
-not win. It is the third row of Table~\ref{tab:imagenette_five}.
+EfficientNet-B0 is level with ResNet-34 on top-1, at $89.96\%$ against
+$89.78$ with the two five-seed ranges overlapping, and 1.1 points over
+MobileNetV2's $88.87\%$, on the same data, the same recipe and the same
+eighty epochs. It gets there with $5.3\times$ fewer parameters than
+ResNet-34 and in ten fewer minutes; MobileNetV2 keeps top-5 by a quarter
+point, the one place the larger model does not win. It is the third row of
+Table~\ref{tab:imagenette_five}.
 
-\medskip\noindent\textbf{SE and Swish buy $+0.79$ top-1 over MobileNetV2 for
+\medskip\noindent\textbf{SE and Swish buy $+1.1$ top-1 over MobileNetV2 for
 $1.80\times$ the parameters} (4.02M against 2.24M), and the cost is the
 two-layer MLP inside every one of the sixteen MBConv blocks. That is a
 better trade than the ImageNet leaderboard suggests, where B0 is compared
@@ -10502,8 +10528,8 @@ against far larger models. It is not the paper's thesis, either: that is
 compound scaling, depth, width and resolution tuned together, whose wins
 arrive at B3--B7, and ten-class Imagenette saturates well before that regime.
 
-\medskip\noindent\textbf{Where the time goes.} A step is 103\,ms, between
-MobileNetV2's 90 and ResNet-34's 120. It is slower than the first because of
+\medskip\noindent\textbf{Where the time goes.} A step is 110\,ms, between
+MobileNetV2's 96 and ResNet-34's 134. It is slower than the first because of
 SE's own ops, a global-average-pool, two denses, a sigmoid and an elementwise
 multiply per block and the product-rule backward for all of it, and quicker
 than the second by less than the parameter count suggests, for the reason
@@ -11137,7 +11163,7 @@ convnet baseline.
 
 Before the two new primitives, train the network that needs them. Four
 commands, and the heaviest per-epoch net in the book still finishes
-inside an hour and a quarter:
+inside an hour and a half:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
@@ -11146,8 +11172,9 @@ lake build convnext-verified-adam
 ./.lake/build/bin/convnext-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-09-13-convnext-imagenette-ls1e-6-resident/}. XLA's
+On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=2}, the median of the five seeds in
+\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{convnext\_s2.log}. XLA's
 startup banner and the resident-parameter notices are removed, the network
 description line is wrapped and its trailing LayerNorm note dropped, each
 interval is wrapped onto an indented continuation, and epochs 5 through 78
@@ -11158,9 +11185,9 @@ are elided:
 [pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir
              (@convnext_adam_train_step, 549 outputs, 1 replica)
-             in 6361 ms
+             in 9362 ms
 [pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir
-             (@convnext_fwd, 1 outputs, 1 replica) in 588 ms
+             (@convnext_fwd, 1 outputs, 1 replica) in 649 ms
 ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN →
   [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN +
   GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense)
@@ -11169,33 +11196,32 @@ ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN →
   xla/pjrt verified_mlir/convnext_fwd.mlir
   train 9469, val 3925; bs 32, ConvNeXt-T adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
-Epoch 1/80: loss=2.321469 lr=0.000333
-  epoch 1: val_acc = 1106/3925 = 28.178344%  top5 = 2873/3925 = 73.197452%
-    [95% CI 26.79–29.61]
-Epoch 2/80: loss=2.000190 lr=0.000667
-  epoch 2: val_acc = 1566/3925 = 39.898089%  top5 = 3378/3925 = 86.063694%
-    [95% CI 38.38–41.44]
-Epoch 3/80: loss=1.675131 lr=0.001000
-  epoch 3: val_acc = 2057/3925 = 52.407643%  top5 = 3601/3925 = 91.745223%
-    [95% CI 50.84–53.97]
-Epoch 4/80: loss=1.506907 lr=0.001000
-  epoch 4: val_acc = 2226/3925 = 56.713376%  top5 = 3640/3925 = 92.738854%
-    [95% CI 55.16–58.26]
-Epoch 79/80: loss=0.500732 lr=0.000000
-  epoch 79: val_acc = 3230/3925 = 82.292994%  top5 = 3789/3925 = 96.535032%
-    [95% CI 81.07–83.46]
-Epoch 80/80: loss=0.500793 lr=0.000000
-  epoch 80: val_acc = 3229/3925 = 82.267516%  top5 = 3788/3925 = 96.509554%
-    [95% CI 81.04–83.43]
+Epoch 1/80: loss=2.294309 lr=0.000333
+  epoch 1: val_acc = 1084/3925 = 27.617834%  top5 = 2938/3925 = 74.853503%
+    [95% CI 26.24–29.04]
+Epoch 2/80: loss=1.935761 lr=0.000667
+  epoch 2: val_acc = 1630/3925 = 41.528662%  top5 = 3406/3925 = 86.777070%
+    [95% CI 40.00–43.08]
+Epoch 3/80: loss=1.689118 lr=0.001000
+  epoch 3: val_acc = 1976/3925 = 50.343949%  top5 = 3567/3925 = 90.878981%
+    [95% CI 48.78–51.91]
+Epoch 4/80: loss=1.535375 lr=0.001000
+  epoch 4: val_acc = 2184/3925 = 55.643312%  top5 = 3612/3925 = 92.025478%
+    [95% CI 54.08–57.19]
+Epoch 79/80: loss=0.500644 lr=0.000000
+  epoch 79: val_acc = 3287/3925 = 83.745223%  top5 = 3772/3925 = 96.101911%
+    [95% CI 82.56–84.87]
+Epoch 80/80: loss=0.500648 lr=0.000000
+  epoch 80: val_acc = 3287/3925 = 83.745223%  top5 = 3772/3925 = 96.101911%
+    [95% CI 82.56–84.87]
 done (trained ConvNeXt-T adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 55 seconds each, one hour and fourteen minutes in
-total, and \textbf{82.27\%} top-1 with \textbf{96.51\%} top-5 on
-Imagenette's 3,925-image validation split. The best epoch reached
-$82.32\%$. That is the lowest top-1 of the convnets in this book's
-Imagenette column, from much the largest network among them, and
-\S\ref{sec:convnext_results} is about why that is the expected answer
+Eighty epochs at about 68 seconds each, an hour and a half in total, and
+\textbf{83.75\%} top-1 with \textbf{96.10\%} top-5 on Imagenette's
+3,925-image validation split. That is the lowest top-1 of the convnets in
+this book's Imagenette column, from much the largest network among them,
+and \S\ref{sec:convnext_results} is about why that is the expected answer
 rather than a defect.
 
 \medskip\noindent\textbf{Two compile lines, where the previous three
@@ -11931,9 +11957,11 @@ those 23 positivities are the only assumptions anywhere in the chain.
 \label{sec:convnext_results}
 
 The largest convnet in the column finishes last among them, and by a clear
-margin: $82.27\%$ against $89.99 \pm 0.32$ for ResNet-34 and $90.04\%$ for
+margin: $83.75\%$ against $89.78\%$ for ResNet-34 and $89.96\%$ for
 EfficientNet-B0, from $1.3\times$ and $6.9\times$ their parameters, on the
-same data, the same recipe and the same eighty epochs. Three things
+same data, the same recipe and the same eighty epochs. It is also the
+widest row in the table, two points from its lowest seed to its highest
+where no other convnet spreads by one. Three things
 contribute. ConvNeXt-T carries 27.83M parameters against 9,469 training
 images, which is not the data scale that capacity wants. The recipe here is
 the shared one, AdamW at $10^{-3}$ with cosine and label smoothing, which is
@@ -12535,46 +12563,57 @@ lake build vit-verified-adam
 ./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-12-vit-imagenette-xla-cuda/}. XLA's startup banner
-is removed, the network description line is wrapped, the per-step lines
-are dropped, and the middle of the run is elided:
+On one RTX 3060 (CUDA 13.3), this binary's render and recipe under
+\texttt{LEAN\_MLIR\_SEED=1}, the median of the five seeds in
+\texttt{runs/2026-10-29-imagenette-seeds/}; the log is \texttt{vit\_s1.log}. XLA's startup banner is removed, the network
+description line is wrapped, the per-step lines are dropped, each interval
+is wrapped onto an indented continuation, and the middle of the run is
+elided:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir
              (@vit_adam_train_step, 603 outputs, 1 replica)
-             in 6104 ms
+             in 7710 ms
 [pjrt_ffi] compiled verified_mlir/vit_fwd.mlir
-             (@vit_fwd, 1 outputs, 1 replica) in 1644 ms
+             (@vit_fwd, 1 outputs, 1 replica) in 2001 ms
 ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer
   blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10)
   via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
   train 9469, val 3925; bs 32, ViT-Tiny adam
     (cosine+warmup 5ep, baseLR 0.000300), He init
 [pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter
              tensors (63.2 MB) on 1 device; they stop crossing PCIe
              from here
-Epoch 1/80: loss=2.127541 lr=0.000060
-  epoch 1: val_acc = 1381/3925 = 35.184713%  top5 = 3121/3925 = 79.515924%
-Epoch 2/80: loss=1.869707 lr=0.000120
-  epoch 2: val_acc = 1619/3925 = 41.248408%  top5 = 3350/3925 = 85.350318%
-Epoch 3/80: loss=1.750333 lr=0.000180
-  epoch 3: val_acc = 1591/3925 = 40.535032%  top5 = 3362/3925 = 85.656051%
-Epoch 30/80: loss=1.004060 lr=0.000225
-  epoch 30: val_acc = 2571/3925 = 65.503185%  top5 = 3698/3925 = 94.216561%
-Epoch 79/80: loss=0.515797 lr=0.000000
-  epoch 79: val_acc = 2698/3925 = 68.738854%  top5 = 3551/3925 = 90.471338%
-Epoch 80/80: loss=0.515159 lr=0.000000
-  epoch 80: val_acc = 2698/3925 = 68.738854%  top5 = 3549/3925 = 90.420382%
+Epoch 1/80: loss=2.127570 lr=0.000060
+  epoch 1: val_acc = 1376/3925 = 35.057325%  top5 = 3123/3925 = 79.566879%
+    [95% CI 33.58–36.56]
+Epoch 2/80: loss=1.869688 lr=0.000120
+  epoch 2: val_acc = 1620/3925 = 41.273885%  top5 = 3352/3925 = 85.401274%
+    [95% CI 39.74–42.82]
+Epoch 3/80: loss=1.750420 lr=0.000180
+  epoch 3: val_acc = 1591/3925 = 40.535032%  top5 = 3364/3925 = 85.707006%
+    [95% CI 39.01–42.08]
+Epoch 30/80: loss=1.016256 lr=0.000225
+  epoch 30: val_acc = 2575/3925 = 65.605096%  top5 = 3700/3925 = 94.267516%
+    [95% CI 64.10–67.08]
+Epoch 79/80: loss=0.517009 lr=0.000000
+  epoch 79: val_acc = 2695/3925 = 68.662420%  top5 = 3554/3925 = 90.547771%
+    [95% CI 67.19–70.09]
+Epoch 80/80: loss=0.515846 lr=0.000000
+  epoch 80: val_acc = 2693/3925 = 68.611465%  top5 = 3554/3925 = 90.547771%
+    [95% CI 67.14–70.04]
 done (trained ViT-Tiny adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 18 seconds each, twenty-four minutes in total,
-and \textbf{68.74\%} top-1 with \textbf{90.42\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $68.92\%$. That is
-the fastest network in this book's Imagenette column by a wide margin
-and also the least accurate one in it (\S\ref{sec:vit_results}).
+Eighty epochs at about 26 seconds each, thirty-five minutes in total,
+and \textbf{68.61\%} top-1 with \textbf{90.55\%} top-5 on Imagenette's
+3,925-image validation split. That is the fastest network in this book's
+Imagenette column and also the least accurate one in it
+(\S\ref{sec:vit_results}).
 
 \prosesection{Attention in one equation}
 
@@ -14139,8 +14178,8 @@ Imagenette runs trained it; the ImageNet pairs of
 \subsection*{Results}
 \label{sec:vit_results}
 
-ViT-Tiny is the fastest network in the column, by a factor of $1.5$ per
-step over the next one, and the least accurate by more than thirteen points.
+ViT-Tiny is the fastest network in the column, by a tenth of a step over
+the next one, and the least accurate by fifteen points.
 That gap is the data-hunger effect: 9,469 training images is tiny for a
 transformer. The ViT paper reached ImageNet-competitive accuracy only when
 trained on ImageNet-21K (14M images) or JFT-300M (300M images). At Imagenette
@@ -14152,44 +14191,37 @@ the design was for.
 
 \medskip\noindent That completes the Part~1 column. Every row of
 Table~\ref{tab:imagenette_five} is a measurement on the verified XLA path, on
-the same data, for the same eighty epochs, on one RTX 4060 Ti.
+the same data, for the same eighty epochs, five seeds on the same box.
 
 \begin{table}[H]
 \centering
-\caption{The five Part~1 networks on Imagenette: 80 epochs each on the verified path, on one RTX 4060 Ti. Step time is the epoch wall-clock divided by 295 batches, validation pass included; MLIR sizes are the committed \texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units. ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation} (\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing; the other rows are one run each. The four convnets share Chapter~\ref{chap:residual}'s recipe; ViT-Tiny trains at a third of its rate with a five-epoch warmup.}
+\caption{The five Part~1 networks on Imagenette: 80 epochs each on the verified path, five seeds per row (\texttt{runs/2026-10-29-imagenette-seeds/}, seeds 1--5 under \texttt{LEAN\_MLIR\_SEED}, one RTX 3060 per job). Top-1 is the median with the range from lowest seed to highest in parentheses; top-5 is the median. Step time is the median seed's epoch wall-clock divided by 295 batches, validation pass included; MLIR sizes are the committed \texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units. The four convnets share Chapter~\ref{chap:residual}'s recipe; ViT-Tiny trains at a third of its rate with a five-epoch warmup.}
 \label{tab:imagenette_five}
 \begin{tabular}{l r r r r r r}
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 90.04\% & 98.29\% \\
-ConvNeXt-T       & 27.83M  & 1{,}019\,KB & 188 ms   & 1.2 h    & 82.27\% & 96.51\% \\
-ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68.74\% & 90.42\% \\
+ResNet-34        & 21.29M  & 754\,KB    & 134 ms    & 53 min   & 89.78\% {\footnotesize (0.5)} & 98.47\% \\
+MobileNetV2      &  2.24M  & 1{,}071\,KB &  96 ms   & 38 min   & 88.87\% {\footnotesize (0.4)} & \textbf{98.55\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 110 ms   & 43 min   & \textbf{89.96\%} {\footnotesize (0.7)} & 98.32\% \\
+ConvNeXt-T       & 27.83M  & 1{,}019\,KB & 230 ms   & 1.5 h    & 83.75\% {\footnotesize (2.0)} & 96.10\% \\
+ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{88 ms} & \textbf{35 min} & 68.61\% {\footnotesize (1.1)} & 89.91\% \\
 \hline
 \end{tabular}
 \end{table}
 
 \noindent Read down the column rather than across the chapters. Accuracy is
-not a function of parameters at this data size: the three networks within a
-point of $90\%$ span 2.24M to 21.3M parameters, and the two designed for far
+not a function of parameters at this data size: the three networks between
+$88.9$ and $90.0$ span 2.24M to 21.3M parameters, and the two designed for far
 more data, ConvNeXt-T and ViT-Tiny, finish last for the reason each chapter
 gave. Step time follows operation count and memory traffic rather than
-parameters, which is why MobileNetV2 at 2.24M is only $1.3\times$ quicker
-than ResNet-34 and ViT-Tiny at 5.53M is twice as quick. The size of the
+parameters, which is why MobileNetV2 at 2.24M is only $1.4\times$ quicker
+than ResNet-34 and ViT-Tiny at 5.53M is $1.5\times$. The size of the
 render follows the ops per block, so the smallest network is not the smallest
-program. Every row but ResNet-34's is one seed, so a difference under about a
-point is read against ResNet-34's $\pm 0.32$ alone.
-
-\medskip\noindent\textbf{It reproduces exactly.} This number was measured three times
-before being printed, and all three passes came back bit-identical on three different
-cards: the same $68.738854\%$ and $90.420382\%$ at epoch 80, and the same
-160 epoch lines the whole way down. The reason is the graph's shape. XLA
-selects convolution algorithms per process, which
-is what moves the convnet chapters' numbers by a point or two between
-runs. This graph holds 435 \texttt{dot\_general}s and two
-convolutions, so there is almost nothing for that selection to vary.
+program. Every row is five seeds and the parenthesis is its range, so a
+difference between two rows is a result when their ranges are clear of each
+other: that separates MobileNetV2 from ResNet-34 and EfficientNet-B0, and
+leaves those two level.
 
 \section{MLIR: Attention}
 

@@ -144,6 +144,18 @@ pool backward and join this tier. If Tier 1a holds, they do not.
   1a: `runs/2026-10-29-imagenette-seeds/`; B0 and both ResNets hold (the Tier 3 conditional does not
   fire), ConvNeXt's median is 83.75 against the shipped 82.27 (a low draw on a two-point seed spread),
   MNv2 88.87 against 89.25. Book not edited; the ConvNeXt row and its ch 8 transcript need a decision.
+- **2026-10-30, Tier 1 in the book** (`blueprint/src/content.tex`). `tab:imagenette_five` is median
+  (range) over the five seeds for every row, timing from the median seed on the 3060, and the Ch 5–9
+  Run-it-first transcripts are the median seeds (R34 s4, MNv2 s5, B0 s4, CNX-T s2, ViT s1); the
+  comparison paragraphs read medians against medians (MNv2 0.9 behind R34 with the ranges clear, B0
+  level with R34, ConvNeXt 83.75 and the widest row). The ViT "reproduces exactly" paragraph is out:
+  seed 1 on the 3060 stack lands 68.61 against 68.74 on the 4060 Ti stack, so bit-identity across
+  cards is not a claim the current evidence supports. The R34 ablation keeps its own 09-12 five seeds
+  as the paired baseline. Ch 4: the two per-image rows, the SGD curves and the un-normalized
+  precision pair are the 10-29 directories; the claims that bf16 costs the bare net 1.4 points and
+  that the op family moves it by 2 did not replicate (medians move under a point, inside the seed
+  ranges) and are rewritten as such; the dead no-BN momentum seed is in the table with a dagger and
+  carries the "verified gradient is not trainability" point.
 - **Tier 2 queued** by `runs/2026-10-30-r50-a3-seeds/queue.sh`: seeds 2 and 3 per arm, JAX s2
   launched 2026-10-30 08:54 UTC. Both confs take `RUN_SEED`; the JAX emitter reads
   `LEAN_MLIR_SEED_OFFSET`.
