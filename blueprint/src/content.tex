@@ -192,19 +192,21 @@ right. That's the pipeline this book is built around.
 \section*{Why image recognition}
 
 Image classification is where a training run can be checked cheaply,
-sharply and legibly. Cheap: every rung up to Imagenette trains in about
-an hour on one consumer card, so the ladder below ImageNet is an afternoon
-to rerun, and the ImageNet rungs are there because that is where the
-baselines live. Sharp: those baselines are known to the decimal, so when
-the verified path and the reference land within a tenth of a point of a
-published number the agreement means something, and a run that misses by
-a point has something to explain. Legible: the ladder from MLP to ViT is
-the one every practitioner has climbed, so a reader who has trained a
-ResNet knows where they are and what the next chapter adds. Language
-gives none of the three: a tokenizer sits in front of the first layer,
-outside anything the proofs can say; the pretraining data is too large to
-rerun; and the number at the end depends on the vocabulary, so two labs
-with different tokenizers are not measuring the same thing.
+sharply and legibly. It is cheap because every rung up to Imagenette
+trains in about an hour on one consumer card, so the whole ladder below
+ImageNet is an afternoon to rerun, and the ImageNet rungs are there
+because that is where the baselines live. It is sharp because those
+baselines are known to the decimal. When the verified path and the
+reference land within a tenth of a point of a published number, the
+agreement means something, and a run that misses by a point has something
+to explain. It is legible because the ladder from MLP to ViT is the one
+every practitioner needs to climb, so a reader who has trained a ResNet
+knows where they are and how short the remaining climb to attention is.
+The same ladder is the cheapest way into a transformer. Language gives
+none of the three. A tokenizer sits in front of the first layer, outside
+anything the proofs can say. The pretraining data is too large to rerun
+and the number at the end depends on the vocabulary, so two labs with
+different tokenizers are not measuring the same thing.
 
 We start with MNIST (digits, $28 \times 28$ grayscale) and work up
 through CIFAR-10 (color, $32 \times 32$) to Imagenette and then full
@@ -7276,7 +7278,7 @@ not take from that paper, each a training-time change that no later
 chapter's recipe shares either: 120 epochs, Nesterov momentum, Xavier
 initialization, the hue/saturation/brightness jitter with PCA noise, and
 the ResNet-D downsampling blocks --- the networks here are torchvision's,
-ResNet-B in that paper's naming and ResNet v1.5 elsewhere: the stride-2
+ResNet-B (also known as ResNet v1.5): the stride-2
 on a bottleneck's $3\times3$ rather than its first $1\times1$.
 
 \prosesection{The reference (JAX)}
