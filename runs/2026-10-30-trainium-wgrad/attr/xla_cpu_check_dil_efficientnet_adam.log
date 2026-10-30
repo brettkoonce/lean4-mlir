@@ -1,0 +1,7 @@
+efficientnet_adam_train_step: 1 weight-grad and 4 input-grad dilations rewritten; interior pads left: 4
+  outputs 740; bit-identical: 467/740; worst:
+    out 264 (40,): max abs 1.98e-09 rel 1.1e+00 differing 40
+    out 290 (80,): max abs 1.07e-09 rel 8.8e-01 differing 78
+    out 303 (80,): max abs 5.36e-10 rel 7.7e-01 differing 80
+    out 355 (112,): max abs 2.10e-10 rel 7.5e-01 differing 102
+    out 277 (40,): max abs 1.09e-09 rel 7.3e-01 differing 39

@@ -1,0 +1,7 @@
+mobilenetv2_adam_train_step: 1 weight-grad and 4 input-grad dilations rewritten; interior pads left: 4
+  outputs 581; bit-identical: 340/581; worst:
+    out 229 (64,): max abs 1.75e-09 rel 8.5e-01 differing 60
+    out 247 (64,): max abs 9.78e-10 rel 6.4e-01 differing 63
+    out 238 (64,): max abs 1.07e-09 rel 5.2e-01 differing 63
+    out 202 (32,): max abs 5.40e-09 rel 4.8e-01 differing 31
+    out 220 (64,): max abs 2.75e-09 rel 4.5e-01 differing 62

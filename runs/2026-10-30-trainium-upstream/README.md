@@ -16,6 +16,8 @@ and only the NEFF load fails.
 | 2 | `02_upsample_weight_grad_conv_wrong.py` | wrong result | a 2× nearest upsample feeding a weight-gradient-form conv returns wrong values |
 | 3 | `03_resnet34_train_step_compile.py` | compiler error | a textbook ResNet-34 train step (f32, batch 32) fails `neuronx-cc` |
 | 4 | `04_tf32_conv_crash.py` | compiler crash | a single 3×3 conv with ≥32 channels crashes the compiler under tf32 auto-cast |
+| 5 | `05_dilated_kernel_conv_wrong.py` | wrong result | a conv whose kernel is a zero-dilated (interior-padded) tensor returns wrong values at 224×224; the same conv with `rhs_dilation` is right |
+| 6 | `06_depthwise_strided_kernel_grad_compile.py` | compiler error | the kernel gradient of a stride-2 depthwise conv (`batch_group_count = C`, `rhs_dilation = 2`, what `jax.grad` emits) fails `neuronx-cc` at 3 of EfficientNet-B0's 4 shapes |
 
 ---
 
@@ -88,3 +90,37 @@ patch conv compile under tf32.
 
 **Repro.** `NEURON_CC_FLAGS="--auto-cast=matmult --auto-cast-type=tf32" python 04_tf32_conv_crash.py 1 32 8`.
 Output: `atlas/04-*.log`.
+
+## 5. A conv with an interior-padded kernel returns wrong values; the same conv with `rhs_dilation` is right
+
+**Summary.** The weight gradient of a 16×16/stride-16 patch-embedding conv, written as a valid
+stride-1 convolution of the image against the output cotangent zero-dilated with
+`lax.pad(..., interior=15)` (a 209×209 kernel, 99.5 % zeros), returns relative error 0.63 against
+CPU at 8×3×224×224 with 32 output channels. The identical gradient written with
+`rhs_dilation=(16, 16)` on the undilated 14×14 cotangent is correct (5e-7). At 64×64 and 128×128
+inputs both forms are correct. Found through a Lean-rendered ViT-Tiny training step whose
+patch-embed Adam moment was 72 % off the CPU golden on Neuron and within 1e-4 after the rewrite;
+the repro is plain JAX on random data.
+
+**Also a performance note, not a bug:** the compiler does not fold the interior pad into kernel
+dilation (nor does XLA), so form A is a 206 GMAC conv at ViT-Tiny's batch 32 where form B is 0.9,
+and on its own it compiles to 267k DMA blocks and 592k PE instructions (`../2026-10-30-trainium-wgrad/`).
+The full-size form A takes ~9 min to compile on an 88-core box; the script runs it only without `SIZES=small`.
+
+**Repro.** `SIZES=small python 05_dilated_kernel_conv_wrong.py` on trn1 (`neuronx-cc` on PATH).
+Output: `trn1/05_dilated_kernel_conv_wrong.out`.
+
+## 6. neuronx-cc fails on the kernel gradient of a stride-2 depthwise convolution
+
+**Summary.** `jax.vjp` of a stride-2 depthwise conv (`feature_group_count = C`) with respect to its
+kernel lowers to a convolution with `batch_group_count = C` and `rhs_dilation = 2`. At batch 32,
+`neuronx-cc` fails on it with `[NCC_IBIR243] Access pattern out of bounds` for C=144 at 56×56 (5×5),
+C=240 at 28×28 (3×3) and C=672 at 14×14 (5×5) — three of EfficientNet-B0's four strided depthwise
+layers; C=96 at 112×112 (3×3) compiles. So an EfficientNet-B0 or MobileNetV2 training step written
+in plain JAX cannot compile for trn1. Writing the same gradient with the cotangent zero-dilated by
+hand (`lax.pad`, interior 1, then a stride-1 conv) compiles, which is the form our renderer keeps
+for these layers.
+
+**Repro.** `python 06_depthwise_strided_kernel_grad_compile.py 32 240 28 3` (fails) against
+`… 32 96 112 3` (compiles). Compile only. Output: `atlas/06-b0-shapes.log` (fake device; the
+compiler runs exactly as on the instance).

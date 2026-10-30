@@ -1,0 +1,4 @@
+depthwise 3x3/s2 kernel grad N=32 C=96 H=W=112  flags="--auto-cast=none"  compiled (load failed: fake device)
+depthwise 5x5/s2 kernel grad N=32 C=144 H=W=56  flags="--auto-cast=none"  COMPILER ERROR NCC_IBIR243
+depthwise 3x3/s2 kernel grad N=32 C=240 H=W=28  flags="--auto-cast=none"  COMPILER ERROR NCC_IBIR243
+depthwise 5x5/s2 kernel grad N=32 C=672 H=W=14  flags="--auto-cast=none"  COMPILER ERROR NCC_IBIR243

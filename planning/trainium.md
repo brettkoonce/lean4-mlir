@@ -8,8 +8,8 @@ atlas). Work lives on branch `trainium`, which is not pushed; local `main` was m
 
 ## 1. Where it stands
 
-- **Works, matches CUDA:** MNIST (92.10 / 97.82 / 98.73) and ViT-Tiny on Imagenette (34.62 % after one
-  epoch, against the 4060 Ti's 35.18 %).
+- **Works, matches CUDA:** MNIST (92.10 / 97.82 / 98.73) and ViT-Tiny on Imagenette — with the rewritten
+  patch-embed gradient, 80 epochs in 34.5 min at 69.27 % (the Arc B50: 68.46 %).
 - **Broken by Neuron:**
   - CIFAR and every CNN with max pooling: the max-pool gradient (`select_and_scatter`) is wrong, and so
     is a 2× upsample feeding a weight-gradient conv.
@@ -36,21 +36,17 @@ atlas). Work lives on branch `trainium`, which is not pushed; local `main` was m
 
 Item 1 is the user's call (it moves pinned renders). Item 2 is the first thing to do once the instance is up.
 
-1. **Fix the patch-embed weight gradient in the renderer.** `Pretty.lean`'s `patchEmbedWeightGrad`
-   emitter (line ~4190, `"patchEmbedWeightGrad" | "patchEmbedWeightGradBf16"`) and `patchEmbedWeightSgd`
-   (line ~1889): drop the interior pad and give the conv `rhs_dilate = [P, P]` (form B), or emit the
-   im2col matmul stock JAX uses (form C; keeps Neuron's conv lowering, which has two open miscompiles in
-   weight-gradient convs, out of the path). `den` is on the AST node, so no proof moves; the pinned text
-   of all 75 `vit*_train_step.mlir` renders moves, plus the tier-2 golden `vit_adam_train_step.npz` and
-   whatever `scripts/book/book_listings.py --check` pins. Re-render, re-golden, rerun the CUDA gate.
-   The ConvNeXt stem (`interior = [0, 0, 3, 3]`, 16× the MACs, 600 MB operand at b32) and the ResNets'
-   stride-2 weight grads (`interior = [0, 0, 1, 1]`, 4×) are the same pattern; do ViT first, then decide.
-   - Not yet measured anywhere: XLA:CPU keeps the 209×209 kernel too, so the 4060 Ti likely pays part of
-     this as well. Time `vit_adam_train_step` against `vit_adamwgB_train_step` on a CUDA box.
-2. **ViT-Tiny on real Imagenette with the rewrite**, alone on the box: `LEAN_MLIR_VARIANT=adamwgB` through
-   `smoke.sh`, one epoch, then a few — the 34.62 % epoch-1 number was trained on the wrong patch-embed
-   gradient, so it needs redoing before it is quoted. Cache: `/var/tmp/neuron-compile-cache-wgrad.tar.gz`
-   on atlas, already merged into the instance's cache (f32 and the bf16 auto-cast entry).
+1. ~~Fix the patch-embed weight gradient in the renderer~~ **done 2026-10-30, and wider than ViT**: every
+   strided-conv weight and input gradient now carries its dilation on the conv (`rhs_dilate` / `lhs_dilate`)
+   instead of a materialized pad — 16 templates in `Pretty.lean`, 252 renders re-emitted, no proof moved
+   (`runs/2026-10-30-trainium-wgrad/README.md`, "The renderer change"). The grouped (depthwise) weight grads
+   keep the pad: neuronx-cc rejects `rhs_dilate` with `batch_group_count > 1` (upstream issue 6).
+   - Still to do for the corpus: the tier-2 goldens if `goldens --check` moved, `verified_mlir/MANIFEST.md`,
+     the CUDA gate on a GPU box (the renders changed bytes; the math did not), and a CUDA timing of
+     `vit_adam_train_step` before/after — XLA:CPU keeps the 209×209 kernel, so the 4060 Ti likely paid too.
+   - Delete the scratch renders once the instance has tested the real ones: `vit_adamwg{B,C}`, `*dil`.
+2. ~~ViT-Tiny on real Imagenette with the rewrite~~ **done 2026-10-30**: 80 epochs in 34.5 min on one
+   NeuronCore, 69.27 % top-1 (the Arc B50: 39 min, 68.46 %). `runs/2026-10-30-trainium-wgrad/trn1/full.log`.
 3. **File the four upstream issues, on the user's okay.** Drafts and scripts are in
    `runs/2026-10-30-trainium-upstream/`. They go to `aws-neuron/aws-neuron-sdk`, which is public. Then
    wait about a week for a response.

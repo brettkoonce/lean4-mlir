@@ -1,0 +1,18 @@
+✓ linear_train_step: max 7.6e-09
+✓ mlp_train_step: max 2.7e-08
+✓ cifar8_train_step: max 1.6e-06
+✓ cifar8_bf16_train_step: max 4.2e-08
+✓ cifar8_bn_adam_train_step: max 1.2e-04
+✗ cifar8wb_bn_bf16adam_train_step: max 2.7e-02
+✗ mobilenetv2_adam_train_step: max 1.6e-02
+✗ mobilenetv2in_adam64bf16_train_step: max 7.3e-01
+✓ efficientnet_adam_train_step: max 6.8e-04
+✗ efficientnet_adambf16_train_step: max 6.4e-02
+✓ vit_adam_train_step: max 1.9e-05
+✓ vitin_adamwxclipdropbf16_train_step: max 1.6e-06
+✗ vitin_adamwxclipdroperfbf16_train_step: max 4.0e-03
+✗ resnet34_adam_train_step: max 1.5e-02
+✗ resnet34_adambf16_train_step: max 6.4e-01
+✓ convnext_adam_train_step: max 3.2e-05
+stale goldens: cifar8wb_bn_bf16adam_train_step, mobilenetv2_adam_train_step, mobilenetv2in_adam64bf16_train_step, efficientnet_adambf16_train_step, vitin_adamwxclipdroperfbf16_train_step, resnet34_adam_train_step, resnet34_adambf16_train_step
+

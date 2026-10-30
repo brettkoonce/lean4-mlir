@@ -3,9 +3,9 @@
 2026-10-30. Found on atlas with no instance: a static profile of the compiled NEFFs that already sat
 in the Neuron compile caches from the warms (`neff_id.sh`, `neff_attr.py`), three micro-compiles of
 the op in isolation (`micro/`), and a text rewrite of the render checked on XLA:CPU
-(`wgrad_rewrite.py`). Then 16 minutes of trn1.2xlarge (`trn1/`): **the rewritten render runs the
+(`wgrad_rewrite.py`). Then two instance sessions (`trn1/`): **the rewritten render runs the
 f32 ViT-Tiny step in 71 ms against the original's 1,281 and stock JAX's 82.5 on the same
-NeuronCore; 54 ms with bf16 matmuls.** It also fixes a numerics fault: the original's patch-embed
+NeuronCore; 54 ms with bf16 matmuls; the full 80-epoch Imagenette run takes 34.5 minutes and lands at 69.27 %.** It also fixes a numerics fault: the original's patch-embed
 Adam moment was 72 % off the CPU golden on Neuron; the rewrite is within 1e-4.
 
 | f32, batch 32, one NeuronCore | ms/step |
@@ -106,6 +106,13 @@ from atlas was hit (6.7 s and 6.2 s "compile" against 47.5 s for the original's 
 bf16 auto-cast variant compiled cold on the instance in 287 s). Numbers in the table at the top;
 per-step dumps in `*-probe.tsv`.
 
+**The full 80-epoch run (`trn1/full.log`, `wgrad_full.sh`):** `LEAN_MLIR_VARIANT=adamwgB`, f32,
+one NeuronCore, real Imagenette with eval every epoch. Start 17:11:45 UTC, done 17:46:16 — **34.5
+minutes wall for 80 epochs, 69.27 % top-1 / 90.17 % top-5 at epoch 80** (95 % CI 67.8–70.7). The
+Arc B50's 80-epoch run of the same recipe (`../2026-10-23-vit-verified-adam/`) took 39 min and
+landed at 68.46 %; epoch 1 here is 1377/3925 = 35.08 %, the Arc's epoch-1 count to the image, against the 34.62 % the wrong
+gradient gave on Neuron. The instance was up 40 minutes for the session, about $0.90.
+
 Numerics (`tier2.log`): the suite's tier-2 check (`tier2.py run`, one NeuronCore against the
 XLA:CPU golden, `tolerances.tsv`'s attention/f32 row):
 
@@ -129,6 +136,43 @@ renders (every `vit*_train_step.mlir`), the tier-2 golden `vit_adam_train_step.n
 `book_listings.py --check` pins. The ConvNeXt stem (`interior = [0, 0, 3, 3]`, 65 renders, 16× the
 needed MACs, a 600 MB operand at b32) and the ResNets' stride-2 weight grads (`interior = [0, 0, 1, 1]`,
 4×) are the same pattern at smaller multipliers.
+
+## The renderer change (the same afternoon)
+
+`LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean`: sixteen templates stop materializing the dilation.
+Ten weight gradients of plain strided convs (`convStrided{,Xla}Weight{Grad,Sgd}` batched and
+per-example, `convStride4WeightGrad`, `patchEmbedWeight{Grad,Sgd}`) emit the undilated cotangent as
+the kernel with `rhs_dilate = [s, s]`; six input gradients (`convStridedBack`, `depthwiseStrided{,Xla}Back`,
+batched and per-example) emit the undilated cotangent as the input with `lhs_dilate = [2, 2]` and
+one more row of high padding. `sWGradDil` replaces `sWGradGeom` for the weight grads: the padded
+kernel's trailing zero row read one input row the dilated kernel does not, so `hi` drops by one —
+at a 1×1 stride-2 projection that is −1, emitted as a one-row `stablehlo.slice` of the input instead
+of a negative pad. The six grouped (depthwise) weight gradients keep the pad: neuronx-cc 2.28 fails
+`rhs_dilate` with `batch_group_count > 1` at three of B0's four shapes (NCC_IBIR243; issue 6 in
+`../2026-10-30-trainium-upstream/`), and in isolation they compile and are tiny.
+
+`den` is on the AST, so no proof moved. `scripts/regen_verified_mlir.sh proofs` re-emitted 252
+renders (3 min 48 s); the diff is mostly SSA renumbering from the dropped pad and zero-constant
+lines. The re-emitted renders equal the scratch rewrites `dilate_rewrite.py` produced, SSA names
+stripped, except that the scratch files kept the now-unused zero constants — and the plugin's cache
+key does not see that: the re-emitted `vit_adam_train_step.mlir` warms to `MODULE_6062314317683602994`,
+the entry the scratch form B produced, so the 71 ms probe and the 69.27 % run above ran the NEFF the
+committed render compiles to. `regen_verified_mlir.sh check` and
+`book_listings.py --check` pass. `tier2.py goldens --check` (`attr/goldens_check.log`) found 7 of the
+16 CPU goldens stale, but not from this change: `resnet34_adam` fails by the same 1.5e-2 against the
+pre-change render, and `cifar8wb_bn_bf16adam` is a render this change does not touch — they had
+drifted since 2026-10-02. All 16 were regenerated and pass.
+
+Before/after at `ty` level, the stride-2 3×3 weight grad (`sWGradDil 3 = (0, 1, 0)`):
+
+```
+  %du = stablehlo.pad %dr, %z, low = [0,0,0,0], high = [0,0,1,1], interior = [0,0,1,1] : [B,oc,h,w] -> [B,oc,2h,2w]
+  %dt = stablehlo.transpose %du … [oc,B,2h,2w]
+  %g  = stablehlo.convolution(%xt, %dt) … pad = [[1, 1], [1, 1]], rhs_dilate = [1, 1]
+→
+  %dt = stablehlo.transpose %dr … [oc,B,h,w]
+  %g  = stablehlo.convolution(%xt, %dt) … pad = [[1, 0], [1, 0]], rhs_dilate = [2, 2]
+```
 
 ## ResNet-34 for contrast (`attr/r34_f32_b16_verified_vs_jax.txt`)
 

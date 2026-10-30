@@ -1,0 +1,3 @@
+render	status	seconds
+efficientnet_adamdil_train_step	FAIL	116.6
+mobilenetv2_adamdil_train_step	FAIL	95.0

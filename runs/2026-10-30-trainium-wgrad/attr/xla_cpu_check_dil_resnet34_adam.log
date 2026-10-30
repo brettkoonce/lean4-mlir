@@ -1,0 +1,8 @@
+resnet34_adam_train_step: 7 weight-grad and 6 input-grad dilations rewritten; interior pads left: 9
+  outputs 405; bit-identical: 213/405; worst:
+    out 113 (64, 64, 3, 3): max abs 3.47e-07 rel 1.1e-05 differing 36716
+    out 125 (64, 64, 3, 3): max abs 1.48e-07 rel 8.1e-06 differing 36633
+    out 112 (64,): max abs 6.57e-08 rel 7.4e-06 differing 64
+    out 137 (128, 64, 1, 1): max abs 1.75e-08 rel 6.6e-06 differing 8126
+    out 119 (64, 64, 3, 3): max abs 1.68e-07 rel 6.0e-06 differing 36666
+exit 0

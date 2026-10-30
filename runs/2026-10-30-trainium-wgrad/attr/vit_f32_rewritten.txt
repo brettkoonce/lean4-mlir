@@ -1,5 +1,5 @@
 
-## neff_wgB
+## neff_wgC (im2col matmul: 1 convolution, 435 dots)
 hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
 TOTAL                       24903      24694     436014      73983       3571      81540      38382
 ?                            4111       4075     245481       6733        443      31436      11948
@@ -23,7 +23,7 @@ rsqrt                           0          0          0          0         80   
 log                             1          1          0          0          0          1          2
 negate                          0          0          0          1          1          0          0
 
-## neff_wgC
+## neff_wgB (rhs_dilate conv: 2 convolutions, 434 dots)
 hlo op                        dma  dma_spill         PE        DVE       Pool Activation         SP
 TOTAL                       24360      24148     435339      74073       3845      81321      38357
 ?                            4124       4087     245340       6715        475      31392      12031

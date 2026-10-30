@@ -1,0 +1,7 @@
+device: NeuronCore(id=0, process_index=0, local_id=0)
+ok    B=4 C=3 D=8 H=64 P=16 A pad+conv       rel err 2.42e-07
+ok    B=4 C=3 D=8 H=64 P=16 B rhs_dilation   rel err 2.42e-07
+ok    B=8 C=3 D=16 H=128 P=16 A pad+conv       rel err 5.26e-07
+ok    B=8 C=3 D=16 H=128 P=16 B rhs_dilation   rel err 4.51e-07
+WRONG B=8 C=3 D=32 H=224 P=16 A pad+conv       rel err 6.34e-01
+ok    B=8 C=3 D=32 H=224 P=16 B rhs_dilation   rel err 5.35e-07

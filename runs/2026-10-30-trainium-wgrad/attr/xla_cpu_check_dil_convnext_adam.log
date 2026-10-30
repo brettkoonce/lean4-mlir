@@ -1,0 +1,8 @@
+convnext_adam_train_step: 4 weight-grad and 3 input-grad dilations rewritten; interior pads left: 0
+  outputs 549; bit-identical: 272/549; worst:
+    out 186 (96, 1, 7, 7): max abs 7.28e-09 rel 4.5e-06 differing 4653
+    out 215 (192, 96, 2, 2): max abs 3.91e-08 rel 4.1e-06 differing 72696
+    out 182 (96, 3, 4, 4): max abs 9.20e-09 rel 3.5e-06 differing 4574
+    out 195 (96, 1, 7, 7): max abs 8.96e-09 rel 3.3e-06 differing 4623
+    out 204 (96, 1, 7, 7): max abs 6.75e-09 rel 2.2e-06 differing 4629
+exit 0
