@@ -1,0 +1,33 @@
+test	tier	status	detail
+build:shim	0	PASS	
+build:probe	0	PASS	
+build:smoke	0	PASS	
+build:guards	0	PASS	
+build:dp	0	PASS	
+build:allreduce	0	PASS	
+build:compile_check	0	PASS	
+build:tier2_run	0	PASS	
+smi	0	PASS	instance-type: trn1.2xlarge
+probe	0	PASS	devices=2
+smoke	0	PASS	compile + execute OK
+erfc	0	PASS	chlo.erfc OK
+guards	1	PASS	all guards fire (0 failures)
+compile_dp	1	PASS	COMPILED OK — 69 outputs
+allreduce	1	PASS	ALL-REDUCE CORRECT across 2 GPUs via the PJRT C API
+dp	1	PASS	DP INVOKE CORRECT: sharding + all_reduce + replica-0 readback
+linear_train_step	2	PASS	OK dot/f32: median 1.3e-06 (≤0.003), p90 1.8e-06 (≤0.03), max 2.0e-06 at output 1
+mlp_train_step	2	PASS	OK dot/f32: median 1.1e-06 (≤0.003), p90 1.9e-06 (≤0.03), max 2.1e-06 at output 2
+cifar8_train_step	2	FAIL	FAIL conv-pool/f32: median 6.7e+00 (≤0.03), p90 4.6e+01 (≤0.07), max 5.3e+01 at output 3
+cifar8_bf16_train_step	2	FAIL	FAIL conv-pool/bf16: median 8.2e+00 (≤0.06), p90 6.2e+01 (≤0.1), max 7.1e+01 at output 2
+cifar8_bn_adam_train_step	2	FAIL	FAIL batchnorm/f32: median 5.5e-02 (≤0.005), p90 3.9e+00 (≤0.2), max 1.3e+01 at output 7
+cifar8wb_bn_bf16adam_train_step	2	FAIL	FAIL batchnorm/bf16: median 3.7e-02 (≤0.01), p90 4.1e+00 (≤1), max 1.2e+01 at output 45
+mobilenetv2_adam_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,078,840 instructions, cap 5,000,000 (trn2: 6.0M)
+mobilenetv2in_adam64bf16_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,360,207 instructions, cap 5,000,000
+efficientnet_adam_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,123,079 instructions, cap 5,000,000 (trn2: 6.4M)
+efficientnet_adambf16_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,123,072 instructions, cap 5,000,000
+vit_adam_train_step	2	PASS	OK attention/f32: median 4.5e-07 (≤0.003), p90 4.9e-06 (≤0.005), max 7.2e-01 at output 200
+vitin_adamwxclipdropbf16_train_step	2	FAIL	FAIL attention/bf16: median 3.3e-02 (≤0.01), p90 4.3e-02 (≤0.05), max 5.9e-01 at output 200
+vitin_adamwxclipdroperfbf16_train_step	2	FAIL	FAIL attention/bf16: median 3.4e-02 (≤0.01), p90 4.5e-02 (≤0.05), max 6.8e-01 at output 200
+resnet34_adam_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IBIR243: birverifier fails on the max-pool's `maximum`; the bf16 render compiles
+resnet34_adambf16_train_step	2	FAIL	2026-Oct-30 00:04:03.093259  5005:5006  ERROR  TDRV:kbl_model_add                           create_data_refill_rings() error
+convnext_adam_train_step	2	SKIP	listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_EBVF030: 9,173,277 instructions, cap 5,000,000 (58 min to find out)

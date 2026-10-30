@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-30T00:04:06Z",
+  "run": "2026-10-29-ip-172-31-36-145-neuron",
+  "core": {
+    "repo_sha": "da5a14047afb5d710d99abb0a79ce7331e77b437",
+    "repo_dirty": true,
+    "lean_toolchain": "leanprover/lean4:v4.35.0",
+    "shim_source_sha": "d92be66bb5815e98",
+    "shim_binary_sha": "fc6f0cce83db60a2",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "a61bee3dc99d4ebc",
+    "suite_sha": "1ee732a7dce52b5f",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "neuron",
+    "host": "ip-172-31-36-145",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NC_v2",
+        "memory": null,
+        "driver": null
+      },
+      {
+        "index": 1,
+        "name": "NC_v2",
+        "memory": null,
+        "driver": null
+      }
+    ],
+    "gpu_count_visible": 2,
+    "visible_devices": null,
+    "driver": null,
+    "runtime": {},
+    "plugin_path": ".venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so",
+    "plugin_package": null,
+    "plugin_sha": "819f9073502da64a",
+    "pjrt_api_plugin": "0.90",
+    "platform_name": "neuron",
+    "platform_version": "2.0;neuron-pjrt-executable-cache-v1;serialized=2;thunk=4",
+    "kernel": "7.0.0-1014-aws",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}

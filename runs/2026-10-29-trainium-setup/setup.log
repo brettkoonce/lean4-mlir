@@ -1,0 +1,152 @@
+════ trainium_setup 2026-10-29 23:33:20 — stages: check venv jax smoke
+
+━━━ check: the box
+  ✓ instance: trn1.2xlarge, 8 vCPU, 30 GB
+  ✓ Neuron devices: 1 (/dev/neuron0 …)
+    instance-type: trn1.2xlarge
+    instance-id: i-07ab710f38e5acdcf
+    +--------+--------+----------+--------+--------------+----------+------+
+    | NEURON | NEURON |  NEURON  | NEURON |     PCI      |   CPU    | NUMA |
+    | DEVICE | CORES  | CORE IDS | MEMORY |     BDF      | AFFINITY | NODE |
+    +--------+--------+----------+--------+--------------+----------+------+
+    | 0      | 2      | 0-1      | 32 GB  | 0000:00:1e.0 | 0-7      | -1   |
+    +--------+--------+----------+--------+--------------+----------+------+
+  ✓ Neuron runtime: libnrt.so.1 (2.35.30.0-d2725ccb8)
+  ✓ compile cache: 22 compiled graphs (warmed? TRAINIUM.md §3)
+  ✓ C compiler: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  ✓ python: /usr/bin/python3.12 (Python 3.12.3)
+  ✓ elan: /home/ubuntu/.elan/bin/elan
+  ✓ disk: 84 GB free
+
+━━━ venv: .venv-neuron with jax-neuronx 0.10.0.1.0.14198
+  ✓ created .venv-neuron (Python 3.12.3)
+  installed: jax 0.10.0, jaxlib 0.10.0, jax-neuronx 0.10.0.1.0.14198+40d442c2, libneuronxla 3.0.10135.0+7d133f20, neuronx-cc 2.28.7631.0+8f7b0cf5
+  ✓ plugin: .venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so
+  ✓ compiler: 2.28.7631.0+8f7b0cf5
+
+━━━ jax: JAX computes on the neuron device
+Platform 'neuron' is experimental and not all JAX functionality may be correctly supported!
+  ✓ NeuronCore(id=0, process_index=0, local_id=0) (NC_v2), 2 devices: (x @ x.T).sum() = 1134.0, as numpy on the CPU
+
+━━━ smoke: our PJRT shim on Neuron's plugin, before any Lean
+  PJRT_PLUGIN=.venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so
+  NEURON_INTERNAL_PJRT_C_API_VERSION=0.90 NEURON_CC_FLAGS=--auto-cast=none
+  ✓ built ffi/libpjrt_ffi.so
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 187 ms
+[pjrt_ffi] output 0 size mismatch: graph produces 0 bytes, caller expects 5120 — refusing to copy
+FAIL run linear_fwd (the shim's message is above)
+
+  ✗ the shim could not drive the plugin (its [pjrt_ffi] lines above name the call that failed)
+
+  The log is runs/2026-10-29-trainium-setup/setup.log. Fix the above, then resume with:
+    bash deploy/trainium_setup.sh smoke
+════ trainium_setup 2026-10-29 23:37:55 — stages: smoke suite data lean mnist cifar
+
+━━━ smoke: our PJRT shim on Neuron's plugin, before any Lean
+  PJRT_PLUGIN=.venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so
+  NEURON_INTERNAL_PJRT_C_API_VERSION=0.90 NEURON_CC_FLAGS=--auto-cast=none
+  ✓ built ffi/libpjrt_ffi.so
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 190 ms
+[pjrt_ffi] @linear_fwd ok (3 in, 1 out)
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 18 ms
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 19 ms
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 27 ms
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 119 ms
+[pjrt_ffi] platform: neuron
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 469 ms
+linear_fwd: max |device - host| = 1.23e-06 over 1280 outputs (y[0][0] = 2.329579)
+compiled verified_mlir/linear_train_step.mlir
+compiled verified_mlir/mlp_fwd.mlir
+compiled verified_mlir/mlp_train_step.mlir
+compiled verified_mlir/cnn_fwd.mlir
+compiled verified_mlir/cnn_train_step.mlir
+SMOKE OK
+
+━━━ suite: scripts/platform/check.sh, tiers 0–2
+platform suite — neuron, tiers 0..2 → runs/platform/2026-10-29-ip-172-31-36-145-neuron
+build:
+  build:shim       PASS  
+  build:probe      PASS  
+  build:smoke      PASS  
+  build:guards     PASS  
+  build:dp         PASS  
+  build:allreduce  PASS  
+  build:compile_check PASS  
+  build:tier2_run  PASS  
+tier 0 — platform:
+  smi              PASS  instance-type: trn1.2xlarge
+  probe            PASS  devices=2
+  smoke            PASS  compile + execute OK
+  erfc             PASS  chlo.erfc OK
+tier 1 — shim:
+  guards           PASS  all guards fire (0 failures)
+  compile_dp       PASS  COMPILED OK — 69 outputs
+  allreduce        PASS  ALL-REDUCE CORRECT across 2 GPUs via the PJRT C API
+  dp               PASS  DP INVOKE CORRECT: sharding + all_reduce + replica-0 readback
+tier 2 — ops vs XLA:CPU goldens:
+  linear_train_step PASS  OK dot/f32: median 1.3e-06 (≤0.003), p90 1.8e-06 (≤0.03), max 2.0e-06 at output 1
+  mlp_train_step   PASS  OK dot/f32: median 1.1e-06 (≤0.003), p90 1.9e-06 (≤0.03), max 2.1e-06 at output 2
+  cifar8_train_step FAIL  FAIL conv-pool/f32: median 6.7e+00 (≤0.03), p90 4.6e+01 (≤0.07), max 5.3e+01 at output 3
+  cifar8_bf16_train_step FAIL  FAIL conv-pool/bf16: median 8.2e+00 (≤0.06), p90 6.2e+01 (≤0.1), max 7.1e+01 at output 2
+  cifar8_bn_adam_train_step FAIL  FAIL batchnorm/f32: median 5.5e-02 (≤0.005), p90 3.9e+00 (≤0.2), max 1.3e+01 at output 7
+  cifar8wb_bn_bf16adam_train_step FAIL  FAIL batchnorm/bf16: median 3.7e-02 (≤0.01), p90 4.1e+00 (≤1), max 1.2e+01 at output 45
+  mobilenetv2_adam_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,078,840 instructions, cap 5,000,000 (trn2: 6.0M)
+  mobilenetv2in_adam64bf16_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,360,207 instructions, cap 5,000,000
+  efficientnet_adam_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,123,079 instructions, cap 5,000,000 (trn2: 6.4M)
+  efficientnet_adambf16_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IXTP002: 5,123,072 instructions, cap 5,000,000
+  vit_adam_train_step PASS  OK attention/f32: median 4.5e-07 (≤0.003), p90 4.9e-06 (≤0.005), max 7.2e-01 at output 200
+  vitin_adamwxclipdropbf16_train_step FAIL  FAIL attention/bf16: median 3.3e-02 (≤0.01), p90 4.3e-02 (≤0.05), max 5.9e-01 at output 200
+  vitin_adamwxclipdroperfbf16_train_step FAIL  FAIL attention/bf16: median 3.4e-02 (≤0.01), p90 4.5e-02 (≤0.05), max 6.8e-01 at output 200
+  resnet34_adam_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_IBIR243: birverifier fails on the max-pool's `maximum`; the bf16 render compiles
+  resnet34_adambf16_train_step FAIL  2026-Oct-30 00:04:03.093259  5005:5006  ERROR  TDRV:kbl_model_add                           create_data_refill_rings() error
+  convnext_adam_train_step SKIP  listed SKIP in scripts/platform/expected/neuron-trn1-2xlarge.txt: NCC_EBVF030: 9,173,277 instructions, cap 5,000,000 (58 min to find out)
+
+19 pass, 0 xfail, 7 fail, 0 xpass, 6 skip — runs/platform/2026-10-29-ip-172-31-36-145-neuron
+
+  ✗ the platform suite failed (results.tsv and logs/ under the runs/platform/ directory it named)
+
+  The log is runs/2026-10-29-trainium-setup/setup.log. Fix the above, then resume with:
+    bash deploy/trainium_setup.sh suite

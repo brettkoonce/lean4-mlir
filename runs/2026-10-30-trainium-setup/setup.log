@@ -1,0 +1,324 @@
+════ trainium_setup 2026-10-30 00:04:27 — stages: lean mnist cifar
+
+━━━ lean: toolchain, Mathlib's prebuilt cache, the five MNIST and CIFAR trainers
+info: downloading https://releases.lean-lang.org/lean4/v4.35.0/lean-4.35.0-linux.tar.zst
+info: installing /home/ubuntu/.elan/toolchains/leanprover--lean4---v4.35.0
+Lake version 5.0.0-src+eb6cafb (Lean version 4.35.0)
+info: checkdecls: materializing new dependency
+info: checkdecls: fetching revision '3d425859e73fcfbef85b9638c2a91708ef4a22d4' from https://github.com/PatrickMassot/checkdecls.git
+info: checkdecls: checking out revision '3d425859e73fcfbef85b9638c2a91708ef4a22d4'
+info: mathlib: materializing new dependency
+info: mathlib: fetching revision '56a005855ea17e0b0958f73ec801ae140b0a1679' from https://github.com/leanprover-community/mathlib4
+info: mathlib: checking out revision '56a005855ea17e0b0958f73ec801ae140b0a1679'
+info: plausible: materializing new dependency
+info: plausible: fetching revision 'dfa4f38190d07c37e315953e08b90fe2d95b3c24' from https://github.com/leanprover-community/plausible
+info: plausible: checking out revision 'dfa4f38190d07c37e315953e08b90fe2d95b3c24'
+info: LeanSearchClient: materializing new dependency
+info: LeanSearchClient: fetching revision 'd6b4c7be5be75ec4917c873ac50c756dc1436372' from https://github.com/leanprover-community/LeanSearchClient
+info: LeanSearchClient: checking out revision 'd6b4c7be5be75ec4917c873ac50c756dc1436372'
+info: importGraph: materializing new dependency
+info: importGraph: fetching revision 'a41f0e9a4dea23188ea9cc1c41ac9f8bbafe0b93' from https://github.com/leanprover-community/import-graph
+info: importGraph: checking out revision 'a41f0e9a4dea23188ea9cc1c41ac9f8bbafe0b93'
+info: proofwidgets: materializing new dependency
+info: proofwidgets: fetching revision 'df72b022e558978a1c50264cfc4d7fec86fa8e04' from https://github.com/leanprover-community/ProofWidgets4
+info: proofwidgets: checking out revision 'df72b022e558978a1c50264cfc4d7fec86fa8e04'
+info: aesop: materializing new dependency
+info: aesop: fetching revision '4a174c490d8707121c4a9290800489f105d85e07' from https://github.com/leanprover-community/aesop
+info: aesop: checking out revision '4a174c490d8707121c4a9290800489f105d85e07'
+info: Qq: materializing new dependency
+info: Qq: fetching revision 'dce0ad79c486cb1fb504af04f953c3466b0c6db8' from https://github.com/leanprover-community/quote4
+info: Qq: checking out revision 'dce0ad79c486cb1fb504af04f953c3466b0c6db8'
+info: batteries: materializing new dependency
+info: batteries: fetching revision '66e469188fe07963e5cf666c7d4433f45b8131c5' from https://github.com/leanprover-community/batteries
+info: batteries: checking out revision '66e469188fe07963e5cf666c7d4433f45b8131c5'
+info: Cli: materializing new dependency
+info: Cli: fetching revision 'c24fe6078c630e89b489bffe59b3e20ac30d12c8' from https://github.com/leanprover/lean4-cli
+info: Cli: checking out revision 'c24fe6078c630e89b489bffe59b3e20ac30d12c8'
+✔ [1/5] Built Cache.Cli (211ms)
+✔ [2/5] Built Cache.Lean (251ms)
+✔ [6/42] Built Cache.Cli:c.o (107ms)
+✔ [7/42] Built Cache.Env (227ms)
+✔ [8/42] Built Cache.Lean:c.o (133ms)
+✔ [9/42] Built Cache.Env:c.o (154ms)
+✔ [10/42] Built Cache.Infra (283ms)
+✔ [11/42] Built Batteries.Tactic.OpenPrivate (655ms)
+✔ [12/42] Built Cache.Infra:c.o (153ms)
+✔ [13/42] Built Cache.Location (347ms)
+✔ [14/42] Built Cache.Location:c.o (205ms)
+✔ [15/42] Built Cache.IO (997ms)
+✔ [16/42] Built Batteries.Tactic.OpenPrivate:c.o (1.0s)
+✔ [17/42] Built Cache.Hashing (450ms)
+✔ [18/42] Built Cache.Hashing:c.o (515ms)
+✔ [19/42] Built Cache.IO:c.o (1.4s)
+✔ [20/42] Built Cache.Requests (1.3s)
+✔ [21/42] Built Cache.Marker (258ms)
+✔ [22/42] Built Cache.Marker:c.o (125ms)
+✔ [23/42] Built Cache.Upload.Curl (365ms)
+✔ [24/42] Built Cache.Upload.Rclone (380ms)
+✔ [25/42] Built Cache.Query (467ms)
+✔ [26/42] Built Cache.Upload.Curl:c.o (237ms)
+✔ [27/42] Built Cache.Upload.Rclone:c.o (226ms)
+✔ [28/42] Built Cache.Upload.Azure (413ms)
+✔ [29/42] Built Cache.Query:c.o (292ms)
+✔ [30/42] Built Cache.Upload.S3 (511ms)
+✔ [31/42] Built Cache.Warning (454ms)
+✔ [32/42] Built Cache.Upload.Azure:c.o (150ms)
+✔ [33/42] Built Cache.Upload.S3:c.o (257ms)
+✔ [34/42] Built Cache.Upload.Defs (299ms)
+✔ [35/42] Built Cache.Warning:c.o (268ms)
+✔ [36/42] Built Cache.Upload.Defs:c.o (135ms)
+✔ [37/42] Built Cache.Upload (250ms)
+✔ [38/42] Built Cache.Upload:c.o (100ms)
+✔ [39/42] Built Cache.Main (732ms)
+✔ [40/42] Built Cache.Requests:c.o (2.4s)
+✔ [41/42] Built Cache.Main:c.o (859ms)
+✔ [42/42] Built cache:exe (461ms)
+Current branch: HEAD
+Using cache from origin: (some leanprover-community/mathlib4)
+Attempting to download 9031 file(s) from leanprover-community/mathlib4 cache at https://cache.mathlib.org/mathlib4-master
+Downloaded: 1 file(s) [attempted 1/9031 = 0%, 253 KB/s][KDownloaded: 67 file(s) [attempted 67/9031 = 0%, 3432 KB/s][KDownloaded: 288 file(s) [attempted 288/9031 = 3%, 897 KB/s][KDownloaded: 496 file(s) [attempted 496/9031 = 5%, 1738 KB/s][KDownloaded: 719 file(s) [attempted 719/9031 = 7%, 180 KB/s][KDownloaded: 939 file(s) [attempted 939/9031 = 10%, 1924 KB/s][KDownloaded: 1039 file(s) [attempted 1039/9031 = 11%, 4969 KB/s][KDownloaded: 1187 file(s) [attempted 1187/9031 = 13%, 199 KB/s][KDownloaded: 1385 file(s) [attempted 1385/9031 = 15%, 13673 KB/s][KDownloaded: 1392 file(s) [attempted 1392/9031 = 15%, 972 KB/s][KDownloaded: 1637 file(s) [attempted 1637/9031 = 18%, 4989 KB/s][KDownloaded: 1848 file(s) [attempted 1848/9031 = 20%, 2076 KB/s][KDownloaded: 1925 file(s) [attempted 1925/9031 = 21%, 1964 KB/s][KDownloaded: 2154 file(s) [attempted 2154/9031 = 23%, 1132 KB/s][KDownloaded: 2368 file(s) [attempted 2368/9031 = 26%, 3650 KB/s][KDownloaded: 2514 file(s) [attempted 2514/9031 = 27%, 308 KB/s][KDownloaded: 2669 file(s) [attempted 2669/9031 = 29%, 871 KB/s][KDownloaded: 2812 file(s) [attempted 2812/9031 = 31%, 1006 KB/s][KDownloaded: 3053 file(s) [attempted 3053/9031 = 33%, 9750 KB/s][KDownloaded: 3299 file(s) [attempted 3299/9031 = 36%, 1032 KB/s][KDownloaded: 3483 file(s) [attempted 3483/9031 = 38%, 1250 KB/s][KDownloaded: 3698 file(s) [attempted 3698/9031 = 40%, 4766 KB/s][KDownloaded: 3769 file(s) [attempted 3769/9031 = 41%, 227 KB/s][KDownloaded: 4008 file(s) [attempted 4008/9031 = 44%, 4564 KB/s][KDownloaded: 4248 file(s) [attempted 4248/9031 = 47%, 930 KB/s][KDownloaded: 4251 file(s) [attempted 4251/9031 = 47%, 5448 KB/s][KDownloaded: 4461 file(s) [attempted 4461/9031 = 49%, 5325 KB/s][KDownloaded: 4685 file(s) [attempted 4685/9031 = 51%, 2489 KB/s][KDownloaded: 4783 file(s) [attempted 4783/9031 = 52%, 1417 KB/s][KDownloaded: 5017 file(s) [attempted 5017/9031 = 55%, 5556 KB/s][KDownloaded: 5163 file(s) [attempted 5163/9031 = 57%, 923 KB/s][KDownloaded: 5315 file(s) [attempted 5315/9031 = 58%, 3635 KB/s][KDownloaded: 5537 file(s) [attempted 5537/9031 = 61%, 1068 KB/s][KDownloaded: 5595 file(s) [attempted 5595/9031 = 61%, 643 KB/s][KDownloaded: 5843 file(s) [attempted 5843/9031 = 64%, 1861 KB/s][KDownloaded: 6081 file(s) [attempted 6081/9031 = 67%, 8532 KB/s][KDownloaded: 6220 file(s) [attempted 6220/9031 = 68%, 1240 KB/s][KDownloaded: 6296 file(s) [attempted 6296/9031 = 69%, 512 KB/s][KDownloaded: 6384 file(s) [attempted 6384/9031 = 70%, 1116 KB/s][KDownloaded: 6549 file(s) [attempted 6549/9031 = 72%, 703 KB/s][KDownloaded: 6651 file(s) [attempted 6651/9031 = 73%, 944 KB/s][KDownloaded: 6812 file(s) [attempted 6812/9031 = 75%, 650 KB/s][KDownloaded: 6947 file(s) [attempted 6947/9031 = 76%, 1701 KB/s][KDownloaded: 6983 file(s) [attempted 6983/9031 = 77%, 1185 KB/s][KDownloaded: 7081 file(s) [attempted 7081/9031 = 78%, 503 KB/s][KDownloaded: 7164 file(s) [attempted 7164/9031 = 79%, 386 KB/s][KDownloaded: 7298 file(s) [attempted 7298/9031 = 80%, 2358 KB/s][KDownloaded: 7391 file(s) [attempted 7391/9031 = 81%, 1966 KB/s][KDownloaded: 7527 file(s) [attempted 7527/9031 = 83%, 3004 KB/s][KDownloaded: 7649 file(s) [attempted 7649/9031 = 84%, 861 KB/s][KDownloaded: 7806 file(s) [attempted 7806/9031 = 86%, 334 KB/s][KDownloaded: 7952 file(s) [attempted 7952/9031 = 88%, 398 KB/s][KDownloaded: 7962 file(s) [attempted 7962/9031 = 88%, 1153 KB/s][KDownloaded: 8086 file(s) [attempted 8086/9031 = 89%, 556 KB/s][KDownloaded: 8136 file(s) [attempted 8136/9031 = 90%, 922 KB/s][KDownloaded: 8320 file(s) [attempted 8320/9031 = 92%, 599 KB/s][KDownloaded: 8472 file(s) [attempted 8472/9031 = 93%, 768 KB/s][KDownloaded: 8563 file(s) [attempted 8563/9031 = 94%, 2377 KB/s][KDownloaded: 8740 file(s) [attempted 8740/9031 = 96%, 955 KB/s][KDownloaded: 8775 file(s) [attempted 8775/9031 = 97%, 406 KB/s][KDownloaded: 8942 file(s) [attempted 8942/9031 = 99%, 2716 KB/s][KDownloaded: 9028 file(s) [attempted 9028/9031 = 99%, 3774 KB/s][KDownloaded: 9031 file(s) [attempted 9031/9031 = 100%, 3774 KB/s][K
+Still decompressing downloaded files...
+Decompressed 9031 file(s)
+Already decompressed 9031 file(s)
+  ▸ lake build mnist-linear-verified
+✔ [2/29] Built «lean4-mlir»/lowererO (110ms)
+✔ [3/29] Built LeanMlir.LEBytes (448ms)
+✔ [4/29] Built LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec (422ms)
+✔ [5/29] Built LeanMlir.IreeRuntime (393ms)
+✔ [6/29] Built LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec:c.o (138ms)
+✔ [7/29] Built LeanMlir.LEBytes:c.o (201ms)
+✔ [8/29] Built LeanMlir.IreeRuntime:c.o (222ms)
+✔ [9/29] Built LeanMlir.Verified.Spec (1.2s)
+✔ [10/29] Built LeanMlir.F32Array (659ms)
+✔ [11/29] Built «lean4-mlir»/ireeLeanFfiO (1.3s)
+✔ [12/29] Built LeanMlir.ParamLayouts (758ms)
+✔ [13/29] Built LeanMlir.E4M3Quant (608ms)
+✔ [14/29] Built LeanMlir.ParamLayouts:c.o (428ms)
+✔ [15/29] Built LeanMlir.F32Array:c.o (708ms)
+✔ [16/29] Built LeanMlir.E4M3Quant:c.o (305ms)
+✔ [17/29] Built LeanMlir.Verified.Spec:c.o (1.1s)
+✔ [18/29] Built LeanMlir.Types (2.9s)
+✔ [19/29] Built LeanMlir.Verified.NetsCore (1.8s)
+✔ [20/29] Built LeanMlir.Verified.NetsCore:c.o (425ms)
+✔ [21/29] Built LeanMlir.Types:c.o (1.0s)
+✔ [22/29] Built «lean4-mlir»/f32HelpersO (5.0s)
+✔ [23/29] Built «lean4-mlir»/libireeffi.static (14ms)
+✔ [25/29] Built LeanMlir.Verified.Train (8.3s)
+✔ [26/29] Built apps.mnist.MainMnistLinearVerified (414ms)
+✔ [27/29] Built apps.mnist.MainMnistLinearVerified:c.o (95ms)
+✔ [28/29] Built LeanMlir.Verified.Train:c.o (27s)
+✔ [29/29] Built «mnist-linear-verified»:exe (146ms)
+Build completed successfully (29 jobs).
+  ▸ lake build mnist-mlp-verified
+✔ [27/29] Built apps.mnist.MainMnistMlpVerified (193ms)
+✔ [28/29] Built apps.mnist.MainMnistMlpVerified:c.o (81ms)
+✔ [29/29] Built «mnist-mlp-verified»:exe (201ms)
+Build completed successfully (29 jobs).
+  ▸ lake build mnist-cnn-verified
+✔ [27/29] Built apps.mnist.MainMnistCnnVerified (193ms)
+✔ [28/29] Built apps.mnist.MainMnistCnnVerified:c.o (82ms)
+✔ [29/29] Built «mnist-cnn-verified»:exe (151ms)
+Build completed successfully (29 jobs).
+  ▸ lake build cifar8w-ablation
+✔ [27/29] Built apps.cifar.MainCifar8WideAblation (314ms)
+✔ [28/29] Built apps.cifar.MainCifar8WideAblation:c.o (141ms)
+✔ [29/29] Built «cifar8w-ablation»:exe (157ms)
+Build completed successfully (29 jobs).
+  ▸ lake build cifar8w-bn-ablation
+✔ [27/29] Built apps.cifar.MainCifar8WideBnAblation (218ms)
+✔ [28/29] Built apps.cifar.MainCifar8WideBnAblation:c.o (101ms)
+✔ [29/29] Built «cifar8w-bn-ablation»:exe (141ms)
+Build completed successfully (29 jobs).
+  ✓ built the five trainers
+
+━━━ mnist: lake run mnist on a NeuronCore
+━━━ XLA/PJRT backend ━━━
+  ✓ ffi/libpjrt_ffi.so up to date
+  ✓ PJRT_PLUGIN=.venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so
+
+━━━ mnist-linear-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-linear-verified: run (gpu 0, neuron) ━━━
+→ mnist-linear-verified (GPU 0, neuron) → runs/2026-10-30-mnist-linear-verified/mnist-linear-verified.log
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793318808.152320    7825 neuronpjrt.cc:394] Registered Neuron auto-sharding: platform=2.0, devices_per_node=32
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 225 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 14 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+[pjrt_ffi] RESIDENT: @linear_train_step holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (139ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: test_acc = 9082/10000 = 90.820000%  [95% CI 90.24–91.37] (147ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: test_acc = 9124/10000 = 91.240000%  [95% CI 90.67–91.78] (138ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: test_acc = 9156/10000 = 91.560000%  [95% CI 91.00–92.09] (134ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: test_acc = 9167/10000 = 91.670000%  [95% CI 91.11–92.20] (150ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: test_acc = 9176/10000 = 91.760000%  [95% CI 91.20–92.28] (191ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: test_acc = 9186/10000 = 91.860000%  [95% CI 91.31–92.38] (173ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: test_acc = 9194/10000 = 91.940000%  [95% CI 91.39–92.46] (217ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (139ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (143ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (148ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: test_acc = 9210/10000 = 92.100000%  [95% CI 91.56–92.61] (147ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).
+
+━━━ mnist-mlp-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-mlp-verified: run (gpu 0, neuron) ━━━
+→ mnist-mlp-verified (GPU 0, neuron) → runs/2026-10-30-mnist-mlp-verified/mnist-mlp-verified.log
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793318818.503574    8028 neuronpjrt.cc:394] Registered Neuron auto-sharding: platform=2.0, devices_per_node=32
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 236 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 16 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.413489, test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (221ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.191177, test_acc = 9525/10000 = 95.250000%  [95% CI 94.82–95.65] (219ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.139140, test_acc = 9638/10000 = 96.380000%  [95% CI 96.00–96.73] (222ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.109069, test_acc = 9689/10000 = 96.890000%  [95% CI 96.53–97.21] (217ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.088712, test_acc = 9716/10000 = 97.160000%  [95% CI 96.82–97.47] (220ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.073540, test_acc = 9735/10000 = 97.350000%  [95% CI 97.02–97.65] (218ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.061898, test_acc = 9745/10000 = 97.450000%  [95% CI 97.12–97.74] (219ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.052656, test_acc = 9762/10000 = 97.620000%  [95% CI 97.30–97.90] (221ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.045100, test_acc = 9773/10000 = 97.730000%  [95% CI 97.42–98.00] (219ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.038842, test_acc = 9776/10000 = 97.760000%  [95% CI 97.45–98.03] (218ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.033523, test_acc = 9779/10000 = 97.790000%  [95% CI 97.48–98.06] (239ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.029015, test_acc = 9782/10000 = 97.820000%  [95% CI 97.51–98.09] (234ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).
+
+━━━ mnist-cnn-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-cnn-verified: run (gpu 0, neuron) ━━━
+→ mnist-cnn-verified (GPU 0, neuron) → runs/2026-10-30-mnist-cnn-verified/mnist-cnn-verified.log
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793318827.799776    8217 neuronpjrt.cc:394] Registered Neuron auto-sharding: platform=2.0, devices_per_node=32
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 646 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 117 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.366943, test_acc = 9530/10000 = 95.300000%  [95% CI 94.87–95.70] (7660ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.080311, test_acc = 9763/10000 = 97.630000%  [95% CI 97.31–97.91] (7542ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.054888, test_acc = 9836/10000 = 98.360000%  [95% CI 98.09–98.59] (7514ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.030072, test_acc = 9846/10000 = 98.460000%  [95% CI 98.20–98.68] (7691ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.018904, test_acc = 9866/10000 = 98.660000%  [95% CI 98.42–98.87] (7549ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.013660, test_acc = 9855/10000 = 98.550000%  [95% CI 98.30–98.77] (7660ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.010747, test_acc = 9848/10000 = 98.480000%  [95% CI 98.22–98.70] (7517ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.008593, test_acc = 9880/10000 = 98.800000%  [95% CI 98.57–99.00] (7518ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.005365, test_acc = 9867/10000 = 98.670000%  [95% CI 98.43–98.88] (7521ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.006192, test_acc = 9873/10000 = 98.730000%  [95% CI 98.49–98.93] (7514ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.004690, test_acc = 9872/10000 = 98.720000%  [95% CI 98.48–98.92] (7510ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.025839, test_acc = 9873/10000 = 98.730000%  [95% CI 98.49–98.93] (7514ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).
+
+━━━ cifar: lake run cifar on a NeuronCore
+━━━ XLA/PJRT backend ━━━
+  ✓ ffi/libpjrt_ffi.so up to date
+  ✓ PJRT_PLUGIN=.venv-neuron/lib/python3.12/site-packages/libneuronxla/libneuronpjrt.so
+
+━━━ cifar8w-ablation: build ━━━
+Build completed successfully (29 jobs).
+━━━ cifar8w-ablation: run (gpu 0, neuron) ━━━
+→ cifar8w-ablation (GPU 0, neuron) → runs/2026-10-30-cifar8w-ablation/cifar8w-ablation.log
+[pjrt_ffi] XLA backend: PJRT 0.90, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793318927.336071    9125 neuronpjrt.cc:394] Registered Neuron auto-sharding: platform=2.0, devices_per_node=32
+[pjrt_ffi] compiled verified_mlir/cifar8w_sgd_train_step.mlir (@cifar8w_sgd_train_step, 69 outputs, 1 replica) in 8709 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 4241 ms
+════════ cifar8w (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_sgd_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide sgd (constant lr 0.100000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_sgd_train_step holds 66 parameter tensors (4.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/390: loss=2.315255
+  step 1/390: loss=2.302560
+  step 2/390: loss=2.302324
+  step 100/390: loss=2.301987
+  step 200/390: loss=2.303731
+  step 300/390: loss=2.302713
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/40: loss=2.304178 lr=0.100000
+  epoch 1: test_acc = 1000/10000 = 10.000000%  top5 = 5000/10000 = 50.000000%  [95% CI 9.43–10.60]
+  step 0/390: loss=2.303324
+  step 1/390: loss=2.304063
+  step 2/390: loss=2.302361
+  step 100/390: loss=2.304933
+  step 200/390: loss=2.304091
+  step 300/390: loss=2.301024
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/40: loss=2.302849 lr=0.100000
+  epoch 2: test_acc = 1000/10000 = 10.000000%  top5 = 5000/10000 = 50.000000%  [95% CI 9.43–10.60]
+  step 0/390: loss=2.302876
+  step 1/390: loss=2.302501
+  step 2/390: loss=2.302899
+  step 100/390: loss=2.304249
+  step 200/390: loss=2.302986
+  step 300/390: loss=2.301339
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/40: loss=2.302843 lr=0.100000
+  epoch 3: test_acc = 1000/10000 = 10.000000%  top5 = 5000/10000 = 50.000000%  [95% CI 9.43–10.60]
+  step 0/390: loss=2.303939
+  step 1/390: loss=2.303093
+  step 2/390: loss=2.303186

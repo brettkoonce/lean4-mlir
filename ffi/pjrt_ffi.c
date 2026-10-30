@@ -502,6 +502,42 @@ static int check(PJRT_Error* err, const char* what) {
   return 1;
 }
 
+// The bytes `buf` copies to the host: ToHostBuffer with dst=NULL, the C API's size query. Neuron's
+// plugin answers that query with 0 (deploy/TRAINIUM.md), so a 0 falls back to the buffer's
+// dimensions times its element size — a dense host layout, which is what ToHostBuffer writes when
+// no host_layout is given. Returns check()'s 1 on a plugin error.
+static int host_size(PJRT_Buffer* buf, size_t* size, const char* what) {
+  PJRT_Buffer_ToHostBuffer_Args q = {0};
+  q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+  q.src = buf;
+  q.dst = NULL;
+  if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), what)) return 1;
+  *size = q.dst_size;
+  if (*size) return 0;
+  PJRT_Buffer_ElementType_Args t = {0};
+  t.struct_size = PJRT_Buffer_ElementType_Args_STRUCT_SIZE;
+  t.buffer = buf;
+  if (check(g_api->PJRT_Buffer_ElementType(&t), what)) return 1;
+  size_t elem;
+  switch (t.type) {
+    case PJRT_Buffer_Type_PRED: case PJRT_Buffer_Type_S8: case PJRT_Buffer_Type_U8: elem = 1; break;
+    case PJRT_Buffer_Type_S16: case PJRT_Buffer_Type_U16:
+    case PJRT_Buffer_Type_F16: case PJRT_Buffer_Type_BF16: elem = 2; break;
+    case PJRT_Buffer_Type_S32: case PJRT_Buffer_Type_U32: case PJRT_Buffer_Type_F32: elem = 4; break;
+    case PJRT_Buffer_Type_S64: case PJRT_Buffer_Type_U64:
+    case PJRT_Buffer_Type_F64: case PJRT_Buffer_Type_C64: elem = 8; break;
+    case PJRT_Buffer_Type_C128: elem = 16; break;
+    default: return 0;   // a type the trainers never return: leave 0, the caller's mismatch says so
+  }
+  PJRT_Buffer_Dimensions_Args d = {0};
+  d.struct_size = PJRT_Buffer_Dimensions_Args_STRUCT_SIZE;
+  d.buffer = buf;
+  if (check(g_api->PJRT_Buffer_Dimensions(&d), what)) return 1;
+  *size = elem;
+  for (size_t k = 0; k < d.num_dims; k++) *size *= (size_t)d.dims[k];
+  return 0;
+}
+
 static int await_event(PJRT_Event* ev, const char* what) {
   PJRT_Event_Await_Args a = {0};
   a.struct_size = PJRT_Event_Await_Args_STRUCT_SIZE;
@@ -1211,17 +1247,14 @@ static int invoke_typed(
       size_t want = (size_t)output_totals[i] * sizeof(float);
       if (acct) acct->d2h_mb += want / 1048576.0;
 
-      PJRT_Buffer_ToHostBuffer_Args q = {0};
-      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
-      q.src = out[i];
-      q.dst = NULL;
-      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(size query)")) {
+      size_t got;
+      if (host_size(out[i], &got, "ToHostBuffer(size query)")) {
         failed = 1; break;
       }
-      if (q.dst_size != want) {
+      if (got != want) {
         fprintf(stderr,
                 "[pjrt_ffi] output %d size mismatch: graph produces %zu bytes, "
-                "caller expects %zu — refusing to copy\n", i, q.dst_size, want);
+                "caller expects %zu — refusing to copy\n", i, got, want);
         failed = 1; break;
       }
 
@@ -1339,16 +1372,13 @@ static int d2h_gather(iree_ffi_session_t* sess, PJRT_Buffer** out, int n_replica
     if (acct) acct->d2h_mb += (double)output_totals[i] * 4.0 / 1048576.0;
     for (int rep = 0; rep < n_replicas; rep++) {
       PJRT_Buffer* src = out[(size_t)(fault ? 0 : rep) * n_outputs + i];
-      PJRT_Buffer_ToHostBuffer_Args q = {0};
-      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
-      q.src = src;
-      q.dst = NULL;
-      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(gather size)")) { rc = 4; break; }
-      if (q.dst_size != want) {
+      size_t got;
+      if (host_size(src, &got, "ToHostBuffer(gather size)")) { rc = 4; break; }
+      if (got != want) {
         fprintf(stderr,
                 "[pjrt_ffi] output %d replica %d size mismatch: graph %zu bytes, caller "
                 "%zu (= %lld floats / %d replicas)\n",
-                i, rep, q.dst_size, want, (long long)output_totals[i], n_replicas);
+                i, rep, got, want, (long long)output_totals[i], n_replicas);
         rc = 4; break;
       }
       PJRT_Buffer_ToHostBuffer_Args a = {0};
@@ -1551,15 +1581,12 @@ int pjrt_ffi_invoke_f32_dp(
     for (int i = 0; i < n_outputs; i++) {
       size_t want = (size_t)output_totals[i] * sizeof(float);
       if (acct) acct->d2h_mb += want / 1048576.0;
-      PJRT_Buffer_ToHostBuffer_Args q = {0};
-      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
-      q.src = out[i];
-      q.dst = NULL;
-      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(dp size)")) { rc = 4; break; }
-      if (q.dst_size != want) {
+      size_t got;
+      if (host_size(out[i], &got, "ToHostBuffer(dp size)")) { rc = 4; break; }
+      if (got != want) {
         fprintf(stderr,
                 "[pjrt_ffi] output %d size mismatch: graph %zu bytes, caller %zu\n",
-                i, q.dst_size, want);
+                i, got, want);
         rc = 4; break;
       }
       PJRT_Buffer_ToHostBuffer_Args a = {0};
@@ -1995,15 +2022,12 @@ int pjrt_ffi_invoke_f32_resident_v2(
       if (!hold && i >= res_out && i < res_out + n_resident) continue;  // stays on device
       size_t want = (size_t)output_totals[i] * sizeof(float);
       if (acct) acct->d2h_mb += want / 1048576.0;
-      PJRT_Buffer_ToHostBuffer_Args q = {0};
-      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
-      q.src = out[i];
-      q.dst = NULL;
-      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(res size)")) { rc = 4; break; }
-      if (q.dst_size != want) {
+      size_t got;
+      if (host_size(out[i], &got, "ToHostBuffer(res size)")) { rc = 4; break; }
+      if (got != want) {
         fprintf(stderr,
                 "[pjrt_ffi] output %d size mismatch: graph %zu bytes, caller %zu\n",
-                i, q.dst_size, want);
+                i, got, want);
         rc = 4; break;
       }
       PJRT_Buffer_ToHostBuffer_Args a = {0};
