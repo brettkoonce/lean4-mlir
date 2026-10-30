@@ -8,20 +8,20 @@
 \begin{tabular}{@{}p{0.10\textwidth}p{0.22\textwidth}p{0.12\textwidth}p{0.12\textwidth}p{0.12\textwidth}p{0.12\textwidth}p{0.12\textwidth}@{}}
 \textbf{Platform} & \textbf{Plugin, pinned} & \textbf{suite} & \textbf{mnist} & \textbf{cifar} & \textbf{imagenette} & \textbf{imagenet} \\[2pt]
 \hline \\[-6pt]
-\cellleft ares & \cellleft \texttt{jax\_cuda12\_pjrt} 0.11.0 in the pinned \texttt{.venv} & \cellleft tiers 0–2, 22 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft R34; R50 at 2018 and RSB-A3 \\[4pt]
-\cellleft 3060 box (mars) & \cellleft \texttt{xla\_cuda13} in \texttt{/\allowbreak home/\allowbreak skoonce/\allowbreak .venv-cuda}, \texttt{SHIM\_PYTHON} required & \cellleft tiers 0–2, 24 pass & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft all seven, and MNv4 \\[4pt]
+\cellleft 4$\times$ RTX 4060 Ti & \cellleft \texttt{jax\_cuda12\_pjrt} 0.11.0 in the pinned \texttt{.venv} & \cellleft tiers 0–2, 22 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft R34; R50 at 2018 and RSB-A3 \\[4pt]
+\cellleft 4$\times$ RTX 3060 & \cellleft \texttt{xla\_cuda13} in \texttt{/\allowbreak home/\allowbreak skoonce/\allowbreak .venv-cuda}, \texttt{SHIM\_PYTHON} required & \cellleft tiers 0–2, 24 pass & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft all seven, and MNv4 \\[4pt]
 \cellleft Jetson Orin Nano 8 GB & \cellleft jax v0.11.1 built for sm\_87 by \texttt{deploy/\allowbreak build\_orin\_pjrt\_plugin.sh}, staged by \texttt{orin\_setup.sh} & \cellleft tiers 0–2, 20 pass & \cellleft the CNN & \cellleft the 8-conv CNN, with and without BN & \cellleft all seven & \cellleft n/a \\[4pt]
-\cellleft AMD ROCm 7.2 & \cellleft \texttt{jax-rocm7-pjrt} in the pinned \texttt{.venv} & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft -- \\[4pt]
-\cellleft Intel Arc Pro B50 16 GB (minerva) & \cellleft \texttt{jax\_oneapi\_pjrt} 0.11.2 (platform \texttt{oneapi}) with its oneAPI runtime wheels in \texttt{.venv-xpu}, made by \texttt{deploy/\allowbreak arc\_setup.sh} & \cellleft tiers 0–2, 21 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft n/a \\[4pt]
-\cellleft Apple Silicon Mac & \cellleft \texttt{jax-graft} 0.0.5 (\texttt{metal-pjrt-core}, platform \texttt{mtl}) in the repo's \texttt{.venv} & \cellleft -- & \cellleft linear, MLP, CNN & \cellleft -- & \cellleft -- & \cellleft n/a \\[4pt]
+\cellleft AMD Radeon RX 7900 XTX & \cellleft \texttt{jax-rocm7-pjrt} in the pinned \texttt{.venv} & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft -- \\[4pt]
+\cellleft Intel Arc Pro B50 16 GB & \cellleft \texttt{jax\_oneapi\_pjrt} 0.11.2 (platform \texttt{oneapi}) with its oneAPI runtime wheels in \texttt{.venv-xpu}, made by \texttt{deploy/\allowbreak arc\_setup.sh} & \cellleft tiers 0–2, 21 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft n/a \\[4pt]
+\cellleft Apple M1 MacBook Air & \cellleft \texttt{jax-graft} 0.0.5 (\texttt{metal-pjrt-core}, platform \texttt{mtl}) in the repo's \texttt{.venv} & \cellleft -- & \cellleft linear, MLP, CNN & \cellleft -- & \cellleft -- & \cellleft n/a \\[4pt]
 \cellleft IREE 3.11 & \cellleft \texttt{iree-compile} on \texttt{\$PATH} and \texttt{ffi/\allowbreak libiree\_ffi.so}, built per historical/IREE\_BUILD.md; on a box without a GPU, \texttt{deploy/\allowbreak iree\_cpu\_setup.sh} & \cellleft n/a & \cellleft MLP, CNN & \cellleft the CIFAR CNN & \cellleft ConvNeXt-T & \cellleft n/a \\
 \end{tabular}
 \par\smallskip{\footnotesize\raggedright
-\textbf{ares}\quad 4$\times$ RTX 4060 Ti, CUDA 12, driver 575; runbook README.\\
-\textbf{3060 box (mars)}\quad 4$\times$ RTX 3060, CUDA 13.3, driver 610; runbook scripts/jobs/\_box.sh.\\
+\textbf{4$\times$ RTX 4060 Ti}\quad CUDA 12, driver 575; runbook README.\\
+\textbf{4$\times$ RTX 3060}\quad CUDA 13.3, driver 610; runbook scripts/jobs/\_box.sh.\\
 \textbf{Jetson Orin Nano 8 GB}\quad sm\_87, JetPack 6.2, unified memory; runbook deploy/ORIN.md.\\
-\textbf{AMD ROCm 7.2}\quad gfx1100 (7900 XTX), the box of the 2026-08 runs; runbook historical/ROCM.md.\\
-\textbf{Intel Arc Pro B50 16 GB (minerva)}\quad Battlemage, oneAPI, kernel 7.0; runbook deploy/ARC\_B50.md.\\
-\textbf{Apple Silicon Mac}\quad M1 MacBook Air, Metal, macOS 26, unified memory; runbook deploy/MAC.md.\\
+\textbf{AMD Radeon RX 7900 XTX}\quad ROCm 7.2, gfx1100; runbook historical/ROCM.md.\\
+\textbf{Intel Arc Pro B50 16 GB}\quad Battlemage, oneAPI, kernel 7.0; runbook deploy/ARC\_B50.md.\\
+\textbf{Apple M1 MacBook Air}\quad Metal, macOS 26, unified memory; runbook deploy/MAC.md.\\
 \textbf{IREE 3.11}\quad the second lowerer, over CUDA, ROCm or the CPU; no PJRT plugin, it compiles every kernel itself. On the CPU, 3.11's \texttt{llvm-cpu} miscompiles the pooled train steps, so the CPU gradient gate runs on \texttt{vmvx}, and its task device crashes on the 224² renders, so a box without a GPU runs 3.13 (\texttt{deploy/\allowbreak iree\_cpu\_setup.sh}); runbook historical/IREE\_BUILD.md.\\
 \par}

@@ -19725,7 +19725,7 @@ in Appendix~\ref{app:verification}.
 \section*{Platforms}
 \label{sec:getting_started_platforms}
 
-The target is the mnist, cifar and imagenette rungs of
+The target is the MNIST, CIFAR and Imagenette rungs of
 Table~\ref{tab:getting_started_tracks} on the GPU platforms of
 Table~\ref{tab:platforms}, each one plugin file and (off the Mac) one device
 variable away from the same Lean binaries, the plugin pinned per platform.
@@ -19745,7 +19745,10 @@ The CUDA 12 and ROCm pins are the lock files under \texttt{jax/}; the CUDA
 Mac's and the Arc's their setup scripts. Three of the rows are there to make
 a point. The Orin is the core sequence on a commodity computer rather than a
 training box --- the board, a plugin built for it and the tier's memory
-recipe, nothing else --- and \texttt{deploy/ORIN.md} is its runbook. The Mac
+recipe, nothing else. The Imagenette tier runs there end to end, seven nets
+in a day with ConvNeXt-T as four accumulated micro-batches of eight, each
+landing within a quarter of a point of its five-seed range in
+Table~\ref{tab:imagenette_five}; \texttt{deploy/ORIN.md} is its runbook. The Mac
 is the same point on a laptop: Metal through a PJRT plugin, unified memory
 (nothing is staged to the device), float32 only (the MNIST renders use no
 float64), and \texttt{deploy/MAC.md} is its runbook. The Arc is the third
@@ -19770,7 +19773,7 @@ needs \texttt{iree-compile} on \texttt{\$PATH}, the runtime built per
 \texttt{historical/\allowbreak IREE\_BUILD.md}, and
 \texttt{ffi/\allowbreak libiree\_ffi.so}; having no plugin to load, it is
 admitted by its twins rather than by the suite. Collectives exist only on
-the PJRT path, so the imagenet rung is XLA-only. On the CPU, IREE 3.11's
+the PJRT path, so the ImageNet rung is XLA-only. On the CPU, IREE 3.11's
 \texttt{llvm-cpu} miscompiles the pooled train steps, and the CPU gradient
 gate runs on \texttt{vmvx} instead. What the second lowerer is for, which
 is not that you might train on it, is \S\ref{sec:jax_pipeline} in
