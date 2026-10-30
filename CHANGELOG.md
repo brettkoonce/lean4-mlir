@@ -3,6 +3,60 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.7.3 — Every pair on its paper recipe, five seeds a row
+
+Every ImageNet pair trains the recipe its paper trained, on both paths, and
+all seven have run: ResNet-34 on Bag of Tricks **74.14%** against the
+reference's 73.98 (McNemar p = 0.29); ResNet-50 **76.99%** against 77.01 on
+the 2018 recipe (p = 0.88) and **78.05%** against 77.58 on RSB-A3 at timm's
+eval resize (p = 0.0002, the one pair that parts, with seeds per arm queued);
+MobileNetV2 on TF-slim's 420 epochs **71.69%** against 71.84 (p = 0.30);
+EfficientNet-B0 on TensorFlow's recipe **77.21%** against 77.17 (p = 0.77);
+ConvNeXt-T on the official recipe **82.15%** against 81.99 (p = 0.18);
+ViT-Tiny on DeiT's **71.61%** against 71.64; and MobileNetV4-Conv-M's
+100-epoch tier **77.42%** against 77.74 (p = 0.014). The `[TODO]` markers are
+gone, Appendix C carries the seven pairs in one table, and each ImageNet
+section is written anchor-then-diff: the recipe stated once, every later one
+as a diff from ResNet-34's. Below ImageNet every number is five seeds. The
+Imagenette column reads median and range per row (EfficientNet-B0 89.96,
+ResNet-34 89.78, ResNet-50 89.63, MobileNetV2 88.87, ConvNeXt-T 83.75,
+ViT-Tiny 68.61) and its transcripts are the median seeds; Chapter 4's CIFAR
+board sits on one date with batch-statistics BatchNorm as the headline
+(momentum 77.4%), two precision claims that did not replicate at five seeds
+are gone, and the one no-BN momentum seed that never left chance now carries
+the point that a verified gradient is not trainability. Lean 4.35.0.
+
+The proofs: the Chapter 1–3 train steps are tied at batch N; Chapter 4's
+batch-statistics net has its whole-net half and its loss-gradient rung; every
+optimizer the book runs has its statement (momentum, AdamW, LAMB, the global
+clip, gradient accumulation, the EMA shadow, RMSProp); the MobileNetV4 chain
+is generic in its feature side; and the ResNet stem pool's backward is nine
+stride-2 slices with no `select_and_scatter`, which every IREE backend
+lowers. `#audit_axioms` checks the three-axiom closure in Lean rather than by
+grep, the comparator runs as four CI legs with seconds per checker, `lake
+test` and `lake lint` drive the gates, every file is on the module system,
+`lake shake` settled the imports, and a 279-file audit rewrote the docstrings
+that said more than their code and fixed the driver and codegen bugs it
+found, with the repeated proof and emitter blocks written once. The book is
+Part 1, Part 2 and the appendices, with Getting started and a Foundations
+page in front, every figure and table numbered and cited, a Recap closing
+every Part 1 chapter, listings held to 88 columns and checked against the
+tree in CI, and two passes that cut what the reader did not need: the
+development history and the operational detail. Appendix B opens on the
+theorem budget and closes on why the three kinds of checking overlap; the
+ladder is named by its commands and the platforms table is generated from
+the record.
+
+Part 2 adds MuZero on tic-tac-toe against the solved game, and every compared
+table carries three seeds: VisDrone, NEU-DET, BraTS, the Boltzmann generator,
+Pong's state arms and the TinyGPT ladder against a Kneser-Ney 7-gram; Leduc
+poker replaces blackjack. Platforms: the Intel Arc Pro B50 on oneAPI runs the
+MNIST, CIFAR and Imagenette tiers, each net inside CUDA's range or two images
+from it; the Jetson Orin Nano 8 GB runs the platform suite and all seven
+Imagenette nets, ConvNeXt-T as four accumulated micro-batches of eight; IREE
+3.13 runs on a box without a GPU; AWS Trainium is prepared off-device; and
+the platforms table names each row by its card.
+
 ## v0.7.2 — The pairs read paired, and five platforms
 
 The ImageNet pairs are read the way the field reads them. Every reference

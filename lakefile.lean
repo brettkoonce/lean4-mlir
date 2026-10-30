@@ -2,7 +2,7 @@ import Lake
 open Lake DSL
 
 package «lean4-mlir» where
-  version := v!"0.7.2"
+  version := v!"0.7.3"
   buildType := .release
   -- `lake test` and `lake lint`: the scripts of those names at the end of this file.
   testDriver := "test"

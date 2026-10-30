@@ -20,7 +20,7 @@ Nature) as the follow-up to
 [![Verify Proofs](https://github.com/brettkoonce/lean4-mlir/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/brettkoonce/lean4-mlir/actions/workflows/proofs.yml)
 [![Comparator](https://github.com/brettkoonce/lean4-mlir/actions/workflows/comparator.yml/badge.svg?branch=main)](https://github.com/brettkoonce/lean4-mlir/actions/workflows/comparator.yml)
 
-**Current version: `v0.7.2`.** Release history in [CHANGELOG.md](CHANGELOG.md).
+**Current version: `v0.7.3`.** Release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Three ways in
 
@@ -162,7 +162,7 @@ held to [timm](https://github.com/huggingface/pytorch-image-models) (Wightman) a
   title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
-  version = {0.7.2},
+  version = {0.7.3},
   year    = {2026},
 }
 ```
