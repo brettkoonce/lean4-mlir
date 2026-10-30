@@ -20610,14 +20610,34 @@ the job's own name.
 \end{tabular}
 \end{table}
 
-\noindent Every row has run, and every chapter prints the pair its row
-trains.
-\texttt{scripts/jobs/} also carries axis siblings that this table does not
-list --- an fp32 peer of each of the ResNet-34, ResNet-50 2018, RSB-A3 and
-ViT rows, and RSB-A3 at $8\times64$ --- which differ from their row in
-precision or in accumulation shape, never in the recipe, plus
-\texttt{selftest}, which exercises the supervisor without a GPU. Each
-config's header says which it is.
+\noindent Every row has run. Table~\ref{tab:track4_results} is the seven
+pairs in one place, each row's chapter table the source.
+
+\begin{table}[H]
+\centering
+\caption{The imagenet tier's results: the reference trainer and the verified path on ImageNet-1k's $50{,}000$ validation images, each pair under the protocol its chapter table states (Tables~\ref{tab:r34_paths}, \ref{tab:r50_paths}, \ref{tab:mnv2_paths}, \ref{tab:enet_paths}, \ref{tab:cnx_paths} and~\ref{tab:vit_paths}). Hours are four-card wall-clock, reference / verified: $\dagger$ four RTX 4060 Ti, $\ddagger$ four RTX 3060.}
+\label{tab:track4_results}
+\small
+\begin{tabular}{@{}l l r r r r r r@{}}
+ & & & \multicolumn{2}{c}{reference (JAX)} & \multicolumn{2}{c}{verified path (PJRT)} & \\
+\textbf{Network} & \textbf{Recipe} & \textbf{Epochs} & top-1 & top-5 & top-1 & top-5 & \textbf{Hours} \\[2pt]
+\hline \\[-6pt]
+ResNet-34       & 2018       &  90 & 73.98 & 91.70 & 74.14 & 91.85 & 12.7 / 23.5$^{\dagger}$ \\
+ResNet-50       & 2018       &  90 & 77.01 & 93.51 & 76.99 & 93.51 & 22.2 / 30.1$^{\dagger}$ \\
+ResNet-50       & RSB-A3     & 100 & 77.58 & 93.66 & 78.05 & 93.97 & 13.4 / 21.9$^{\dagger}$ \\
+MobileNetV2     & TF-slim    & 420 & 71.84 & 90.53 & 71.69 & 90.52 & 48.7 / 63.7$^{\dagger}$ \\
+EfficientNet-B0 & TensorFlow & 350 & 77.17 & 93.39 & 77.21 & 93.46 & 42.5 / 65.1$^{\ddagger}$ \\
+ConvNeXt-T      & official   & 300 & 81.99 & 95.87 & 82.15 & 95.91 & 74.1 / 102.7$^{\ddagger}$ \\
+ViT-Tiny        & DeiT-Ti    & 300 & 71.64 & 90.98 & 71.61 & 90.95 & 48.3 / 62.6$^{\ddagger}$ \\
+\end{tabular}
+\end{table}
+
+\noindent Six of the seven pairs tie, within two tenths of a point on top-1
+either way. ResNet-50 on A3 parts by half a point in the verified path's
+favour, at one seed per arm (\S\ref{sec:r50_pjrt}).
+\texttt{scripts/jobs/} also carries siblings of these rows that differ in
+precision or accumulation shape and never in recipe, plus
+\texttt{selftest}, which exercises the supervisor without a GPU.
 
 \section*{This tier needs Python}
 
