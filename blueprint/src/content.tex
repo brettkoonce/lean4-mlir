@@ -791,8 +791,8 @@ over, not a new theorem. Two statements do the lifting for every
 certificate in the book, the matrix form of the VJP record and the lemma
 that applies a per-example backward to each row of a batch; they are
 proved in \S\ref{sec:matrix_machinery}, and because they are bookkeeping
-rather than content, the chapter maps of Figures~\ref{fig:spines}
-and~\ref{fig:chapter_map} leave them out. The one exception is BatchNorm, which normalizes
+rather than content, the chapter map of Figure~\ref{fig:spines} leaves
+them out. The one exception is BatchNorm, which normalizes
 each example by statistics of the whole batch, so the batch enters the
 function itself and the per-example theorem no longer describes it.
 Chapter~\ref{chap:bn} proves it twice, per example and at batch
@@ -932,7 +932,8 @@ chapter's own statements and the edges among them. A statement that every
 later chapter cites --- \(\pdiv\) and its rules, the VJP records,
 composition --- is not redrawn where it is used; the
 \texttt{\textbackslash uses} line under each statement has them all, and
-Figure~\ref{fig:chapter_map} is the same graph at the scale of chapters.}
+Figure~\ref{fig:spines} in Appendix~\ref{app:verification} follows each
+chapter network's certificate through all of them.}
 \label{fig:depgraph_tensor}
 \end{figure}
 
@@ -19844,56 +19845,9 @@ One property makes the whole edifice auditable: \textbf{every chapter is
 pure composition}. Every primitive either inherits from Mathlib's
 \(\fderiv\) or composes previously-proved theorems, so each
 architecture's whole-network VJP traces back to the Chapter~1 calculus.
-Figure~\ref{fig:spines} follows each chapter network's whole-network
-certificate back through everything it cites, chapter by chapter;
-Figure~\ref{fig:chapter_map} is the citation graph between the chapters
-themselves.
-
-\begin{figure}[H]
-\centering
-\input{figures/depgraph/spines}
-\caption{The five chapter networks' whole-network certificates and what each
-stands on. A column follows one certificate's proof up through every statement it
-cites, transitively; the circle at a chapter is how many of that chapter's
-statements it reaches, the double circle marks the chapter that proves it,
-and every box is a link. All five reach Chapter~\ref{chap:tensor}'s calculus and
-Chapter~\ref{chap:bn}'s normalisation lemmas. The three convolutional
-nets stop at their own chapter; the two LayerNorm nets go on to
-Chapter~\ref{chap:layernorm} and the matrix-level machinery of
-\S\ref{sec:matrix_machinery}, and their chains are twice the length.
-EfficientNet-B0 and ConvNeXt-T reach Chapter~\ref{chap:residual}'s
-residual; ViT-Tiny alone reaches Chapter~\ref{chap:attention}'s attention
-proofs. Not counted are the two statements every certificate passes
-through to be stated for a batch rather than one example, the matrix form
-of the VJP record and its row-wise lifting (\S\ref{sec:matrix_machinery}).}
-\label{fig:spines}
-\end{figure}
-
-Read down a column, this is what one network's certificate stands on;
-read across a row, this is what one chapter contributes, and
-Chapter~\ref{chap:tensor}'s row is the only one every column crosses, so
-the chapters a column reaches are the chapters its row of
-Table~\ref{tab:roadmap} names. Each chapter's theorems section opens
-with the same picture at the scale of its own statements, and the full
-clickable dependency graph is in the blueprint web view.
-
-\begin{figure}[ht]
-\centering
-\input{figures/depgraph/book}
-\caption{The same fact at the scale of chapters. Each box is a chapter and
-the number of statements it proves; an arrow from one box to another means
-the second's proofs cite the first's, and its width grows with the count,
-\depgraphCitations{} citations in all, the two batch-lifting statements of
-\S\ref{sec:matrix_machinery} set aside as in Figure~\ref{fig:spines}. The
-double-bordered box is cited by every chapter after it ---
-Chapter~\ref{chap:tensor}, \depgraphCitesTensor{} times, for \(\pdiv\)
-and its rules --- so its arrows are left out. The matrix-level machinery of
-\S\ref{sec:matrix_machinery} is proved in Chapter~\ref{chap:attention}
-and drawn as its own box, one row above Chapter~\ref{chap:layernorm},
-where it is first used; the dashed arrow is the one statement proved
-later than it is used, softmax's derivative. Every box is a link.}
-\label{fig:chapter_map}
-\end{figure}
+Table~\ref{tab:theorem_budget} is the count of what each chapter proves,
+and Figure~\ref{fig:spines} follows each chapter network's certificate
+back through everything it cites.
 
 \section{What each chapter proves}
 \label{sec:theorem_budget}
@@ -19953,38 +19907,42 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 \end{tabular}
 \end{table}
 
-\medskip\noindent\textbf{Two regimes, one boundary.} The ladder of
-Table~\ref{tab:getting_started_tracks} has two regimes, and the boundary is
-the cifar rung. At and below it, the shallow nets carry the theorem families
-that need the whole training story: the SGD descent lemmas (the linear net,
-the MLP, the CNN, CIFAR) and the randomized-smoothing scorecards (the MLP,
-the CNN, the CIFAR CNN). Above it, from ResNet-34 on, a net carries its VJP
-contracts, its step tie and the JAX cross-check, and nothing more. The
-second lowerer has a line of its own one rung higher, at imagenet, where
-collectives exist only on the PJRT path (Table~\ref{tab:platforms}).
-Descent, smoothing and the IREE row each stop where a line sits, and none
-needs its own excuse.
+\begin{figure}[H]
+\centering
+\input{figures/depgraph/spines}
+\caption{The five chapter networks' whole-network certificates and what each
+stands on. A column follows one certificate's proof up through every statement it
+cites, transitively; the circle at a chapter is how many of that chapter's
+statements it reaches, the double circle marks the chapter that proves it,
+and every box is a link. All five reach Chapter~\ref{chap:tensor}'s calculus and
+Chapter~\ref{chap:bn}'s normalisation lemmas. The three convolutional
+nets stop at their own chapter; the two LayerNorm nets go on to
+Chapter~\ref{chap:layernorm} and the matrix-level machinery of
+\S\ref{sec:matrix_machinery}, and their chains are twice the length.
+EfficientNet-B0 and ConvNeXt-T reach Chapter~\ref{chap:residual}'s
+residual; ViT-Tiny alone reaches Chapter~\ref{chap:attention}'s attention
+proofs. Not counted are the two statements every certificate passes
+through to be stated for a batch rather than one example, the matrix form
+of the VJP record and its row-wise lifting (\S\ref{sec:matrix_machinery}).}
+\label{fig:spines}
+\end{figure}
 
-\medskip\noindent\textbf{The scorecard is the one place a measurement
-becomes a theorem.} The smoothing driver takes the first hundred test
-images, draws $n = 10112$ Gaussian forwards per image at $\sigma = 0.5$
-through the net's committed forward, and counts the votes for the top
-class. That count is the hypothesis of a kernel-checked binomial-tail lemma
-(\texttt{binomTail\_le\_of\_kernel\_check}, one per image, decided at
-$\alpha = 10^{-3}$), whose conclusion is a lower confidence bound $q_0$ on
-the top class's probability; a second lemma per image proves a decimal lower
-bound on the radius $\sigma\,\Phi^{-1}(q_0)$ that randomized smoothing
-assigns to it. 99, 100 and 80 of the hundred get a radius on the MLP, the
-CNN and the CIFAR CNN, 99, 100 and 60 of those at the right label. What
-stays a hypothesis is that the driver's checkpoint is the classifier the
-radius theorem is about, and \texttt{TRUST.md} lists it as one. That is the
-bridge from a measured count to a proved bound, and the other meaning of
-``verified'': not that the gradient is right, but that the number reported
-is the one the theorem decides.
+Read down a column, this is what one network's certificate stands on;
+read across a row, this is what one chapter contributes, and
+Chapter~\ref{chap:tensor}'s row is the only one every column crosses, so
+the chapters a column reaches are the chapters its row of
+Table~\ref{tab:roadmap} names.
+
+\medskip\noindent\textbf{Two regimes, one boundary.} At and below the cifar
+rung, the shallow nets carry the theorem families that need the whole
+training story, the SGD descent lemmas and the randomized-smoothing
+scorecards. From ResNet-34 up, a net carries its VJP contracts, its step
+tie and the JAX cross-check, and nothing more.
+
 
 Every chapter's theorems section opens with its own dependency graph,
-every box a Lean theorem and a link, and each chapter names its contracts
-as it proves them. The rest of this appendix is how those claims get
+every box a Lean theorem and a link, and the full clickable graph is the
+blueprint web view. The rest of this appendix is how those claims get
 checked: the audits, the bridge theorems, and the hardware oracles.
 
 \section{Proven: the math is right}
@@ -20040,47 +19998,49 @@ against an allowlist of exactly \(\{\texttt{propext}, \texttt{Quot.sound},
 \texttt{con-leche} and \texttt{con-ron}. Any project axiom in the closure
 of any listed theorem fails the run.
 
-The 110 theorems split across three files, and the split is the point.
-\texttt{Challenge.lean} \textbf{imports Mathlib and nothing else}. It
-carries the 13 architecture-free theorems (Chapter~\ref{chap:tensor}'s
-\texttt{pdiv} calculus rules and Chapter~\ref{chap:attention}'s
-matrix-level ones), with the handful of definitions they need copied
-inline, and \texttt{chk\_pdiv\_is\_fderiv} pinning \texttt{pdiv} to
-Mathlib's \texttt{fderiv} by \texttt{rfl}. A reviewer can read that one
-file and know what is claimed without reading a line of this project.
-Copying the definitions is safe here in a way copying an architecture
-would not be: comparator compares the challenge and solution statements
-bit-identically, so a copy that drifted would fail the run rather than
-quietly prove something weaker.
+The 110 theorems split across three files, and the split is the point. \texttt{Challenge.lean} imports Mathlib and nothing else: the 13
+architecture-free theorems, Chapter~\ref{chap:tensor}'s \texttt{pdiv}
+calculus rules and Chapter~\ref{chap:attention}'s matrix-level ones, with
+the definitions they need copied inline and \texttt{chk\_pdiv\_is\_fderiv}
+pinning \texttt{pdiv} to Mathlib's \texttt{fderiv} by \texttt{rfl}. A
+reviewer can read that one file and know what is claimed without reading a
+line of this project, and a copied definition that drifted would fail the
+run rather than quietly prove something weaker, because comparator compares
+the challenge and solution statements bit-identically.
+\texttt{ChallengeArch.lean} holds the 39 statements about specific networks,
+every chapter's headline Jacobian and the public \texttt{*HasVJP\_correct}
+wrappers, which cannot be phrased without the network in scope. Once the
+\texttt{fderiv} pin and the structural rules are checked over Mathlib
+alone, these are applications of them, and what you must additionally
+trust is the forward functions. The last 58 are \texttt{ChallengeTier.lean},
+the layer the second half of the book rests on: the step ties, the codegen
+faithfulness results, the whole-net back-chains, the data-parallel
+results, the float bridge and the four certificate theorems, printed from
+each declaration's own type rather than transcribed. With the four already
+in \texttt{ChallengeArch.lean} they are exactly the declarations
+\texttt{formalization.yaml} puts forward, so the coverage is checkable by
+diffing two lists. The 110 are not the whole proof suite: the axiom audit
+covers every headline declaration under the same allowlist.
+What the 110 add is a second, non-elaborator opinion on every result the
+book puts forward and the calculus floor they rest on.
 
-Thirty-nine more live in \texttt{ChallengeArch.lean} and do import the
-project, because each is a statement about a specific network, and
-``ResNet-34's rendered backward equals its Fréchet derivative'' cannot be
-phrased without ResNet-34 in scope: every chapter's headline Jacobian,
-the public \texttt{*HasVJP\_correct} wrappers, and three smooth-point
-pointwise variants (\texttt{reluHasVJPAt\_\allowbreak correct},
-\texttt{mlpHasVJPAt\_\allowbreak correct}, \texttt{maxPool2HasVJPAt3\_\allowbreak correct}) whose
-underlying \texttt{.correct} field is a real proof rather than
-\texttt{rfl}. Once the \texttt{fderiv} pin and the structural rules are
-checked over Mathlib alone, the architecture theorems are applications
-of them, and what you must additionally trust is the forward functions
-and nothing else.
+\subsection{A measurement becomes a theorem}
 
-The last 58 are \texttt{ChallengeTier.lean}, the layer this book's second
-half rests on: the step ties, the codegen faithfulness results, the
-whole-net back-chains, the data-parallel results, the float bridge and
-the four certificate theorems. Their statements run to hundreds of lines
-apiece, so the file is printed from each declaration's own type
-(\texttt{scripts/gates/\allowbreak gen\_comparator\_tier.py}) rather than
-transcribed, and the solution proves each one with the project theorem
-itself. With the four that \texttt{ChallengeArch.lean} already holds,
-these are exactly the declarations \texttt{formalization.yaml} puts
-forward, so the coverage is checkable by diffing two lists.
-
-The 110 are not the whole proof suite: the axiom audit covers every
-headline declaration under the same allowlist. What the 110 add is a second,
-non-elaborator opinion, on every result \texttt{formalization.yaml}
-puts forward together with the calculus floor those rest on.
+The smoothing scorecard is the one place a measured count becomes a proved
+bound. The driver takes the first hundred test images, draws $n = 10112$
+Gaussian forwards per image at $\sigma = 0.5$ through the net's committed
+forward, and counts the votes for the top class. That count is the
+hypothesis of a kernel-checked binomial-tail lemma
+(\texttt{binomTail\_le\_of\_kernel\_check}, one per image, decided at
+$\alpha = 10^{-3}$) whose conclusion is a lower confidence bound $q_0$ on
+the top class's probability, and a second lemma per image proves a decimal
+lower bound on the radius $\sigma\,\Phi^{-1}(q_0)$ that randomized
+smoothing assigns to it. 99, 100 and 80 of the hundred get a radius on the
+MLP, the CNN and the CIFAR CNN, 99, 100 and 60 of those at the right label.
+What stays a hypothesis is that the driver's checkpoint is the classifier
+the radius theorem is about, and \texttt{TRUST.md} lists it as one. That is
+the other meaning of ``verified'': not that the gradient is right, but that
+the number reported is the one the theorem decides.
 
 \section{By construction: the code is the math}
 
@@ -20156,15 +20116,6 @@ thousands of lines of string-building linked to the proof by nothing at all,
 the unproven surface here is one printer's per-token text, tested end to end, plus
 the hand-written lines each render declares in its own comments (the
 report-only \texttt{\%loss}, for one, and ConvNeXt's GAP-backward block).
-
-\medskip\noindent\textbf{Why it is tractable.} A deep ResNet or a
-transformer block comes under this scheme as an engineering build rather
-than a research project because the VJP library is per-operator and
-generic: each operator is proved once over abstract dimensions, and the
-whole-network VJPs compose those lemmas through the chain rule. Code
-generation therefore carries no new proof obligation. Every
-architecture's operators are proven once, the emitter reuses them, and
-what it adds is the printer and the numerical check.
 
 \medskip\noindent\textbf{From operators to whole training steps.} The
 per-operator bridge is the demonstration, and the verified trainers run the
@@ -20314,19 +20265,6 @@ theorems compose into a whole-network VJP: the MLP's
 \texttt{mlp\_whole\_bridge} is four of these substitutions, closed by
 unfolding and \texttt{rfl}.
 
-\medskip\noindent\textbf{Why the datatype is the point.} The graph value
-is the pivot between two arrows. A printer walks it with names in place of
-its values, one \texttt{stablehlo} operation per node
-(\texttt{dotGeneral} $\mapsto$ \texttt{stablehlo.dot\_\allowbreak general}, and
-\texttt{selectPos} $\mapsto$ \texttt{compare GT 0} plus \texttt{select}),
-and that arrow is the trusted one; for the whole-step graphs the printer
-is \texttt{StableHLO.Pretty} over \texttt{SHlo}, and the chapter listings
-are its committed renders at batch width. The denotation interprets the
-same value into the proofs' \texttt{Vec} type, and the bridge proves the
-result equals the derivative, so that arrow is machine-checked. Because
-both arrows start from one concrete datatype rather than from a string,
-``the emitted code computes the proven gradient'' is a theorem about a
-value, not a hope about a comment.
 
 \section{Cross-checked}
 \label{sec:cross_checked}
@@ -20373,46 +20311,23 @@ what the second lowerer is for (\S\ref{sec:jax_pipeline}).
 \subsection{Finite-difference gradient checks}
 
 The script \texttt{LeanMlir/Proofs/check\_jacobians.py} runs 30
-finite-difference gradient checks (its 31st is the identity rule, which
-needs none). For each, it perturbs the input by
-\(\varepsilon\), compares the claimed VJP against the centered
-difference
-\((f(x + \varepsilon) - f(x - \varepsilon)) / 2\varepsilon\), and
-asserts agreement within tolerance (typical max-error
-\(\sim 10^{-11}\) at \(\varepsilon = 10^{-5}\) in float64).
+finite-difference checks over every closed-form Jacobian the book uses
+downstream, from the dense and ReLU rules through the four BatchNorm
+pieces, the convolution and depthwise VJPs, max-pool, softmax, GELU, the
+single-head and multi-head attention backwards and the patch embedding, to
+the whole MLP composition and a few bestiary operators. Each perturbs the
+input by \(\varepsilon\), compares the claimed VJP against the centred
+difference \((f(x + \varepsilon) - f(x - \varepsilon)) / 2\varepsilon\),
+and asserts agreement within tolerance, typically \(\sim 10^{-11}\) at
+\(\varepsilon = 10^{-5}\) in float64.
 
-Every FD check is a belt-and-suspenders pass over a
-proved Jacobian theorem.
-The proofs already establish that each formula equals
-\(\fderiv\) at the relevant points, and the FD checks confirm
-the formulas-as-written agree numerically with what the function
-actually does. Coverage spans every closed-form Jacobian we use
-downstream: \(\pdiv\_\texttt{dense}\) and its weight/bias
-companions, \(\pdiv\_\texttt{relu}\) (at smooth points),
-softmax cross-entropy, all four BN pieces
-(\texttt{bnNormalize}, \texttt{bnCentered},
-\texttt{bnIstdBroadcast}, \texttt{bnAffine}), the conv2d and
-depthwise input/weight/bias VJPs, the maxPool2 input VJP, and the
-softmax Jacobian. It also covers the three single-head SDPA Q/K/V
-backwards, GELU, the bundled multi-head SDPA reduction (per-head
-\texttt{sdpa\_back} stacked over the head axis), the patch-embed
-input VJP, the full-network MLP composition, and bestiary
-spot-checks (bilinear upsample, channel concat, per-pixel
-softmax cross-entropy, U-Net skip plumbing).
-
-What the FD pass checks is the formula as transcribed into NumPy: that
-the closed form a theorem states is in fact the derivative of the
-forward it is claimed for. It reads neither the prose nor the Lean
-statement, so a chapter that narrates a different formula than its
-theorem states is caught by neither tool; Lean verifies its own
-statement, and the transcription is by hand.
-
-FD is cheap, easy to reason about, and tight enough for
-spot-checking formulas, but it can't probe what the
-compiled code actually computes on the GPU, only
-what the formula says in Python, and it struggles at
-non-smooth points where the limit definition breaks down. For
-those gaps and for end-to-end pipeline verification, the next oracle takes over.
+What the pass checks is the formula as transcribed into NumPy: that the
+closed form a theorem states is the derivative of the forward it is
+claimed for. It reads neither the prose nor the Lean statement, so a
+chapter that narrates a different formula than its theorem states is
+caught by neither tool. And it probes the formula in Python rather than
+what the compiled code computes on the GPU, and struggles at non-smooth
+points, so for those gaps the next oracle takes over.
 
 \subsection{Against JAX}
 \label{sec:jax_pipeline}
@@ -20463,42 +20378,17 @@ committed as JSON-Lines, with
 
 \medskip\noindent\textbf{Why a second lowerer.} Both consume the same
 proven StableHLO and sit in the same trusted tier; neither is verified, and
-swapping them changes nothing about what is proved. XLA is faster ---
-$2.3\times$ on the MNIST linear net, $4.9\times$ on the CNN --- because it
+swapping them changes nothing about what is proved. XLA is faster because it
 dispatches to the vendor's hand-tuned kernels, where IREE generates every
-kernel itself. That is also why IREE's runtime is $392\times$ smaller,
-$1.3$\,MB against the XLA plugin's $505$\,MB. \textbf{The size gap is not a
-trust gap}: most of the plugin is vendor kernel libraries it calls, where
-IREE generates the equivalent, and both bodies of code are unverified.
-Choosing the small runtime relocates the trusted base rather than shrinking
-it. What the second lowerer buys is the rows above: two compilers with
+kernel itself, which is also why IREE's runtime is a few hundred times
+smaller. \textbf{The size gap is not a trust gap}: most of the plugin is
+vendor kernel libraries, and both bodies of code are unverified. What the second lowerer buys is the rows above: two compilers with
 different code generation, different runtime and different kernels, so that
 agreement between them is evidence of anything, and some oracle binaries are
 IREE-only for that reason and refuse to start on the XLA backend. A training
 run wants one lowerer and a full verification run wants both; selecting the
 second, and where it runs, is the last row of Table~\ref{tab:platforms}.
 
-\medskip\noindent One fault in the CPU target is worth keeping in view.
-IREE 3.11's \texttt{llvm-cpu} miscompiles the
-\texttt{select\_\allowbreak and\_\allowbreak scatter} of the batched
-CIFAR-8 train steps. The CPU gradient gate for those nets runs on IREE's
-\texttt{vmvx} backend instead
-(\texttt{tests/\allowbreak TestCifar8BbnGradCheck.lean}), and an
-\texttt{llvm-cpu} mismatch on a pooled net means check the lowerer before
-the render. The GPU runs use
-XLA and are unaffected.
-
-\bigskip
-
-Each kind fails differently, and overlaying them is the guarantee. A
-deductive proof is blind to a miscompile, an empirical diff is blind to a
-corner it never samples, and a faithful bridge is blind to a wrong formula it
-renders perfectly. Verified code generation straddles two
-of the kinds: its bridge is structural, its printer's text checked
-empirically. The
-finite-precision theorem layer, next, straddles the other pair: its
-budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
-\(\delta\)) empirical.
 
 \section{Finite precision}
 \label{sec:precision}
@@ -20607,48 +20497,33 @@ fp32 accumulator, and not worth having at pure low precision --- which is
 a fact about the arithmetic, not a gap in the proofs.
 
 \paragraph{The chain.} Four links, each in the three-axiom audit.
-\emph{Forward}: \texttt{mlp\_float\_close\_uniform} budgets the
-rounded \(784{\to}512{\to}512{\to}10\) forward against the exact
-one, from coordinatewise magnitude bounds alone. \emph{Backward}:
-\texttt{mlp\_\{w2,w1,w0,b2,b1,b0\}\_step\_float\_close} budget
-every rounded SGD parameter entry against \(\theta -
-\mathrm{lr}\cdot(a_i c_j)\), entry for entry, and the
-\texttt{emitWeightGrad} quantities the render closes
-(\S\ref{sec:verified_codegen}) prove equal to the
-\(\pdiv\)-Jacobian contractions, so the float step chains to the
-proven gradient. \emph{The loss head}:
-\texttt{softmax\_ce\_cot\_close} budgets the rounded
-softmax-minus-onehot cotangent against the certified
-\(\partial(\mathrm{crossEntropy})/\partial(\mathrm{logits})\).
-\emph{Descent}: \texttt{sgd\_descends} proves an \(\eta\)-accurate
-gradient step still decreases the loss, and
-\texttt{linear\_sgd\_descends} discharges its smoothness hypothesis with
-the explicit constant \(2a^2/(1-2aD)\), with no Hessian, because the softmax
-ratio sandwich that powers the float budgets turns out to be the Lipschitz
-engine too. With the float budget fused in, so that the step's
-\(\eta\) is the proven binary32 gradient accuracy rather than an
-assumed parameter, this closes for the linear classifier
-(\texttt{linear\_float\_sgd\_descends}); for each of the MLP's three
-weight matrices with the rest of the net held fixed
-(\texttt{mlp\_\{output,hidden,input\}\_\allowbreak float\_sgd\_descends}; the MLP's
-biases descend over \(\mathbb{R}\) only, in \texttt{MlpBias.lean}); and
-for the Chapter-3 CNN's two convolutions, weights and biases
-(\texttt{cnn\_conv\{1,2\}\_\allowbreak float\_sgd\_descends},
-\texttt{cnn\_conv\{1,2\}\_bias\_\allowbreak float\_sgd\_descends}; its dense head has
-no float descent). Each statement moves one parameter group. What is
-rounded in those statements is the gradient and nothing else: each is
-one example, the update \(\theta - \alpha\,\tilde g\) is taken in
-\(\mathbb{R}\), the loss it decreases is the real one, and the \(\exp\)
-inside the softmax enters through an accuracy hypothesis that the
-trained-weight instance (\texttt{trained\_linear\_\allowbreak sgd\_descends\_\allowbreak concrete})
-discharges at the exact \(\exp\). The \(\mathbb{R}\)-side
-argument reaches one layer further:
-\texttt{cifar8\_lastConv\_sgd\_descends} is the first non-MNIST descent. It is
-CIFAR-8's last conv, proved as an instance of the CNN lemma at its
-frozen earlier features, and that framing is exactly why it stops there.
-The admissible \(\mathrm{lr}\) is a product of per-layer operator-norm
-factors, so each added layer shrinks it geometrically. Full-depth CIFAR and
-all five deep nets stay closeness-only, by design.
+\emph{Forward}: the rounded \(784{\to}512{\to}512{\to}10\) forward is
+budgeted against the exact one from coordinatewise magnitude bounds alone
+(\texttt{mlp\_float\_close\_uniform}). \emph{Backward}: every rounded SGD
+parameter entry is budgeted against \(\theta - \mathrm{lr}\cdot(a_i c_j)\),
+and the render's gradient quantities are proved equal to the
+\(\pdiv\)-Jacobian contractions (\S\ref{sec:verified_codegen}), so the
+float step chains to the proven gradient. \emph{The loss head}: the rounded
+softmax-minus-onehot cotangent is budgeted against the certified
+\(\partial(\mathrm{crossEntropy})/\partial(\mathrm{logits})\)
+(\texttt{softmax\_ce\_cot\_close}). \emph{Descent}: \texttt{sgd\_descends}
+proves an \(\eta\)-accurate gradient step still decreases the loss, with
+the smoothness constant \(2a^2/(1-2aD)\) discharged explicitly and no
+Hessian, because the softmax ratio sandwich that powers the float budgets
+is the Lipschitz engine too. With the float budget fused in, so that
+\(\eta\) is the proven binary32 gradient accuracy rather than an assumed
+parameter, this closes for the linear classifier, for each of the MLP's
+three weight matrices with the rest of the net held fixed, and for the
+Chapter-3 CNN's two convolutions (\texttt{linear\_float\_sgd\_descends}
+and its peers; the MLP's biases descend over \(\mathbb{R}\) only, and the
+CNN's dense head has no float descent). Each statement moves one parameter
+group, rounds the gradient and nothing else, and takes the update in
+\(\mathbb{R}\). The \(\mathbb{R}\)-side argument reaches one layer further,
+to CIFAR-8's last convolution at its frozen earlier features
+(\texttt{cifar8\_lastConv\_sgd\_descends}), and that framing is why it
+stops there: the admissible \(\mathrm{lr}\) is a product of per-layer
+operator-norm factors, so each added layer shrinks it geometrically.
+Full-depth CIFAR and all five deep nets stay closeness-only, by design.
 
 \paragraph{The corner.}
 Over \(\mathbb{R}\), ReLU forced the hypotheses \(x_k \ne 0\). In
@@ -20692,6 +20567,18 @@ flip count is zero across 29.5 million measured pre-activations in each
 of the two hidden layers. The
 margin hypotheses are not a technicality the proofs hide behind. They
 are what training actually looks like.
+
+\bigskip
+
+Each kind fails differently, and overlaying them is the guarantee. A
+deductive proof is blind to a miscompile, an empirical diff is blind to a
+corner it never samples, and a faithful bridge is blind to a wrong formula
+it renders perfectly. Verified code generation straddles two of the kinds,
+its bridge structural and its printer's text checked empirically. The
+finite-precision layer straddles the other pair, its budgets deductive and
+its interface constants (\(u\), \(e_{\exp}\), \(\delta\)) measured. If it
+builds, the gradients are right. Everything past that is an oracle that
+has to agree.
 
 
 \chapter{The ImageNet tier}
