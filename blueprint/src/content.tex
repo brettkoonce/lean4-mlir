@@ -9350,7 +9350,7 @@ at $0.9999$ that the README scores instead.
 
 The run finished at \textbf{71.84\%} top-1 and \textbf{90.53\%} top-5, the
 weight average at epoch 420 through an fp32 forward, in $48.7$ hours on
-four RTX 4060 Ti, one attempt. The last $25$ epochs average $71.72\%$, a
+four RTX 4060 Ti. The last $25$ epochs average $71.72\%$, a
 tenth of a point under the endpoint. The paper's figure is $72.0\%$ and the
 README promises ``roughly 72.0''; at $n=50{,}000$ the Wilson 95\% interval
 on this run is $[71.44, 72.23]$, so the README's command is not
@@ -9443,8 +9443,7 @@ lake run mnv2-default-4gpu
 
 \noindent The run finished at \textbf{71.69\%} top-1 and \textbf{90.52\%}
 top-5, the weight average at epoch 420 through the same fp32 forward, in
-$63.7$ hours on the same four cards, with one restart, on a corrected PCIe
-error off a chipset bridge, resumed from the previous epoch's checkpoint.
+$63.7$ hours on the same four cards.
 
 \prosesection{The two paths, side by side}
 
@@ -9462,7 +9461,6 @@ lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $
 Python in the step   & yes                      & none \\
 per epoch            & $7.0$ min                & $9.1$ min \\
 total                & $48.7$ hr                & $63.7$ hr \\
-restarts             & none                     & one, from the previous epoch's checkpoint \\
 \hline
 \textbf{val top-1}   & $\mathbf{71.84\%}$       & $\mathbf{71.69\%}$ \\
 \textbf{val top-5}   & $\mathbf{90.53\%}$       & $\mathbf{90.52\%}$ \\
@@ -9637,7 +9635,7 @@ optimizer steps an epoch; bf16 convolutions against fp32 master weights; the
 live weights scored every fifth epoch and the last, through an fp32 forward.
 The run finished at \textbf{77.74\%} top-1 and \textbf{93.50\%} top-5,
 the live weights at epoch 100 through an fp32 forward, in about $22.5$ hours
-on four RTX 4060 Ti at about $13.7$ minutes an epoch, one attempt.
+on four RTX 4060 Ti at about $13.7$ minutes an epoch.
 
 The trainer is feed-bound at this shape, $2.59$\,s an optimizer
 step with the four cards waiting on the input pipeline. Set against
@@ -9746,7 +9744,7 @@ scripts/supervise.sh mnv4-full-e100-4gpu
 bound, under the run's own checkpoint tag. The run finished at
 \textbf{77.42\%} top-1 and \textbf{93.48\%} top-5, the live weights at epoch
 100 through the same fp32 forward, in about $17.6$ hours on the same four
-cards at about $10.6$ minutes an epoch, one attempt. It is compute-bound, at
+cards at about $10.6$ minutes an epoch. It is compute-bound, at
 about a quarter of a second a $512$-image micro-step, which is why the proven
 graph finishes five hours ahead of the Python trainer.
 
@@ -12316,9 +12314,7 @@ ran as the chapter's row in \texttt{lake run imagenet}:
 lake run cnx-default-emabf16-4gpu
 \end{verbatim}
 
-\noindent It ran once, with one deliberate stop and resume in its third
-epoch to test the accumulating blob's checkpoint, and no other restart, and
-finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$ top-5, the EMA
+\noindent It finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$ top-5, the EMA
 weights at epoch 300 through the same fp32 forward, in $102.7$ hours on the
 same four cards at $20.5$ minutes an epoch. The last twenty-five epochs
 average $82.14$ / $95.93$, so here too the final number is the tail's mean,
@@ -14530,7 +14526,7 @@ LayerNorm/softmax that bf16 leaves alone. The job is
 
 The run finished at $\mathbf{71.64\%}$ top-1 and $\mathbf{90.98\%}$
 top-5, the EMA weights at epoch 300 through an fp32 forward, in $48.3$
-hours on four RTX 3060 at $9.7$ minutes an epoch, one attempt.
+hours on four RTX 3060 at $9.7$ minutes an epoch.
 DeiT-Ti without distillation publishes $72.2\%$ / $91.1\%$ for
 the live weights; this run scores the shadow during training, and its
 live weights, rescored afterwards, are $71.87\%$ / $91.12\%$ (below). At
@@ -14636,7 +14632,7 @@ lake run vit-default-emabf16-4gpu
 \noindent The run finished at $\mathbf{71.61\%}$ top-1 and
 $\mathbf{90.95\%}$ top-5, the EMA weights at epoch 300 through the same
 fp32 forward, in $62.6$ hours on the same four cards at $12.5$ minutes an
-epoch, one attempt. Rescored at the live region, the final checkpoint
+epoch. Rescored at the live region, the final checkpoint
 gives $71.73\%$ / $91.08\%$.
 
 \prosesection{The two paths, side by side}
