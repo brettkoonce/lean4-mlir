@@ -1,0 +1,13 @@
+=== 2026-10-26 00:17:07 restarted after the 23:12 hang (boot 2026-10-25 23:54:39)
+=== 2026-10-26 00:17:07 break 15 min before block 5c1
+=== 2026-10-26 00:32:07 START 5c1
+cat: '/sys/bus/pci/devices/0000:0d:00.0/hwmon/hwmon2/power1_average': Device or resource busy
+./ladder-more.sh: line 19: /1000000 : syntax error: operand expected (error token is "/1000000 ")
+=== 2026-10-26 01:27:07 END 5c1 rc=124
+=== 2026-10-26 01:27:07 break 15 min before block 5c2
+=== 2026-10-26 01:42:07 START 5c2
+=== 2026-10-26 02:15:12 END 5c2 rc=0
+=== 2026-10-26 02:15:12 break 15 min before block 6g1
+=== 2026-10-26 02:30:12 START 6g1
+=== 2026-10-26 02:44:31 END 6g1 rc=0
+=== 2026-10-26 02:44:31 ALLDONE

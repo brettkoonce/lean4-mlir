@@ -1,0 +1,53 @@
+I1025 20:44:31.541994  126888 service.cc:154] XLA service 0x72989a9d96f0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 20:44:31.542028  126888 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 20:44:31.615772  126888 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 20:44:31.615806  126888 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 20:44:34.289911  126907 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+I1025 20:44:34.816229  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.845722  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.951838  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.958236  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.985020  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.991423  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:34.995089  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:35.009737  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:35.111703  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:35.137069  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 20:44:35.153364  126888 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 15763 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 832 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 446 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  ▸ resuming from checkpoint at epoch 78
+  ▸ resumed BN running stats + ema_bn from .lake/build/efficientnet_adam_ckpt_xla_xtx80.bin.bn (hash 11612417492091322689)
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=0.502813
+  step 1/295: loss=0.502822
+  step 2/295: loss=0.502370
+  step 100/295: loss=0.504412
+  step 200/295: loss=0.503533
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.504368 lr=0.000000
+  epoch 79: val_acc = 3549/3925 = 90.420382%  top5 = 3869/3925 = 98.573248%  [95% CI 89.46–91.30]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_xtx80.bin.bn (42016 floats x 2, hash 9402216981408322538)
+  step 0/295: loss=0.503610
+  step 1/295: loss=0.502174
+  step 2/295: loss=0.503092
+  step 100/295: loss=0.504107
+  step 200/295: loss=0.503218
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.504789 lr=0.000000
+  epoch 80: val_acc = 3541/3925 = 90.216561%  top5 = 3869/3925 = 98.573248%  [95% CI 89.25–91.11]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_xtx80.bin.bn (42016 floats x 2, hash 2767204752301370798)
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).

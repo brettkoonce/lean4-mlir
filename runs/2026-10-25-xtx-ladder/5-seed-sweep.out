@@ -1,0 +1,4 @@
+[22:00:50] sweep start: SUITE=bbn, 5 jobs, GPUs 0, seeds [1 2 3 4 5] -> runs/2026-10-24-bbn-seeds
+[22:00:50] gpu0  cifar8wb_bbn_s1  start  (cifar8wb-bbn-ablation)
+[22:29:55] gpu0  cifar8wb_bbn_s1  OK   29m5s  75.250000% / 77.910000% / 75.460000% / 76.430000% / 76.550000% / 74.660000%
+[22:29:55] gpu0  cifar8wb_bbn_s2  start  (cifar8wb-bbn-ablation)

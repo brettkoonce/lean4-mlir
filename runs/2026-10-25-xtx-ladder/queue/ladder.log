@@ -1,0 +1,14 @@
+=== 2026-10-25 20:46:59 break 15 min before block 1
+=== 2026-10-25 21:01:59 START 1-build (≤ 3300s)
+=== 2026-10-25 21:03:58 END 1-build rc=0 1 min into the block
+=== 2026-10-25 21:03:58 START 2-mnist (≤ 3181s)
+=== 2026-10-25 21:04:51 END 2-mnist rc=0 2 min into the block
+=== 2026-10-25 21:04:51 START 3-gradcheck (≤ 3128s)
+=== 2026-10-25 21:04:56 END 3-gradcheck rc=0 2 min into the block
+=== 2026-10-25 21:04:56 START 4-cifar (≤ 3123s)
+=== 2026-10-25 21:45:50 END 4-cifar rc=0 43 min into the block
+=== 2026-10-25 21:45:50 break 15 min before block 2
+=== 2026-10-25 22:00:50 START 5-seed-sweep (≤ 3300s)
+=== 2026-10-25 22:55:50 END 5-seed-sweep rc=124 55 min into the block
+=== 2026-10-25 22:55:50 break 15 min before block 3
+=== 2026-10-25 23:10:50 START 6-grid-sweep (≤ 3300s)

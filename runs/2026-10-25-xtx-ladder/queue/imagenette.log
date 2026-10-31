@@ -1,0 +1,17 @@
+=== 2026-10-25 16:44:21 start resnet34-verified-adam block 1 → runs/2026-10-25-xtx-resnet34-verified-adam
+=== 2026-10-25 17:19:53 end resnet34-verified-adam block 1 rc=0   epoch 80: val_acc = 3552/3925 = 90.496815%  top5 = 3872/3925 = 98.649682%  [95% CI 89.54
+=== 2026-10-25 17:19:53 break 15 min
+=== 2026-10-25 17:34:53 start mobilenetv2-verified-adam block 1 → runs/2026-10-25-xtx-mobilenetv2-verified-adam
+=== 2026-10-25 18:24:55 end mobilenetv2-verified-adam block 1 rc=0   epoch 80: val_acc = 3490/3925 = 88.917197%  top5 = 3866/3925 = 98.496815%  [95% CI 87.90
+=== 2026-10-25 18:24:55 break 15 min
+=== 2026-10-25 18:39:55 start vit-verified-adam block 1 → runs/2026-10-25-xtx-vit-verified-adam
+=== 2026-10-25 19:19:27 end vit-verified-adam block 1 rc=0   epoch 80: val_acc = 2655/3925 = 67.643312%  top5 = 3535/3925 = 90.063694%  [95% CI 66.16
+=== 2026-10-25 19:19:27 break 15 min
+=== 2026-10-25 19:34:27 start efficientnet-verified-adam block 1 → runs/2026-10-25-xtx-efficientnet-verified-adam
+=== 2026-10-25 20:29:30 end efficientnet-verified-adam block 1 rc=124   epoch 78: val_acc = 3545/3925 = 90.318471%  top5 = 3868/3925 = 98.547771%  [95% CI 89.35
+=== 2026-10-25 20:29:30 break 15 min
+=== 2026-10-25 20:44:30 start efficientnet-verified-adam block 2 → runs/2026-10-25-xtx-efficientnet-verified-adam
+=== 2026-10-25 20:46:30 end efficientnet-verified-adam block 2 rc=0   epoch 80: val_acc = 3541/3925 = 90.216561%  top5 = 3869/3925 = 98.573248%  [95% CI 89.25
+=== 2026-10-25 20:46:30 break 15 min
+Terminated
+=== 2026-10-25 20:46:42 stopped here: convnext/resnet50/mobilenetv4 moved to imagenette2.sh after the ladder

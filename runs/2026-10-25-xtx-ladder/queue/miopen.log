@@ -1,0 +1,7 @@
+=== 2026-10-26 00:17:07 restarted after the 23:12 hang (boot 2026-10-25 23:54:39)
+=== 2026-10-26 02:44:37 break 15 min
+=== 2026-10-26 03:03:53 suite cold default: 26 pass, 0 xfail, 3 fail, 0 xpass, 3 skip — runs/platform/2026-10-26-minerva-rocm-coldmiopen
+=== 2026-10-26 03:08:00 suite cold CONV_GEMM=0: 29 pass, 0 xfail, 0 fail, 0 xpass, 3 skip — runs/platform/2026-10-26-minerva-rocm-coldmiopen-nogemm
+=== 2026-10-26 03:09:06 vit nogemm: PROBE: 84 ms/step 
+=== 2026-10-26 03:10:11 vit warm: PROBE: 78 ms/step 
+=== 2026-10-26 03:10:11 ALLDONE

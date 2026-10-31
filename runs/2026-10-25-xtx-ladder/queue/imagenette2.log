@@ -1,0 +1,14 @@
+=== 2026-10-26 00:17:07 restarted after the 23:12 hang (boot 2026-10-25 23:54:39)
+=== 2026-10-26 09:36:33 start convnext-verified-adam block 1 → runs/2026-10-26-xtx-convnext-verified-adam
+=== 2026-10-26 14:13:15 restarted after the 10:17 hang (boot 2026-10-26 14:02:49)
+=== 2026-10-26 14:13:15 start convnext-verified-adam block 1 → runs/2026-10-26-xtx-convnext-verified-adam
+=== 2026-10-26 14:39:42 restarted after the 14:17 hang, cables checked, uncapped (boot 2026-10-26 14:36:43)
+=== 2026-10-26 14:39:42 start convnext-verified-adam block 1 → runs/2026-10-26-xtx-convnext-verified-adam
+=== 2026-10-30 23:37:35 restarted after the 10-30 23:15 reset; cap 275 W, clocks auto (boot 2026-10-30 23:17:10)
+=== 2026-10-30 23:37:35 start convnext-verified-adam block 1 → runs/2026-10-30-xtx-convnext-verified-adam
+=== 2026-10-31 13:34:19 restarted after the 10-30 23:41 reset (at the 275 W cap); power recabled to 3 inputs, uncapped (boot 2026-10-31 13:20:15)
+=== 2026-10-31 13:34:19 start convnext-verified-adam block 1 → runs/2026-10-31-xtx-convnext-verified-adam
+=== 2026-10-31 13:59:20 end convnext-verified-adam block 1 rc=0   epoch 80: val_acc = 3217/3925 = 81.961783%  top5 = 3784/3925 = 96.407643%  [95% CI 80.73
+=== 2026-10-31 13:59:20 break 15 min
+Terminated
+=== 2026-10-31 14:02:55 start resnet50-verified-adam block 1 → runs/2026-10-31-xtx-resnet50-verified-adam

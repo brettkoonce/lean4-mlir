@@ -1,0 +1,42 @@
+I1025 21:04:06.268817  131831 service.cc:154] XLA service 0x79622bba3850 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 21:04:06.268854  131831 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 21:04:06.344003  131831 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 21:04:06.344040  131831 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 21:04:06.386027  131869 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 7578 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 126 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.413491, test_acc = 9197/10000 = 91.970000%  [95% CI 91.42–92.49] (426ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.191146, test_acc = 9523/10000 = 95.230000%  [95% CI 94.79–95.63] (382ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.139155, test_acc = 9636/10000 = 96.360000%  [95% CI 95.97–96.71] (387ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.109130, test_acc = 9693/10000 = 96.930000%  [95% CI 96.57–97.25] (386ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.088704, test_acc = 9720/10000 = 97.200000%  [95% CI 96.86–97.51] (390ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.073543, test_acc = 9734/10000 = 97.340000%  [95% CI 97.01–97.64] (395ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.061937, test_acc = 9748/10000 = 97.480000%  [95% CI 97.15–97.77] (392ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.052679, test_acc = 9763/10000 = 97.630000%  [95% CI 97.31–97.91] (385ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.045133, test_acc = 9770/10000 = 97.700000%  [95% CI 97.39–97.98] (389ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.038888, test_acc = 9773/10000 = 97.730000%  [95% CI 97.42–98.00] (392ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.033561, test_acc = 9777/10000 = 97.770000%  [95% CI 97.46–98.04] (395ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.029046, test_acc = 9782/10000 = 97.820000%  [95% CI 97.51–98.09] (395ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).
