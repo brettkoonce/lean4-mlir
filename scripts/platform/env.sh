@@ -91,8 +91,9 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
       PLATFORM_GPU=$(nvidia-smi --query-gpu=name --format=csv,noheader -i "${CUDA_VISIBLE_DEVICES:-0}" 2>/dev/null | grep -v "^No devices" | head -1 | _platform_slug) || true
     ;;
   rocm:*)
-    # The jax rocm plugin in the pinned .venv (jax-rocm7-pjrt); the code paths stay, the next run
-    # is the MI300 cloud box (planning/platform_integration.md §5).
+    # The jax rocm plugin in the pinned .venv (jax-rocm7-pjrt) against the system ROCm in /opt/rocm;
+    # deploy/ROCM_7900XTX.md is the runbook. Detection needs rocm-smi on PATH (/opt/rocm/bin is not
+    # on it by default); PJRT_PLUGIN selects another ROCm, e.g. 10.1's (the runbook's §1).
     PLATFORM_HOST=$(hostname -s 2>/dev/null || echo rocm)
     PLATFORM_DEVVAR=HIP_VISIBLE_DEVICES
     PLATFORM_PLUGIN=${PJRT_PLUGIN:-.venv/lib/python3.12/site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so}

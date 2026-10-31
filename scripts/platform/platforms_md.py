@@ -7,8 +7,9 @@ the same matrix as a LaTeX tabular for Appendix A's Table "platforms": platform,
 then one cell per rung holding the date and the short tag of the record (the link dropped), and
 the runbooks as a line under the table. One row per platform, one column per rung of the ladder
 (suite, mnist, cifar, imagenette, imagenet); a `suite` cell of `auto:<host>` is filled from the
-newest suite run with that host. scripts/platform/check.sh calls this after each run; `--check`
-fails if either committed file is stale.
+newest suite run with that host, `auto:<host>/<backend>` from the newest with that backend too.
+scripts/platform/check.sh calls this after each run; `--check` fails if either committed file is
+stale.
 """
 import csv, json, re, sys
 from pathlib import Path
@@ -88,12 +89,14 @@ def suite_dirs():
             if (d / 'manifest.json').exists() and (d / 'results.tsv').exists()] if RUNS.exists() else []
 
 
-def suite_cell(host):
-    """The newest suite run on `host`: date, verdict, pass count, link — or `-`."""
+def suite_cell(spec):
+    """The newest suite run on `spec` — `host`, or `host/backend` for a box with two platforms
+    (minerva: the B50 and the 7900 XTX): date, verdict, pass count, link — or `-`."""
+    host, _, backend = spec.partition('/')
     best = None
     for d in suite_dirs():
         m, n, verdict = counts(d)
-        if m['platform']['host'] != host:
+        if m['platform']['host'] != host or (backend and m['platform'].get('backend') != backend):
             continue
         if best is None or m['date'] > best[0]:
             best = (m['date'], f"{m['date'][:10]} · {verdict} {n['PASS']} pass, tiers 0–{m['core']['tier']} "

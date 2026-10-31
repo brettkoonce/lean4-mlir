@@ -1,6 +1,6 @@
-# MIOpen conv on gfx1100 (ROCm 7.2.0): the im2col/hiprtc crash no longer reproduces — what remains
+# MIOpen conv on gfx1100 (ROCm 7.2.0 → 10.1): the im2col/hiprtc compile failure — what it is, and what hides it
 
-**Status: NOT FILED — but REPRODUCED 2026-07-28, reversing the 06-24 conclusion.**
+**Status: NOT FILED. REPRODUCED 2026-07-28 (7.2.0) and 2026-10-25 (7.2.4, 10.1); hidden by a warm MIOpen find-db (10-25 section).**
 The `get_global_id` hiprtc compile error is **back and deterministic** given the right
 graph shape; see the 07-28 section immediately below, which supersedes the 06-24
 "not reproducible" finding. The 06-24 text is kept intact underneath because its
@@ -12,6 +12,34 @@ reproduce on the current stack. Conv nets run; the residue is a *performance*
 fallback (ResNet-34 ~2× the reference ms/step) plus a latent *no-workspace*
 limitation in MIOpen's GEMM solver. Nothing here is worth an upstream filing as-is.
 The original mid-investigation hypothesis is preserved at the bottom for history.
+
+---
+
+## UPDATE 2026-10-25 — still there in ROCm 7.2.4 and 10.1, and a warm find-db hides it
+
+On minerva's 7900 XTX (`runs/2026-10-25-rocm10-bench/README.md`):
+
+- **Both current stacks have it.** ViT-Tiny's train step fails with the same
+  `MIOpenIm2d2Col.cpp:298:19: use of undeclared identifier 'get_global_id'` on ROCm 7.2.4
+  (MIOpen 3.5.1, apt) and on ROCm 10.1 (TheRock `b324869f`, as wheels and as debs).
+- **It needs an empty MIOpen database.** Every 7.2.4 ViT run on the box since August — the
+  platform suites, the 80-epoch Imagenette runs — used the default `~/.config/miopen` database,
+  whose stored find results keep MIOpen off `GemmFwdRest`, and passed. Point
+  `MIOPEN_USER_DB_PATH` / `MIOPEN_CUSTOM_CACHE_DIR` at an empty directory and 7.2.4 fails on
+  the first step. ROCm 10.1's MIOpen keys a database of its own, so on this box it always
+  started cold — the suite's three ViT rows failed there, which first read as a 10.1
+  regression. A fresh install of either version hits it.
+- **`MIOPEN_DEBUG_CONV_GEMM=0` is a workaround, not the hang the 06 notes recorded.** With it,
+  the GEMM solvers are out of the search, ViT trains (71 ms/step on 10.1; on 7.2.4 84 ms
+  from an empty database against 78 from the warm one), and the 10.1 suite goes from 17 to 21 of 21 together with three
+  switches for a second, separate bf16 defect: the grouped implicit-GEMM XDLOPS kernels
+  (`MIOPEN_DEBUG_GROUP_CONV_IMPLICIT_GEMM_HIP_{FWD,WRW}_XDLOPS=0`,
+  `MIOPEN_DEBUG_CONV_IMPLICIT_GEMM_HIP_GROUP_BWD_XDLOPS=0`), which give garbage in bf16 on
+  gfx1100 — a card with no XDLOPS. R34 bf16's `gemm_wrw.cpp: Not enough workspace` is the same
+  no-workspace gap as 06-24's `GemmFwdRest`, on the weight-gradient side.
+
+The `EXTREME_LARGE` diagnosis below stands; with two current releases affected and
+`repro_pad_conv_fused.py` ready, this is now worth filing with MIOpen.
 
 ---
 
