@@ -1,0 +1,52 @@
+I1025 21:04:52.094592  132520 service.cc:154] XLA service 0x70480f972ca0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 21:04:52.094665  132520 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 21:04:52.169926  132520 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 21:04:52.169980  132520 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 21:04:52.975080  132558 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_adam_train_step.mlir (@cifar8wb_bbn_adam_train_step, 133 outputs, 1 replica) in 3681 ms
+GRADCHECK — @cifar8wb_bbn_adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend xla
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  xla/pjrt verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  base loss 2.357593   ‖g‖ 2.885582   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.000001 at L8.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005203 at head.Wa
+             L1.(W,b)	0.000000
+             L2.(W,b)	0.000000
+             L3.(W,b)	0.000000
+             L4.(W,b)	0.000000
+             L5.(W,b)	0.000000
+             L6.(W,b)	0.000000
+             L7.(W,b)	0.000000
+             L8.(W,b)	0.000001
+             head.W9	0.010720
+             head.Wa	0.005203
+             head.Wb	0.035034
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000410	0.000410	0.001303
+          L2	conv 16→16 @32² + BN + relu	0.000462	0.000461	0.001255
+          L3	conv 16→16 @16² + BN + relu	0.000329	0.000328	0.001043
+          L4	conv 16→16 @16² + BN + relu	0.000287	0.000287	0.000418
+          L5	conv 16→32 @8² + BN + relu	0.000366	0.000366	0.000534
+          L6	conv 32→32 @8² + BN + relu	0.000362	0.000362	0.000470
+          L7	conv 32→32 @4² + BN + relu	0.000339	0.000339	0.000187
+          L8	conv 32→32 @4² + BN + relu	0.000266	0.000266	0.001019
+          head	dense 128→512→512→10	0.002555	0.002557	0.000458
+          whole	all 38 tensors	0.006162	0.006131	0.005051
+  worst rel 0.005051 at whole;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 0.000000
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.999542 at head
+  25 invokes of @m.cifar8wb_bbn_adam_train_step
+
+  ✅ GRADCHECK PASSES.
+     TIER 1: the 8 BN-followed convs satisfy ⟨g_W,W⟩+⟨g_b,b⟩ = 0 to |cos∠| ≤ 0.000001, against 3 head weights that violate it by ≥ 0.005203 (7576.422441×).
+     TIER 2: all 9 groups and the whole net agree in magnitude to rel ≤ 0.005051, against a doubled-gradient control that misses by 0.999542 (197.886008× the tie).
+     The backward of verified_mlir/cifar8wb_bbn_adam_train_step.mlir is the gradient of its forward.

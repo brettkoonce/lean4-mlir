@@ -1,0 +1,27 @@
+I1025 13:47:28.144323    5754 service.cc:154] XLA service 0x7320bfba4c40 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:47:28.144357    5754 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 13:47:28.213657    5754 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 13:47:28.213695    5754 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:47:30.524004    5787 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 15369 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir (@mobilenetv2_fwd, 1 outputs, 1 replica) in 563 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 266 ms
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
+  train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @mobilenetv2_adam_train_step holds 474 parameter tensors (25.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.499920
+  step 1/295: loss=2.584144
+  step 2/295: loss=2.808494
+  step 100/295: loss=2.213831
+  PROBE: 114 ms/step (median of 92 steps 9..100, MobileNetV2)
+  PROBE-SPREAD: min=111 med=114 p90=116 mean=114 ms/step (starvation wait = med-min = 3 ms)

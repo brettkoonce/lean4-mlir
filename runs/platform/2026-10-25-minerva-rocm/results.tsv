@@ -1,0 +1,33 @@
+test	tier	status	detail
+build:shim	0	PASS	
+build:probe	0	PASS	
+build:smoke	0	PASS	
+build:guards	0	PASS	
+build:dp	0	PASS	
+build:allreduce	0	PASS	
+build:compile_check	0	PASS	
+build:tier2_run	0	PASS	
+smi	0	PASS	Fail to open libdrm_amdgpu.so: libdrm_amdgpu.so: cannot open shared object file: No such file or directory
+probe	0	PASS	devices=1
+smoke	0	PASS	compile + execute OK
+erfc	0	PASS	chlo.erfc OK
+guards	1	PASS	all guards fire (0 failures)
+compile_dp	1	SKIP	needs 2 devices, 1 visible
+allreduce	1	SKIP	needs 2 devices, 1 visible
+dp	1	SKIP	needs 2 devices, 1 visible
+linear_train_step	2	PASS	OK dot/f32: median 1.2e-06 (≤0.003), p90 1.8e-06 (≤0.03), max 1.9e-06 at output 1
+mlp_train_step	2	PASS	OK dot/f32: median 5.4e-07 (≤0.003), p90 1.6e-06 (≤0.03), max 1.7e-06 at output 0
+cifar8_train_step	2	PASS	OK conv-pool/f32: median 3.7e-07 (≤0.03), p90 1.7e-06 (≤0.07), max 2.4e-05 at output 0
+cifar8_bf16_train_step	2	PASS	OK conv-pool/bf16: median 2.0e-02 (≤0.06), p90 2.6e-02 (≤0.1), max 1.0e-01 at output 0
+cifar8_bn_adam_train_step	2	PASS	OK batchnorm/f32: median 1.2e-06 (≤0.005), p90 1.1e-05 (≤0.2), max 8.5e-05 at output 1
+cifar8wb_bn_bf16adam_train_step	2	PASS	OK batchnorm/bf16: median 2.7e-03 (≤0.01), p90 3.3e-01 (≤1), max 3.8e-01 at output 46
+mobilenetv2_adam_train_step	2	PASS	OK depthwise/f32: median 5.2e-04 (≤0.06), p90 1.0e-02 (≤0.9), max 1.6e-02 at output 304
+mobilenetv2in_adam64bf16_train_step	2	PASS	OK depthwise/bf16: median 2.0e-01 (≤0.25), p90 1.1e+00 (≤3), max 3.3e+01 at output 8
+efficientnet_adam_train_step	2	PASS	OK swish-se/f32: median 8.5e-06 (≤0.015), p90 3.0e-05 (≤0.02), max 7.3e-04 at output 12
+efficientnet_adambf16_train_step	2	PASS	OK swish-se/bf16: median 7.3e-02 (≤0.2), p90 1.3e-01 (≤0.4), max 9.7e-01 at output 12
+vit_adam_train_step	2	PASS	OK attention/f32: median 3.7e-07 (≤0.003), p90 3.1e-06 (≤0.005), max 2.3e-05 at output 209
+vitin_adamwxclipdropbf16_train_step	2	PASS	OK attention/bf16: median 2.3e-03 (≤0.01), p90 1.5e-02 (≤0.05), max 7.4e-02 at output 209
+vitin_adamwxclipdroperfbf16_train_step	2	PASS	OK attention/bf16: median 1.6e-03 (≤0.01), p90 1.7e-02 (≤0.05), max 8.7e-02 at output 9
+resnet34_adam_train_step	2	PASS	OK deep-conv/f32: median 3.4e-03 (≤0.15), p90 1.4e-02 (≤0.8), max 2.9e-02 at output 102
+resnet34_adambf16_train_step	2	PASS	OK deep-conv/bf16: median 1.7e-01 (≤0.3), p90 8.8e-01 (≤3), max 1.0e+00 at output 157
+convnext_adam_train_step	2	PASS	OK layernorm-dw7/f32: median 5.6e-07 (≤0.003), p90 2.6e-06 (≤0.005), max 1.8e-05 at output 52

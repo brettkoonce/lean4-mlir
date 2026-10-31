@@ -1,0 +1,24 @@
+I1025 13:53:54.845650   11980 service.cc:154] XLA service 0x7dce203bfba0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:53:54.845675   11980 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1025 13:53:54.956582   11980 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1025 13:53:54.956619   11980 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:53:55.072970   11980 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1025 13:53:57.634115   12041 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 36477 ms
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 17782 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.351305
+  step 1/295: loss=3.004615
+  step 2/295: loss=2.555267
+  step 100/295: loss=2.180400
+  PROBE: 71 ms/step (median of 92 steps 9..100, ViT-Tiny)
+  PROBE-SPREAD: min=69 med=71 p90=72 mean=71 ms/step (starvation wait = med-min = 2 ms)

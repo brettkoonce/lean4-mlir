@@ -1,0 +1,33 @@
+I1025 13:49:48.844888    9160 service.cc:154] XLA service 0x72d267987720 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:49:48.844924    9160 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 13:49:48.915261    9160 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 13:49:48.915300    9160 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:49:52.611937    9191 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+MIOpen(HIP): Warning [IsEnoughWorkspace] [GetSolutionsFallback WTI] Solver <GemmFwdRest>, workspace required: 6422528, provided ptr: 0 size: 0
+MIOpen(HIP): Warning [IsEnoughWorkspace] [EvaluateInvokers] Solver <GemmFwdRest>, workspace required: 6422528, provided ptr: 0 size: 0
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 37362 ms
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 12517 ms
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+MIOpen(HIP): Error [Compile] 'hiprtcCompileProgram(prog.get(), c_options.size(), c_options.data())' MIOpenIm2d2Col.cpp: HIPRTC_ERROR_COMPILATION (6)
+MIOpen(HIP): Error [BuildHip] HIPRTC status = HIPRTC_ERROR_COMPILATION (6), source file: MIOpenIm2d2Col.cpp
+MIOpen(HIP): Warning [BuildHip] /tmp/comgr-9156-13-55a268/input/MIOpenIm2d2Col.cpp:298:19: error: use of undeclared identifier 'get_global_id'
+  298 |     index_t tid = get_global_id(0);
+      |                   ^~~~~~~~~~~~~
+/tmp/comgr-9156-13-55a268/input/MIOpenIm2d2Col.cpp:326:16: error: use of undeclared identifier 'get_global_size'
+  326 |         tid += get_global_size(0);
+      |                ^~~~~~~~~~~~~~~
+2 errors generated when compiling for gfx1100.
+MIOpen Error: minerva:/longer_pathname_so_that_rpms_can_support_packaging_the_debug_info_for_all_os_profiles/src/rocm-libraries/projects/miopen/src/hipoc/hipoc_program.cpp:299: Code object build failed. Source: MIOpenIm2d2Col.cpp
+[pjrt_ffi] d2h(res): Failed to enqueue convolution on stream: miopenStatusUnknownError
+[pjrt_ffi] d2h(res): Failed to enqueue convolution on stream: miopenStatusUnknownError
+[pjrt_ffi] d2h(res): Failed to enqueue convolution on stream: miopenStatusUnknownError
+uncaught exception: mlp train step failed

@@ -1,0 +1,2 @@
+32-224-224-14x14-192-16-16-3-0x0-1x1-16x16-0-NCHW-FP32-F=ConvDirectNaiveConvFwd:6.19646,0,miopenConvolutionFwdAlgoDirect
+3-224-224-16x16-192-14-14-32-0x0-16x16-1x1-0-NCHW-FP32-F=ConvDirectNaiveConvFwd:7.68611,0,miopenConvolutionFwdAlgoDirect

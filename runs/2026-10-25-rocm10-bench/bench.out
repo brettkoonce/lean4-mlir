@@ -1,0 +1,20 @@
+resnet34	724	PROBE: 78 ms/step	35s	13:45:48
+resnet34	pip101	PROBE: 88 ms/step	27s	13:46:15
+resnet34	pip101sw	PROBE: 89 ms/step	24s	13:46:39
+resnet34	apt101	PROBE: 88 ms/step	25s	13:47:04
+resnet34	apt101sw	PROBE: 89 ms/step	23s	13:47:27
+mobilenetv2	724	PROBE: 114 ms/step	34s	13:48:01
+mobilenetv2	pip101	PROBE: 110 ms/step	27s	13:48:28
+mobilenetv2	pip101sw	PROBE: 119 ms/step	26s	13:48:54
+mobilenetv2	apt101	PROBE: 109 ms/step	28s	13:49:22
+mobilenetv2	apt101sw	PROBE: 118 ms/step	26s	13:49:48
+vit	724	FAIL rc=1	56s	13:50:44
+vit	pip101	FAIL rc=1	61s	13:51:45
+vit	pip101sw	PROBE: 71 ms/step	68s	13:52:53
+vit	apt101	FAIL rc=1	61s	13:53:54
+vit	apt101sw	PROBE: 71 ms/step	67s	13:55:01
+efficientnet	724	PROBE: 126 ms/step	37s	13:55:38
+efficientnet	pip101	PROBE: 121 ms/step	38s	13:56:16
+efficientnet	pip101sw	PROBE: 130 ms/step	37s	13:56:53
+efficientnet	apt101	PROBE: 121 ms/step	36s	13:57:29
+efficientnet	apt101sw	PROBE: 129 ms/step	37s	13:58:06

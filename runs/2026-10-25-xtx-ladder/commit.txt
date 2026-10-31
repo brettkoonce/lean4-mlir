@@ -1,0 +1,5 @@
+85d9b2a1 runs(arc b50): check + smoke + suite on minerva's B50 after the rebase onto main — 21 pass, 3 skip (two-device rungs)
+ M PLATFORMS.md
+ M deploy/README.md
+ M historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md
+ M scripts/platform/env.sh

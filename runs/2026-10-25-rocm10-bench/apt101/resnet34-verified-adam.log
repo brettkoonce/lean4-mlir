@@ -1,0 +1,28 @@
+I1025 13:46:40.120446    4765 service.cc:154] XLA service 0x7bf2bc3bfd00 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:46:40.120472    4765 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1025 13:46:40.224411    4765 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1025 13:46:40.224451    4765 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:46:40.300557    4765 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1025 13:46:44.176599    4828 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir (@resnet34_adam_train_step, 405 outputs, 1 replica) in 6937 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir (@resnet34_fwd, 1 outputs, 1 replica) in 2330 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir (@resnet34_fwd_eval, 1 outputs, 1 replica) in 194 ms
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-34 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @resnet34_adam_train_step holds 330 parameter tensors (243.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.614365
+  step 1/295: loss=3.722513
+  step 2/295: loss=3.375139
+  step 100/295: loss=2.045747
+  PROBE: 88 ms/step (median of 92 steps 9..100, ResNet-34)
+  PROBE-SPREAD: min=85 med=88 p90=90 mean=88 ms/step (starvation wait = med-min = 3 ms)

@@ -1,0 +1,42 @@
+I1025 21:04:20.499177  132127 service.cc:154] XLA service 0x79efc7bb7f20 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 21:04:20.499219  132127 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 21:04:20.573955  132127 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 21:04:20.573996  132127 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 21:04:20.625586  132140 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 7754 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 116 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.353734, test_acc = 9420/10000 = 94.200000%  [95% CI 93.72–94.64] (1947ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.093865, test_acc = 9741/10000 = 97.410000%  [95% CI 97.08–97.70] (1901ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.055934, test_acc = 9792/10000 = 97.920000%  [95% CI 97.62–98.18] (1903ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.037743, test_acc = 9825/10000 = 98.250000%  [95% CI 97.97–98.49] (1901ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.025728, test_acc = 9849/10000 = 98.490000%  [95% CI 98.23–98.71] (1889ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.017761, test_acc = 9834/10000 = 98.340000%  [95% CI 98.07–98.57] (1907ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.012790, test_acc = 9850/10000 = 98.500000%  [95% CI 98.24–98.72] (1899ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.008737, test_acc = 9865/10000 = 98.650000%  [95% CI 98.40–98.86] (1909ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.028711, test_acc = 9844/10000 = 98.440000%  [95% CI 98.18–98.66] (1900ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.011075, test_acc = 9871/10000 = 98.710000%  [95% CI 98.47–98.91] (1908ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.004539, test_acc = 9870/10000 = 98.700000%  [95% CI 98.46–98.90] (1914ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.002948, test_acc = 9876/10000 = 98.760000%  [95% CI 98.52–98.96] (1914ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

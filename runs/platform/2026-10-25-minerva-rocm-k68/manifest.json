@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-25T16:43:34Z",
+  "run": "2026-10-25-minerva-rocm-k68",
+  "core": {
+    "repo_sha": "85d9b2a13b4b5485d5f9c8b15113d9fa8104ce7b",
+    "repo_dirty": true,
+    "lean_toolchain": "leanprover/lean4:v4.35.0",
+    "shim_source_sha": "d8d048279e12fa99",
+    "shim_binary_sha": "e1d75ea737b20f0f",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "f1b427e6c5412d87",
+    "suite_sha": "77cfb6490c1518da",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "rocm",
+    "host": "minerva",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "AMD Radeon RX 7900 XTX",
+        "memory": null,
+        "driver": null
+      }
+    ],
+    "gpu_count_visible": 1,
+    "visible_devices": null,
+    "driver": null,
+    "runtime": {
+      "driver": "7.2.53211",
+      "runtime": "7.2.53211",
+      "toolkit": "7.14.60850",
+      "dnn": "0.0.0"
+    },
+    "plugin_path": ".venv/lib/python3.12/site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so",
+    "plugin_package": "jax_rocm7_pjrt==0.11.0",
+    "plugin_sha": "3187826fca54f3ea",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "rocm",
+    "platform_version": "rocm 71400",
+    "kernel": "6.8.0-147-generic",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}

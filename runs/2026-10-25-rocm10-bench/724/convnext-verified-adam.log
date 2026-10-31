@@ -1,0 +1,20 @@
+I1025 13:58:07.228651   15990 service.cc:154] XLA service 0x79ebbb95f100 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:58:07.228686   15990 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.53211; Runtime: 7.2.53211; Toolkit: 7.14.60850; DNN: 0.0.0)
+I1025 13:58:07.298765   15990 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1025 13:58:07.298803   15990 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:58:09.203970   16039 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir (@convnext_adam_train_step, 549 outputs, 1 replica) in 14294 ms
+[pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir (@convnext_fwd, 1 outputs, 1 replica) in 2582 ms
+ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000
+  xla/pjrt verified_mlir/convnext_adam_train_step.mlir
+  xla/pjrt verified_mlir/convnext_fwd.mlir
+  train 9469, val 3925; bs 32, ConvNeXt-T adam (cosine+warmup 3ep, baseLR 0.001000), He init
+[pjrt_ffi] RESIDENT: @convnext_adam_train_step holds 546 parameter tensors (318.5 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.556978
+  step 1/295: loss=3.736046
+  step 2/295: loss=3.749500

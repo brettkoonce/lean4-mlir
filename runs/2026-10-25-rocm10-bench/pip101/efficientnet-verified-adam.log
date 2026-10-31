@@ -1,0 +1,39 @@
+I1025 13:55:39.305855   13819 service.cc:154] XLA service 0x739c443c2c70 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1025 13:55:39.305885   13819 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1025 13:55:39.429696   13819 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1025 13:55:39.429735   13819 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1025 13:55:39.558943   13819 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1025 13:55:42.061915   13874 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+I1025 13:55:44.340936   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:44.398129   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:44.849295   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:44.886247   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:45.255922   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:45.319444   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:45.322539   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:45.428761   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:46.106447   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:46.314796   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+I1025 13:55:46.403895   13819 dot_search_space.cc:194] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs? Working around this by using the full hints set instead.
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 17668 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 788 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 439 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.444781
+  step 1/295: loss=2.256287
+  step 2/295: loss=2.506456
+  step 100/295: loss=2.221895
+  PROBE: 121 ms/step (median of 92 steps 9..100, EfficientNet-B0)
+  PROBE-SPREAD: min=118 med=121 p90=124 mean=121 ms/step (starvation wait = med-min = 3 ms)

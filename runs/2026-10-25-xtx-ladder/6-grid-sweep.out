@@ -1,0 +1,3 @@
+=== 23:10:50 [gpu0] cifar8wb_bbn fc8 (25 ep) ===
+    [gpu0] -> fc8 acc=74.970000% n=10000 CI=[74.11,75.81]
+=== 23:12:36 [gpu0] cifar8wb_bbn fc4096 (25 ep) ===
