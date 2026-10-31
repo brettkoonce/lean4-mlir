@@ -7,7 +7,7 @@ has run which rung of the ladder, suite → mnist → cifar → imagenette → i
 (backend, plugin, device variable, a Jetson's allocator defaults) is
 [`scripts/platform/env.sh`](../scripts/platform/env.sh); the suite that says whether a
 platform runs a build at all is [`scripts/platform/check.sh`](../scripts/platform/check.sh).
-A platform that needs nothing beyond the environment — a desktop CUDA or ROCm card — has no
+A platform that needs nothing beyond the environment — a desktop CUDA card — has no
 page here: it runs `lake run mnist | cifar | imagenette` as the README's tour has them.
 A new platform is a row in `support.tsv`, an arm in `env.sh`, an expected file under
 `scripts/platform/expected/` and a page here; `check.sh` regenerates `PLATFORMS.md` and the
@@ -21,9 +21,8 @@ book's platforms table (Appendix A) from the row, so the book's prose never coun
 | [`MAC.md`](MAC.md) | Apple Silicon Mac, macOS 26 (Metal through jax-graft's PJRT plugin) | the MNIST tier on the GPU, rung by rung: the box, the venv, JAX on `mtl`, the shim's smoke test, the data, the Lean build, `lake run mnist`. Works on an M1 Air, MNIST matching CUDA; TODO: full runs |
 | [`ARC_B50.md`](ARC_B50.md) | Intel Arc Pro B50 16 GB (Battlemage, oneAPI through Intel's OpenXLA PJRT plugin, kernel 7.0) | the MNIST and CIFAR tiers on the GPU, rung by rung, and the bring-up in the order it cost time (§1: kernel 7.0, a full-VRAM BAR, Intel's runtime), the suite (§2), the SYCL copy races and the shim's serial uploads and readbacks (§3), the bus drop under load at Gen4 and the slot at Gen3 that cured it (§4). Works on minerva, MNIST and CIFAR matching CUDA, bf16 included, all seven Imagenette nets' 80 epochs inside CUDA's five-seed ranges or within two images of them (~9 h at 62–69 W); one process on the card at a time, and automatic upgrades off for overnight runs |
 | [`TRAINIUM.md`](TRAINIUM.md) | AWS Trainium, trn1.2xlarge (one Trainium1 chip, two NeuronCores; Neuron SDK 2.33.0 through libneuronxla's PJRT plugin) | the rungs before any Trainium hour — `neuronx-cc` compiling the renders on any x86 box (§2), and the compile cache warmed through the plugin under Neuron's fake device (§3) — then the box (§1), the suite and the MNIST and CIFAR tiers on a NeuronCore. In preparation: every MNIST and CIFAR graph compiles for trn1, four of the suite's ten Imagenette train steps do (the depthwise nets and ConvNeXt are over the compiler's instruction cap at batch 32); nothing has run on the device yet |
+| [`ROCM_7900XTX.md`](ROCM_7900XTX.md) | AMD Radeon RX 7900 XTX 24 GB (gfx1100, ROCm 7.2.4 through AMD's PJRT plugin, kernel 6.8 or 7.0) | the box, ROCm's install and the plugin, the MNIST, CIFAR and Imagenette tiers on the GPU (Measured), ROCm 10.1 beside 7.2.4 and why the box stays on 7.2.4 (§1), the bus drops on a riser, then the box resetting itself under load, and what has been ruled out (§2), and the MIOpen solver that an empty database falls into, with the switch that avoids it (§3) |
 
-ROCm gets a page here when it runs again; until then its row in `PLATFORMS.md` points at
-`historical/ROCM.md`.
 
 ## Scripts
 
@@ -36,6 +35,7 @@ ROCm gets a page here when it runs again; until then its row in `PLATFORMS.md` p
 | [`arc_setup.sh`](arc_setup.sh) | the Arc box | ARC_B50.md's rungs as one resumable script (`check venv jax smoke suite data lean mnist cifar`), logged to `runs/<date>-arc-setup/` with the box's facts in `manifest.txt` |
 | [`trainium_setup.sh`](trainium_setup.sh) | the Trainium instance (`venv` and `aot` on any x86 box) | TRAINIUM.md's rungs as one resumable script (`check venv jax smoke suite data lean mnist cifar`, and `aot` by name), logged to `runs/<date>-trainium-setup/` with the box's facts in `manifest.txt`; `scripts/platform/neuron_warm.sh` fills the instance's compile cache from an x86 box (§3) |
 | [`iree_cpu_setup.sh`](iree_cpu_setup.sh) | any Linux box, GPU or not | the second lowerer on the CPU: `iree-compile` into `.venv`, the IREE runtime at the wheel's commit, a CPU-only `ffi/libiree_ffi.so`, and a 224² smoke on `local-task` (`check venv runtime shim smoke`), logged to `runs/<date>-iree-cpu-setup/` with the box's facts in `manifest.txt`; pins 3.13.0 because 3.11.0's CPU task device crashes on the 224² renders (historical/IREE_BUILD.md) |
+| [`rocm724_install.sh`](rocm724_install.sh) | the ROCm box | installs ROCm 7.2.4's userspace from `repo.radeon.com`, apt-pinned, on the in-tree `amdgpu` (`dryrun` / `apply`, as root; ROCM_7900XTX.md) |
 | [`export_onnx.py`](export_onnx.py) | the training box | the detector checkpoint → PyTorch replica → ONNX, with the frame-golden gate (DETECTOR.md) |
 | [`orin_detect.py`](orin_detect.py) | the board | the detector runner: TensorRT, ONNX Runtime or IREE backend, `--bench` (DETECTOR.md) |
 | [`build_orin.sh`](build_orin.sh) | the training box | the IREE route: batch-1 StableHLO → vmfb (DETECTOR.md) |
