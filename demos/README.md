@@ -10,7 +10,10 @@ shape), and last the games
 the chapter's figure. Nothing here changes the codegen: every
 demo is the ordinary train step on a new input, loss or host loop.
 
-Build any of these with `lake exe <name>`; the ImageNet-bootstrapped ones need the relevant
+Run any of these by short name with `lake run demo <group> [entry] [args…]`: `lake run demo`
+lists the groups, and `lake run demo ttt alphazero n=4` is `alphazero-ttt n=4`, built, run and
+its transcript teed to `runs/<date>-<exe>/`. `lake exe <name>` still runs any of them directly,
+which is how the commands below are written. The ImageNet-bootstrapped ones need the relevant
 chapter trainer's checkpoint first.
 
 ---

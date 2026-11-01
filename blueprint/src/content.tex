@@ -457,7 +457,8 @@ pip install jax-oneapi-pjrt 'jax-oneapi-plugin[with-oneapi]'   # Intel Arc
 \end{verbatim}
     Match the wheel to your CUDA or ROCm version; the Arc's plugin brings its
     oneAPI runtime with it, and \texttt{deploy/arc\_setup.sh} does that
-    install end to end. The shim finds the plugin in the repo's
+    install end to end. A Mac takes a Metal plugin instead, which
+    \texttt{deploy/MAC.md} installs. The shim finds the plugin in the repo's
     \texttt{.venv}; one anywhere else is named by \texttt{\$PJRT\_PLUGIN}
     (Appendix~\ref{app:getting_started}).
 
@@ -477,13 +478,17 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
     the device. The linear MNIST classifier of Chapter~\ref{chap:tensor}
     trains in seconds:
 \begin{verbatim}
-lake build mnist-linear-verified
-.lake/build/bin/mnist-linear-verified data
+lake run train linear          # = mnist-linear-verified
+lake run train r34             # = resnet34-verified-adam, Chapter 5
+lake run train r34 1           # the same, on GPU 1
 \end{verbatim}
-    The trainers take the data root as their one argument and default to
-    \texttt{data}. The Imagenette nets build the same way
-    (\texttt{lake build resnet34-verified-adam}) and run for the better part
-    of an hour each; the tiers below bundle them.
+    \texttt{lake run train} builds the trainer, runs it, and tees its
+    transcript to \texttt{runs/<date>-<trainer>/}. It takes a target's full
+    name or its short one, and with no name it lists both. The binary it
+    builds is \texttt{.lake/build/bin/<trainer>}, which takes the data root
+    as its one argument and defaults to \texttt{data}. The Imagenette nets
+    run from forty-five minutes to an hour and twenty each; the tiers below
+    bundle them.
 \end{enumerate}
 
 \section*{One command per tier}
@@ -506,7 +511,8 @@ times, about 4.3 hours between them, plus ResNet-50 (an hour and twenty
 minutes) and MobileNetV4 (about forty-five minutes), which ride in the same tier. Each
 trainer's transcript is teed to \texttt{runs/<date>-<trainer>/}. Each tier
 also has an \texttt{-iree} twin, which is Appendix~\ref{app:getting_started}'s
-business. The tiers bundle these targets, and any one builds on its own:
+business. The tiers bundle these targets, and \texttt{lake run train}
+runs any one of them on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
@@ -522,6 +528,10 @@ business. The tiers bundle these targets, and any one builds on its own:
     \texttt{mobilenetv4-verified-adam}, \texttt{efficientnet-verified-adam},
     \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}\par\endgroup
 \end{itemize}
+
+The demos of Chapters~\ref{chap:bestiary_nets}--\ref{chap:bestiary_games}
+run the same way by short name. \texttt{lake run demo} lists them, and
+\texttt{lake run demo pong dqn} builds and runs the Pong agent.
 
 \chapter*{Foundations}
 \addcontentsline{toc}{chapter}{Foundations}

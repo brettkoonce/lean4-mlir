@@ -737,7 +737,7 @@ lean_exe «vit-b-imagenet-verified» where
   root := `apps.imagenette.MainViTBImagenet
   moreLinkArgs := lowererLink
 
--- ─── Demos — `lake exe <name>`, in chapter 10's order: detection, inspection, people, agriculture, segmentation; RL, language, diffusion, physics, signal, beyond vision (demos/README.md) ───
+-- ─── Demos — `lake run demo <group> [entry]` (`demoGroups`) or `lake exe <name>`, in Chapters 11–13's order: detection, inspection, people, agriculture, segmentation; RL, language, diffusion, physics, signal, beyond vision (demos/README.md) ───
 
 lean_exe «unet-brats-train» where
   root := `demos.MainUnetBratsTrain
@@ -2206,12 +2206,14 @@ private def notePjrtPlugin : IO Unit := do
 
     A trainer that fails does not stop the group — the rest of a 5½-hour Imagenette pass is worth
     having — but it is named at the end and the script exits 1. -/
-private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32 := do
-  let backend ← match ← IO.getEnv "IREE_BACKEND" with
-    | some b => pure b
-    | none   => detectBackend
+private def runDemoGroup (names : List String) (xla : Bool := false)
+    (gpu? backend? : Option String := none) (extra : Array String := #[]) : IO UInt32 := do
+  let backend ← match backend?, ← IO.getEnv "IREE_BACKEND" with
+    | some b, _    => pure b
+    | none, some b => pure b
+    | none, none   => detectBackend
   let gpu ← do
-    let pick := [← IO.getEnv "LEAN_DEMO_GPU", ← IO.getEnv "CUDA_VISIBLE_DEVICES",
+    let pick := [gpu?, ← IO.getEnv "LEAN_DEMO_GPU", ← IO.getEnv "CUDA_VISIBLE_DEVICES",
                  ← IO.getEnv "HIP_VISIBLE_DEVICES"].filterMap id |>.filter (!·.isEmpty)
     pure (pick.head?.getD "0")
   if xla then
@@ -2242,7 +2244,8 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
       IO.eprintln s!"build failed: {n}"
       return 1
     IO.println s!"━━━ {n}: run (gpu {gpu}, {backend}) ━━━"
-    let rp ← IO.Process.spawn { cmd := "./run.sh", args := #[n, gpu, backend], env := runEnv }
+    let passArgs := if extra.isEmpty then #[] else #["--"] ++ extra
+    let rp ← IO.Process.spawn { cmd := "./run.sh", args := #[n, gpu, backend] ++ passArgs, env := runEnv }
     let rc ← rp.wait
     if rc != 0 then
       IO.eprintln s!"━━━ {n}: FAILED (exit {rc}) — continuing with the rest ━━━"
@@ -2251,10 +2254,22 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   IO.eprintln s!"\n━━━ {failed.size} of {names.length} failed: {", ".intercalate failed.toList} ━━━"
   return 1
 
+/-- The tiers' trainers, one list per tier, so `lake run <tier>`, its `-iree` twin and
+    `lake run train` cannot drift apart. `imagenette` is book order (ch.5 → ch.9, each chapter's
+    side quest right after it). -/
+private def mnistNets : List String :=
+  ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
+private def cifarNets : List String :=
+  ["cifar8w-ablation", "cifar8w-bn-ablation", "cifar8wb-bbn-ablation"]
+private def imagenetteNets : List String :=
+  ["resnet34-verified-adam", "resnet50-verified-adam",
+   "mobilenetv2-verified-adam", "mobilenetv4-verified-adam",
+   "efficientnet-verified-adam", "convnext-verified-adam", "vit-verified-adam"]
+
 /-- `lake run mnist-iree` — the same three binaries as `lake run mnist`, with the
     IREE lowerer selected instead of XLA, which is slower here. -/
 script «mnist-iree» do
-  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
+  runDemoGroup mnistNets
 
 /-- `lake run cifar-iree` — the ch.4 six-arm optimizer ablation (SGD/momentum/adam ×
     bn/no-bn) on the IREE lowerer.
@@ -2266,7 +2281,7 @@ script «mnist-iree» do
     the head width, so neither needs its own proof — they are just not what
     `lake run cifar` shows. -/
 script «cifar-iree» do
-  runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"]
+  runDemoGroup (cifarNets.filter (· != "cifar8wb-bbn-ablation"))
 
 /-- `lake run imagenette-iree` — the Imagenette nets IREE lowers, the SAME binaries as
     `lake run imagenette` in the same book order, with the IREE lowerer selected instead of XLA:
@@ -2294,9 +2309,7 @@ script «cifar-iree» do
     seconds per step at batch 32 on 88 cores, an 18-minute MobileNetV2 epoch — so a training run
     here is days, not hours. -/
 script «imagenette-iree» do
-  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam", "resnet50-verified-adam",
-                "mobilenetv4-verified-adam", "efficientnet-verified-adam", "convnext-verified-adam",
-                "vit-verified-adam"]
+  runDemoGroup imagenetteNets
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
@@ -2323,8 +2336,7 @@ script «imagenette-iree» do
     two scripts is the lowerer `runDemoGroup` puts in the environment, which is
     the strongest form the G2 comparison can take — one binary, run twice. -/
 script mnist do
-  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified",
-                "mnist-cnn-verified"] (xla := true)
+  runDemoGroup mnistNets (xla := true)
 
 /-- `lake run cifar` — the Chapter-4 optimizer ablation on XLA: SGD / Nesterov-momentum / AdamW
     × no-BN / per-image BN / batch-statistics BN, the last also in bf16 (twelve arms, three
@@ -2340,12 +2352,12 @@ script mnist do
     epoch than narrow and buys no accuracy — §4.3's head-width sweep is exactly that finding —
     but matching the chapter is worth the minutes. -/
 script cifar do
-  runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation", "cifar8wb-bbn-ablation"] (xla := true)
+  runDemoGroup cifarNets (xla := true)
 
 /-- `lake run imagenette` — the seven Imagenette nets on the verified XLA path, 80 epochs of AdamW
     at 224², in book order (ch.5 → ch.9, each chapter's side quest right after it).
 
-    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (6) +
+    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (3 binaries, 12 arms) +
     this (7) is the whole demo surface; nothing else is a headline runner. `lake run
     imagenette-iree` is the same seven binaries on the other lowerer.
 
@@ -2360,12 +2372,131 @@ script cifar do
     `lake run imagenette` scores each finished checkpoint instead of training it again; set
     `LEAN_MLIR_CKPT_TAG` for a fresh run beside it. -/
 script imagenette do
-  -- Book order (ch.5 -> ch.9, each chapter's side quest right after it), so the
-  -- group narrates in the order a reader met the nets.
-  runDemoGroup ["resnet34-verified-adam", "resnet50-verified-adam",
-                "mobilenetv2-verified-adam", "mobilenetv4-verified-adam",
-                "efficientnet-verified-adam", "convnext-verified-adam",
-                "vit-verified-adam"] (xla := true)
+  runDemoGroup imagenetteNets (xla := true)
+
+/-- Short names for the tier nets: `lake run train r34` is `lake run train resnet34-verified-adam`. -/
+private def trainAliases : List (String × String) :=
+  [ ("linear", "mnist-linear-verified"), ("mlp", "mnist-mlp-verified"),
+    ("cnn", "mnist-cnn-verified"),
+    ("cifar8w", "cifar8w-ablation"), ("cifar8w-bn", "cifar8w-bn-ablation"),
+    ("cifar8wb-bbn", "cifar8wb-bbn-ablation"),
+    ("r34", "resnet34-verified-adam"), ("r50", "resnet50-verified-adam"),
+    ("mnv2", "mobilenetv2-verified-adam"), ("mnv4", "mobilenetv4-verified-adam"),
+    ("enet", "efficientnet-verified-adam"), ("cnx", "convnext-verified-adam"),
+    ("vit", "vit-verified-adam") ]
+
+/-- `lake run train <net> [gpu] [backend] [--iree]` — one trainer: build it, then run it through
+    `run.sh` with the GPU and backend set and the transcript teed to `runs/<date>-<net>/`, which is
+    what each `lake run <tier>` does for every net in its list.
+
+    `<net>` is any `lean_exe` name, a short name from `trainAliases` (`r34`, `vit`, `cnn`, …), or a
+    prefix that picks out one tier net (`resnet34`, `efficientnet`). The GPU and backend default as
+    in the tiers (`$LEAN_DEMO_GPU`, else the device variable already set, else 0; the backend
+    `scripts/platform/env.sh` detects). The lowerer is XLA unless `--iree` is given or the backend
+    is `llvm-cpu` / `vmvx`, IREE on the CPU. With no `<net>`, it lists the tier nets and their short
+    names. -/
+script train (args) do
+  let iree := args.contains "--iree"
+  let pos := args.filter (· != "--iree")
+  let tierNets := mnistNets ++ cifarNets ++ imagenetteNets
+  let usage := "usage: lake run train <net> [gpu] [backend] [--iree]"
+  let listing := "\n".intercalate (tierNets.map fun n =>
+    match trainAliases.find? (·.2 == n) with
+    | some (a, _) => s!"  {a.pushn ' ' (14 - a.length)}{n}"
+    | none        => s!"  {"".pushn ' ' 14}{n}")
+  let some arg := pos.head?
+    | IO.println s!"{usage}\n\nthe tier nets (short name, target); any other lean_exe name works too:\n{listing}"
+      return 0
+  -- Exact target name first, then a short name, then a prefix of exactly one tier net.
+  let net? ← do
+    if (← findLeanExe? (Lean.Name.mkSimple arg)).isSome then pure (some arg)
+    else match trainAliases.lookup arg with
+      | some n => pure (some n)
+      | none   => match tierNets.filter (·.startsWith arg) with
+        | [n] => pure (some n)
+        | []  => pure none
+        | ns  =>
+          IO.eprintln s!"'{arg}' matches {ns.length} nets: {", ".intercalate ns} — name one"
+          return 1
+  let some net := net?
+    | IO.eprintln s!"no trainer named '{arg}'\n{usage}\n\nthe tier nets (short name, target):\n{listing}"
+      return 1
+  let backend? := pos[2]?
+  let cpu := backend?.any (· ∈ ["llvm-cpu", "vmvx"])
+  runDemoGroup [net] (xla := !(iree || cpu)) (gpu? := pos[1]?) (backend? := backend?)
+
+/-- The demos of Chapters 11–13, in the book's order: (group, chapter, tagline, entries), each
+    entry (short name, `lean_exe`). A one-entry group's short name is unused — the group runs it. -/
+private def demoGroups : List (String × String × String × List (String × String)) :=
+  [ ("yolo",  "11", "detection: R34+FPN on VisDrone, then NEU-DET steel defects",
+      [("visdrone", "yolov1-visdrone-fpn"), ("neudet", "yolov1-neudet-fpn"),
+       ("neudet448", "yolov1-neudet448")]),
+    ("signs", "11", "people: Arabic sign-language letters, random vs blocked split",
+      [("", "arasl-signs")]),
+    ("plant-leaf", "11", "agriculture: ResNet-34 from lab leaves to field leaves",
+      [("", "plant-leaf")]),
+    ("rs-bands", "11", "remote sensing: thirteen Sentinel-2 bands, Europe to Brazil",
+      [("", "rs-bands")]),
+    ("brats", "11", "segmentation: a ResNet-34 U-Net on BraTS",
+      [("train", "unet-brats-train"), ("r34", "unet-brats-r34"),
+       ("predict", "brats-predict"), ("eval", "brats-eval")]),
+    ("shakespeare", "12", "language: a bigram model and TinyGPT",
+      [("bigram", "bigram-shakespeare"), ("gpt", "tinygpt-shakespeare")]),
+    ("ddpm", "12", "diffusion: DDPM on MNIST",
+      [("train", "mnist-ddpm-train"), ("sample", "mnist-ddpm-sample"),
+       ("score", "mnist-ddpm-score")]),
+    ("diffusion-2d", "12", "physics: a flow-matching Boltzmann generator on Müller-Brown",
+      [("", "diffusion-2d")]),
+    ("gw", "12", "signal: gravitational-wave detection on LIGO strain",
+      [("", "gw-detect")]),
+    ("ising", "12", "quantum: neural quantum states, transverse-field Ising",
+      [("", "nqs-ising")]),
+    ("casp", "12", "structure: a distogram ResNet against the CASP16 field",
+      [("", "distogram-casp")]),
+    ("pong", "13", "RL: DQN from pixels on a Lean Pong",
+      [("env", "pong-env"), ("dqn", "pong-dqn")]),
+    ("leduc", "13", "poker: Deep CFR on Leduc hold'em",
+      [("env", "leduc-env"), ("cfr", "deep-cfr-leduc")]),
+    ("ttt", "13", "tic-tac-toe: AlphaZero and MuZero against the solved game",
+      [("env", "ttt-env"), ("alphazero", "alphazero-ttt"), ("muzero", "muzero-ttt")]) ]
+
+/-- `lake run demo [group [entry]] [args…]` — the demos of Chapters 11–13 by short name:
+    `lake run demo pong dqn mode=pixels` is `pong-dqn mode=pixels`, built, then run through
+    `run.sh` like `lake run train`, the transcript teed to `runs/<date>-<exe>/`. A one-entry group
+    takes its arguments straight after the group (`lake run demo gw arm=real`). Bare, it lists the
+    groups and their entries; a group without its entry lists that group's. Everything after the
+    entry goes to the demo, so the GPU is the environment's (`$LEAN_DEMO_GPU`, else the device
+    variable already set, else 0), as in the tiers. The lowerer is XLA; `--iree` selects IREE. -/
+script demo (args) do
+  let iree := args.contains "--iree"
+  let args := args.filter (· != "--iree")
+  let pad (w : Nat) (t : String) := t.pushn ' ' (w - t.length)
+  let entriesOf (es : List (String × String)) :=
+    if es.length == 1 then "" else s!"[{", ".intercalate (es.map (·.1))}]"
+  let usage := "usage: lake run demo <group> [entry] [args…]"
+  let listing := "\n".intercalate (demoGroups.map fun (g, ch, tag, es) =>
+    s!"  {pad 13 g}{pad 32 (entriesOf es)}ch {ch}  {tag}")
+  let some g := args.head?
+    | IO.println s!"{usage}\n\n{listing}"
+      return 0
+  let some (_, ch, tag, es) := demoGroups.find? (·.1 == g)
+    | IO.eprintln s!"no demo group '{g}'\n{usage}\n\n{listing}"
+      return 1
+  let rest := args.drop 1
+  let (exe, demoArgs) ← match es with
+    | [(_, e)] => pure (e, rest)
+    | _ => match rest with
+      | e :: more =>
+        match es.lookup e with
+        | some x => pure (x, more)
+        | none =>
+          IO.eprintln s!"'{g}' has no entry '{e}': lake run demo {g} {entriesOf es}"
+          return 1
+      | [] =>
+        IO.println (s!"{g} (ch {ch}): {tag}\n" ++
+          "\n".intercalate (es.map fun (s, x) => s!"  lake run demo {g} {pad 10 s} # {x}"))
+        return 0
+  runDemoGroup [exe] (xla := !iree) (extra := demoArgs.toArray)
 
 /-- The Orin tier's rows: (exe, pool fraction, the row's extra env), `imagenette`'s seven nets in
     book order. The fraction is `LEAN_MLIR_MEM_FRACTION`, the BFC pool as a share of the board's one
