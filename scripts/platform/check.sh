@@ -2,7 +2,7 @@
 # Platform integration suite: does THIS GPU platform run THIS build?
 # Design and the tier table: planning/platform_integration.md.
 #
-#   scripts/platform/check.sh [--tier 0|1] [--backend cuda|rocm|xpu|neuron] [--plan] [--out DIR]
+#   scripts/platform/check.sh [--tier 0|1] [--backend cuda|rocm|xpu|neuron|metal] [--plan] [--out DIR]
 #
 #   --tier N     run tiers 0..N (default 2). Tier 3 (training) is not written yet.
 #   --backend    default: whichever vendor SMI is on PATH.
@@ -49,6 +49,7 @@ case "$BACKEND" in
         else SMI=(amd-smi static --asic --driver); fi ;;   # 10.1's wheels ship amd-smi only
   xpu)  SMI=(xpu-smi discovery) ;;
   neuron) SMI=(neuron-ls) ;;
+  metal) SMI=(sysctl -n machdep.cpu.brand_string) ;;   # no SMI on a Mac: the chip names the GPU
 esac
 command -v "${SMI[0]}" >/dev/null || { echo "backend $BACKEND: no ${SMI[0]} on PATH" >&2; exit 2; }
 PLUGIN=$PLATFORM_PLUGIN
@@ -100,6 +101,14 @@ record() {  # record <test> <tier> <rc> <detail>   (rc: 0 pass, 77 skip, else fa
 # from env.sh (300; 900 on a Jetson). On Neuron a test includes neuronx-cc compiling its
 # graph, minutes to hours on a trn1.2xlarge's 8 vCPU (deploy/TRAINIUM.md §2).
 CHECK_TIMEOUT=${CHECK_TIMEOUT:-${PLATFORM_TEST_TIMEOUT:-300}}
+# macOS has no `timeout` (coreutils' is `gtimeout` under Homebrew). Without one every test would
+# exit 127 and FAIL, so fall back to perl's alarm, which survives the exec; its SIGALRM death
+# (142) is mapped to timeout's 124 in run().
+if ! command -v timeout > /dev/null 2>&1; then
+  if command -v gtimeout > /dev/null 2>&1; then timeout() { gtimeout "$@"; }
+  else timeout() { perl -e 'alarm shift; exec @ARGV or exit 127' "$@"; }
+  fi
+fi
 run() {
   local t=$1 tier=$2 ok=$3; shift 3
   if [ "$(expected_status "$t")" = SKIP ]; then
@@ -107,6 +116,7 @@ run() {
     return
   fi
   timeout "$CHECK_TIMEOUT" "$@" > "$LOGS/$t.log" 2>&1; local rc=$?
+  [ $rc = 142 ] && rc=124
   if [ $rc = 0 ] && ! grep -qE "$ok" "$LOGS/$t.log"; then rc=1; fi
   local detail
   if [ $rc = 0 ]; then detail=$(grep -E "$ok" "$LOGS/$t.log" | tail -1)
@@ -115,9 +125,11 @@ run() {
   record "$t" "$tier" "$rc" "${detail:0:160}"
 }
 finish() {
-  python3 scripts/platform/manifest.py "$OUT" --backend "$BACKEND" --plugin "$PLUGIN" --tier "$TIER" \
+  local py=python3   # a Mac's python3 is the command-line tools' 3.9; the venv's is 3.12+
+  [ "$(uname -s)" = Darwin ] && [ -x .venv/bin/python3 ] && py=.venv/bin/python3
+  "$py" scripts/platform/manifest.py "$OUT" --backend "$BACKEND" --plugin "$PLUGIN" --tier "$TIER" \
     || echo "  (manifest.py failed)"
-  python3 scripts/platform/platforms_md.py || echo "  (platforms_md.py failed)"
+  "$py" scripts/platform/platforms_md.py || echo "  (platforms_md.py failed)"
   echo
   echo "$(grep -c $'\tPASS\t' "$RESULTS") pass, $(grep -c $'\tXFAIL\t' "$RESULTS") xfail, $NFAIL fail, $NXPASS xpass, $(grep -c $'\tSKIP\t' "$RESULTS") skip — $OUT"
   [ "$NXPASS" -gt 0 ] && echo "XPASS: a listed failure now passes — drop it from $EXPECTED"
@@ -129,17 +141,20 @@ echo "platform suite — $BACKEND, tiers 0..$TIER → $OUT"
 echo "build:"
 CC=${CC:-gcc}
 b() { local t=$1; shift; "$CC" "$@" >> "$LOGS/build.log" 2>&1; record "build:$t" 0 $? ""; }
+# How the tests link the shim. macOS's linker looks for `-lpjrt_ffi` as .dylib/.tbd/.a and never
+# finds the .so, so there the tests name the file itself (its install name is that absolute path).
+if [ "$(uname -s)" = Darwin ]; then SHIM=("$BUILD/libpjrt_ffi.so"); else SHIM=(-L"$BUILD" -lpjrt_ffi); fi
 b shim     -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o "$BUILD/libpjrt_ffi.so"
 b probe    -O2 -Iffi scripts/platform/probe.c -ldl -o "$BUILD/probe"
-b smoke    -O2 -Iffi scripts/platform/smoke.c -L"$BUILD" -lpjrt_ffi -ldl -lm -Wl,-rpath,"$BUILD" -o "$BUILD/smoke"
+b smoke    -O2 -Iffi scripts/platform/smoke.c "${SHIM[@]}" -ldl -lm -Wl,-rpath,"$BUILD" -o "$BUILD/smoke"
 if [ "$TIER" -ge 1 ]; then
-  b guards        -O2 -Iffi ffi/test_pjrt_guards.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_guards"
-  b dp            -O2 -Iffi ffi/test_pjrt_dp.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_dp"
+  b guards        -O2 -Iffi ffi/test_pjrt_guards.c "${SHIM[@]}" -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_guards"
+  b dp            -O2 -Iffi ffi/test_pjrt_dp.c "${SHIM[@]}" -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_dp"
   b allreduce     -O2 -Iffi ffi/test_pjrt_allreduce.c -ldl -o "$BUILD/test_pjrt_allreduce"
   b compile_check -O2 -Iffi ffi/test_pjrt_compile_check.c -ldl -o "$BUILD/test_pjrt_compile_check"
 fi
 [ "$TIER" -ge 2 ] && \
-  b tier2_run   -O2 -Iffi scripts/platform/tier2_run.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/tier2_run"
+  b tier2_run   -O2 -Iffi scripts/platform/tier2_run.c "${SHIM[@]}" -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/tier2_run"
 [ "$NFAIL" -gt 0 ] && { echo "build failed — see $LOGS/build.log"; finish; }
 
 echo "tier 0 — platform:"

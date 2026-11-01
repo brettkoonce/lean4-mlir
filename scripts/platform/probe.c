@@ -69,8 +69,43 @@ int main(int argc, char** argv) {
   pi.struct_size = PJRT_Plugin_Initialize_Args_STRUCT_SIZE;
   if (fail(api->PJRT_Plugin_Initialize(&pi), "Plugin_Initialize")) return 1;
 
+  // The client options the shim reads from the environment, so the probe's client is created as
+  // the trainers' is. Off a Mac none is set (env.sh exports them only for the `metal` backend) and
+  // the client is created with none, as before; jax-graft's Metal plugin needs `platform_name`
+  // or it looks for CUDA (deploy/MAC.md § What is Mac-specific).
+  PJRT_NamedValue copts[3];
+  size_t n_copts = 0;
+  const char* platform_name = getenv("LEAN_MLIR_PJRT_PLATFORM");
+  const char* alloc_name = getenv("LEAN_MLIR_ALLOCATOR");
+  const char* prealloc = getenv("LEAN_MLIR_PREALLOCATE");
+  if (platform_name && *platform_name) {
+    PJRT_NamedValue* v = &copts[n_copts++];
+    memset(v, 0, sizeof(*v));
+    v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+    v->name = "platform_name"; v->name_size = strlen("platform_name");
+    v->type = PJRT_NamedValue_kString;
+    v->string_value = platform_name; v->value_size = strlen(platform_name);
+  }
+  if (alloc_name && *alloc_name) {
+    PJRT_NamedValue* v = &copts[n_copts++];
+    memset(v, 0, sizeof(*v));
+    v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+    v->name = "allocator"; v->name_size = strlen("allocator");
+    v->type = PJRT_NamedValue_kString;
+    v->string_value = alloc_name; v->value_size = strlen(alloc_name);
+  }
+  if (prealloc && *prealloc) {
+    PJRT_NamedValue* v = &copts[n_copts++];
+    memset(v, 0, sizeof(*v));
+    v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+    v->name = "preallocate"; v->name_size = strlen("preallocate");
+    v->type = PJRT_NamedValue_kBool;
+    v->bool_value = (atoi(prealloc) != 0);
+  }
+
   PJRT_Client_Create_Args ca = {0};
   ca.struct_size = PJRT_Client_Create_Args_STRUCT_SIZE;
+  if (n_copts) { ca.create_options = copts; ca.num_options = n_copts; }
   if (fail(api->PJRT_Client_Create(&ca), "Client_Create")) return 1;
 
   PJRT_Client_PlatformName_Args pn = {0};

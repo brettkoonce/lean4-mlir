@@ -48,6 +48,50 @@ Everything is teed to `runs/<date>-mac-setup/setup.log`, with the box's chip, me
 macOS and package versions in `manifest.txt` beside it. Each trainer's own log lands under
 `runs/<date>-mnist-*/`, as on the other platforms.
 
+## The ladder: suite through CIFAR
+
+Once `mac_setup.sh` is green, `deploy/mac_ladder.sh` runs the rest of the 7900 XTX's ladder at
+CIFAR and below (`deploy/ROCM_7900XTX.md` § Measured on ares, on the `rocm10-7900xtx` branch):
+
+```bash
+bash deploy/mac_ladder.sh                # every stage, in order
+bash deploy/mac_ladder.sh cifar          # resume from a stage
+bash deploy/mac_ladder.sh seeds grid     # only the stages named
+```
+
+| stage | runs | the 7900 XTX's result on ares |
+|---|---|---|
+| `build` | `lake build` the eight binaries below | — |
+| `data` | MNIST and CIFAR-10 into `data/` | — |
+| `suite` | `scripts/platform/check.sh`, tiers 0–2, into `runs/platform/<date>-<host>-metal/` | 21 pass, 3 skips (two-device tests; a Mac has one GPU, so they skip here too) |
+| `mnist` | `lake run mnist`, 12 epochs | 92.10 / 97.80 / 98.60 % |
+| `gradcheck` | `cifar8-bbn-gradcheck`: the batch-BN step's backward, both tiers | passes |
+| `cifar` | `lake run cifar`: no BN, per-image BN, batch BN, 40 epochs | best 77.13 % |
+| `seeds` | `cifar8wb-bbn-ablation` at seeds 1–5, six arms each | per-arm means 74.37–77.39 % |
+| `grid` | `cifar8wb-bbn-grid` at ten head widths, 25 epochs | 76.23–78.52 % |
+
+The seeds and grid are the Linux sweeps (`scripts/sweeps/seed_sweep.sh SUITE=bbn`,
+`run_cifar8wb_bbn_grid_sweep.sh`) redone for a stock Mac, one job after another on the one GPU,
+with the same log names and result columns. Those scripts need bash 4, gawk, `flock` and a
+`journalctl` watchdog, none of which a stock Mac has. Every stage leaves a done-marker, so a
+second run finishes the first. Checkpoints are tagged `mac-ladder`, so a stale checkpoint from
+an earlier partial run is never resumed. `caffeinate` keeps the Mac awake while the ladder runs.
+`sensors.tsv` logs the thermal speed limit and free memory once a minute, which shows when a
+fanless Air throttles. The wall time on an M1 has not been measured: `cifar` and `seeds` are
+the long stages (twelve and thirty 40-epoch arms).
+
+For `check.sh` to run on a Mac it has a `metal` backend: the chip name stands in for a vendor
+SMI, perl's `alarm` stands in for `timeout`, the tests link the shim by path (macOS's linker
+never resolves `-lpjrt_ffi` to a `.so`), and the manifest runs under the venv's python.
+`scripts/platform/probe.c` creates its client with the shim's `LEAN_MLIR_PJRT_PLATFORM` /
+`ALLOCATOR` / `PREALLOCATE` options. Without `platform_name=METAL` the plugin looks for CUDA.
+None of these options is set off a Mac.
+
+Send back `runs/<date>-mac-ladder/`, `runs/platform/<date>-<host>-metal/` and the
+`runs/<date>-{mnist,cifar8w}*/` trainer logs. The results fill the Mac row's `suite` and `cifar`
+cells in `scripts/platform/support.tsv`, then `scripts/platform/platforms_md.py` regenerates
+`PLATFORMS.md` and the book's table (`blueprint/src/figures/platforms.tex`).
+
 ## What is Mac-specific
 
 - **`scripts/platform/env.sh`** has a `metal` backend, chosen when `uname -s` is Darwin. It
