@@ -2357,7 +2357,7 @@ script cifar do
 /-- `lake run imagenette` — the seven Imagenette nets on the verified XLA path, 80 epochs of AdamW
     at 224², in book order (ch.5 → ch.9, each chapter's side quest right after it).
 
-    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (3 binaries, 12 arms) +
+    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (3, twelve arms) +
     this (7) is the whole demo surface; nothing else is a headline runner. `lake run
     imagenette-iree` is the same seven binaries on the other lowerer.
 
@@ -2405,7 +2405,9 @@ script train (args) do
     | some (a, _) => s!"  {a.pushn ' ' (14 - a.length)}{n}"
     | none        => s!"  {"".pushn ' ' 14}{n}")
   let some arg := pos.head?
-    | IO.println s!"{usage}\n\nthe tier nets (short name, target); any other lean_exe name works too:\n{listing}"
+    | IO.println s!"{usage}\n\nthe tier nets (short name, target); any other lean_exe name works too:\n{listing}\n\n\
+                    ImageNet-1k runs take the same short names (and a3 / a2 / a1) through\n\
+                    `lake run imagenet start <name>`; `lake run imagenet list` names them all."
       return 0
   -- Exact target name first, then a short name, then a prefix of exactly one tier net.
   let net? ← do
@@ -2620,12 +2622,66 @@ private def imagenetRows : List (String × String × String) :=
     ("vits-default-emabf16-4gpu", "vit-s-imagenet-verified",     "Ch. 9  ViT-S (DeiT-S), EMA + bf16 (side quest)"),
     ("vitb-default-emabf16-4gpu", "vit-b-imagenet-verified",     "Ch. 9  ViT-B (DeiT-B), EMA + bf16 (side quest)") ]
 
+/-- The ImageNet tier by short name: (short name, the verified job — an `imagenetRows` entry — and
+    its JAX reference peer, the `scripts/supervise.sh`-only conf at the same recipe and epoch count),
+    in `imagenetRows`' order. `lake run imagenet`, `lake run bench` and `lake run train`'s listing
+    all read it, so a net is spelled one way everywhere; the words are `trainAliases`' Imagenette
+    ones, plus `a3` / `a2` / `a1` for ResNet-50's RSB recipes (`r50` is its 2018 recipe). -/
+private def imagenetPairs : List (String × String × String) :=
+  [ ("r34",  "r34-default-bf16-4gpu",        "r34-default-jax-4gpu"),
+    ("r50",  "r50-2018-bf16-4gpu",           "r50-2018-jax-4gpu"),
+    ("a3",   "r50-a3-wxclip4x128-bf16-4gpu", "r50-a3-jax-4gpu"),
+    ("a2",   "r50-a2-bf16-4gpu",             "r50-a2accum-jax-4gpu"),
+    ("a1",   "r50-a1-bf16-4gpu",             "r50-a1-jax-4gpu"),
+    ("mnv2", "mnv2-default-4gpu",            "mnv2-full-jax-4gpu"),
+    ("mnv4", "mnv4-full-4gpu",               "mnv4-full-jax-4gpu"),
+    ("enet", "enet-default-4gpu",            "enet-full-jax-4gpu"),
+    ("cnx",  "cnx-default-emabf16-4gpu",     "cnx-default-jax-4gpu"),
+    ("cnxs", "cnxs-default-emabf16-4gpu",    "cnxs-default-jax-4gpu"),
+    ("cnxb", "cnxb-default-emabf16-4gpu",    "cnxb-default-jax-4gpu"),
+    ("vit",  "vit-default-emabf16-4gpu",     "vit-default-jax-4gpu"),
+    ("vits", "vits-default-emabf16-4gpu",    "vits-accum-jax-4gpu"),
+    ("vitb", "vitb-default-emabf16-4gpu",    "vitb-accum-jax-4gpu") ]
+
+/-- The short names, one line each: name, the book's row, the two jobs. -/
+private def imagenetListing : String :=
+  "\n".intercalate (imagenetPairs.map fun (s, v, j) =>
+    let row := ((imagenetRows.find? (·.1 == v)).map (·.2.2)).getD ""
+    s!"  {s.pushn ' ' (6 - s.length)}{row}\n        verified {v} · reference {j}")
+
+/-- `lake run imagenet`'s rows for a list of names, as (job, exe, row): each name is a short name
+    from `imagenetPairs`, else a job-name prefix (every `imagenetRows` job it starts: `r50-` is
+    ResNet-50's four recipes). A short name wins over the prefix it also is, so `cnx` and `vit`,
+    which as prefixes took the S and B side quests too, now name ConvNeXt-T and ViT-Tiny alone.
+    No names is every row.
+    `jax` swaps each row for its reference peer, whose exe is `""`: a Python trainer, nothing
+    for lake to build. -/
+private def imagenetSelect (names : List String) (jax : Bool) :
+    Except String (List (String × String × String)) := do
+  let pick (v : String) : String × String × String :=
+    let (_, exe, row) := (imagenetRows.find? (·.1 == v)).getD (v, "", "")
+    if jax then (((imagenetPairs.find? (·.2.1 == v)).map (·.2.2)).getD v, "", s!"{row} — JAX reference")
+    else (v, exe, row)
+  if names.isEmpty then return imagenetRows.map (pick ·.1)
+  let mut out : List (String × String × String) := []
+  for n in names do
+    match imagenetPairs.find? (·.1 == n) with
+    | some (_, v, _) => out := out ++ [pick v]
+    | none =>
+      let hits := imagenetRows.filter (·.1.startsWith n)
+      if hits.isEmpty then throw s!"no ImageNet row '{n}'"
+      out := out ++ hits.map (pick ·.1)
+  return out
+
 /-- One job in one mode. `plan` skips the build and says whether the binary exists; the other
     two build the exe first (the `runDemoGroup` convention) and then hand the job to the engine,
-    which owns everything else — devices, env, checkpoint resume, restart policy. -/
+    which owns everything else — devices, env, checkpoint resume, restart policy. An empty `exe`
+    is a JAX reference job, which has no binary. -/
 private def runJob (job exe mode : String) : IO UInt32 := do
   let bin : System.FilePath := ".lake" / "build" / "bin" / exe
-  if mode == "plan" then
+  if exe.isEmpty then
+    IO.println "  ▸ JAX reference: the emitted Python trainer, nothing for lake to build"
+  else if mode == "plan" then
     IO.println (if ← bin.pathExists then s!"  ✓ {bin}" else s!"  ▸ {bin} not built yet — a run builds it")
   else
     IO.println s!"━━━ {job}: build {exe} ━━━"
@@ -2671,24 +2727,42 @@ script «vit-default-emabf16-4gpu» (args) do runJobScript "vit-default-emabf16-
 script «vits-default-emabf16-4gpu» (args) do runJobScript "vits-default-emabf16-4gpu" args
 script «vitb-default-emabf16-4gpu» (args) do runJobScript "vitb-default-emabf16-4gpu" args
 
-/-- `lake run imagenet` — the fourth tier: the fourteen ImageNet rows, in chapter order.
+/-- `lake run imagenet [start | once] [name …] [--jax]` — the fourth tier: the fourteen ImageNet
+    rows, in chapter order.
 
     PLAN-ONLY unless the first argument is `start`. Bare, it runs every row's `plan` — the name
     check, the PRECHECK, the wall-clock on file — and launches nothing, because the tier is weeks
     of four-card time and this box has crashed under it. `lake run imagenet start` runs the rows
     through `scripts/supervise.sh` in order and stops at the first failure; a row whose checkpoint
-    is complete exits 0 at once, so re-invoking resumes where it left off. `lake run imagenet
-    start cnx vit` (job-name prefixes) runs a subset. Rows are sequential by construction: every
-    job claims all four cards. `lake build imagenet` builds every row's trainer first, and the
-    `vit-ema-drop-render` layout gate the EMA confs' PRECHECKs call, so the plan's
-    binary-freshness checks have nothing to warn about. -/
+    is complete exits 0 at once, so re-invoking resumes where it left off. Rows are sequential by
+    construction: every job claims all four cards.
+
+    Names pick rows: the short names of `imagenetPairs` (`lake run imagenet start a3`, `lake run
+    imagenet vit` to plan one), or job-name prefixes as before. `--jax` runs each row's JAX
+    reference instead of the verified path — the pair's other half, through the same supervisor.
+    `once` is one foreground run of one row, no restart policy (the per-job scripts' `once`).
+    `lake run imagenet list` prints the short names and the jobs behind them.
+    `lake build imagenet` builds every row's trainer first, and the `vit-ema-drop-render` layout
+    gate the EMA confs' PRECHECKs call, so the plan's binary-freshness checks have nothing to warn
+    about. The same names time a row instead of training it: `lake run bench`. -/
 script imagenet (args) do
-  let (go, only) := match args with
-    | "start" :: rest => (true, rest)
-    | rest            => (false, rest)
-  let rows := imagenetRows.filter fun (j, _, _) => only.isEmpty || only.any (j.startsWith ·)
-  if rows.isEmpty then
-    IO.eprintln s!"no ImageNet row matches {only}"
+  let jax := args.contains "--jax"
+  let args := args.filter (· != "--jax")
+  let usage := "usage: lake run imagenet [start | once] [name …] [--jax]"
+  if args == ["list"] then
+    IO.println s!"{usage}\n\nthe rows by short name (job-name prefixes work too):\n{imagenetListing}"
+    return 0
+  let (mode, names) := match args with
+    | "start" :: rest => ("run", rest)
+    | "once" :: rest  => ("once", rest)
+    | rest            => ("plan", rest)
+  let rows ← match imagenetSelect names jax with
+    | .ok r => pure r
+    | .error e =>
+      IO.eprintln s!"{e}\n{usage}\n\nthe rows by short name:\n{imagenetListing}"
+      return 1
+  if mode == "once" && rows.length != 1 then
+    IO.eprintln s!"`once` runs one row; {rows.length} named"
     return 1
   IO.println s!"━━━ lake run imagenet: {rows.length} row(s) in chapter order — plan first ━━━"
   let mut refused : List String := []
@@ -2697,21 +2771,57 @@ script imagenet (args) do
     if (← runJob j exe "plan") != 0 then refused := refused ++ [j]
   IO.println s!"\n━━━ plan: {rows.length - refused.length} of {rows.length} row(s) ready\
               {if refused.isEmpty then "" else s!" — refused: {refused}"} ━━━"
-  if !go then
-    IO.println "plan only, nothing launched. `lake run imagenet start [job-prefix …]` runs these rows in\n\
+  if mode == "plan" then
+    IO.println "plan only, nothing launched. `lake run imagenet start [name …]` runs these rows in\n\
                 order through scripts/supervise.sh, each resuming from its own checkpoint."
     return (if refused.isEmpty then 0 else 1)
   if !refused.isEmpty then
     IO.eprintln "⛔ not starting: fix the refused rows first, or name a subset that excludes them"
     return 1
-  IO.println "━━━ XLA/PJRT backend ━━━"
-  if !(← ensurePjrtShim) then return 1
+  if rows.any (!·.2.1.isEmpty) then
+    IO.println "━━━ XLA/PJRT backend ━━━"
+    if !(← ensurePjrtShim) then return 1
   for (j, exe, row) in rows do
     IO.println s!"\n▸ {row}"
-    if (← runJob j exe "run") != 0 then
+    if (← runJob j exe mode) != 0 then
       IO.eprintln s!"⛔ {j} did not complete — the tier stops here; re-run to resume"
       return 1
   return 0
+
+/-- `lake run bench [plan] <name … | all> [--jax | --verified]` — the ImageNet tier as a benchmark:
+    each named net's two jobs (the JAX reference and the verified path, `imagenetPairs`), on the
+    real ImageNet stream, `BENCH_EPOCHS` (2) epochs each, timed by `scripts/bench/bench.sh` into
+    `runs/<date>-bench-<host>/bench.tsv` — epoch wall clock, train / val split, steady step time,
+    img/s, GPU and host-CPU load, the environment the trainer actually got. Each row is the job's
+    own conf, so a bench row and a `lake run imagenet start` row run the same command; it trains
+    into a scratch checkpoint and never touches the job's lineage. `plan` resolves every row and
+    runs its PRECHECK, launching nothing; bare, it lists the names. `--jax` / `--verified` bench
+    one path only. -/
+script bench (args) do
+  let jaxOnly := args.contains "--jax"
+  let verOnly := args.contains "--verified"
+  let pos := args.filter fun a => a != "--jax" && a != "--verified"
+  let (plan, names) := match pos with
+    | "plan" :: rest => (true, rest)
+    | rest           => (false, rest)
+  let usage := "usage: lake run bench [plan] <name … | all> [--jax | --verified]"
+  if names.isEmpty then
+    IO.println s!"{usage}\n\nthe nets (each benches its JAX reference and its verified job):\n{imagenetListing}"
+    return 0
+  let mut nets : List (String × String × String) := []
+  if names == ["all"] then nets := imagenetPairs
+  else
+    for n in names do
+      match imagenetPairs.find? (·.1 == n) with
+      | some p => nets := nets ++ [p]
+      | none =>
+        IO.eprintln s!"no net '{n}'\n{usage}\n\n{imagenetListing}"
+        return 1
+  let rows := nets.foldl (init := #[]) fun acc (n, v, j) =>
+    acc ++ (if verOnly then #[] else #[s!"{n}:jax:{j}"]) ++ (if jaxOnly then #[] else #[s!"{n}:verified:{v}"])
+  let p ← IO.Process.spawn { cmd := "scripts/bench/bench.sh",
+                             args := (if plan then #["plan"] else #[]) ++ rows }
+  pure (← p.wait)
 
 -- `imagenet` the script owns the root name, hence the namespace; the target's name is still `imagenet`.
 namespace ImagenetBuild

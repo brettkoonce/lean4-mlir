@@ -11,6 +11,7 @@ Every script says what it does in its first lines. Run them from the repo root.
 | [`demos/`](demos/) | one figure / metrics / score set per bestiary demo |
 | [`book/`](book/) | the book's dependency graphs, cross-reference and citation checks, plots from logs, the site map |
 | [`datasets/`](datasets/) | `download_*.sh` and `preprocess_*.py` for every dataset |
+| [`bench/`](bench/) | real-data throughput rows for the ImageNet confs, both paths (`lake run bench`) |
 | [`sweeps/`](sweeps/) | seed sweeps, ablation launchers and other multi-run drivers |
 | [`probes/`](probes/) | one-off measurements behind a specific result: the detector and segmentation loss checks, bf16 probes, perturbation studies |
 | [`lib/`](lib/) | helpers the others import or source: `_iree.py`, `_mnist_io.py`, `_stats.py`, `lean_graph.py`, the shell libraries |

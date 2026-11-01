@@ -48,7 +48,7 @@ jax/{Jax,generated,tests,probe,demos,scripts}/**/*.{lean,py,sh,md}
 # Scripts: the buckets, plus the drivers in-flight jobs call at the top level
 scripts/README.md
 scripts/{det_shim.sh,gen_shims.sh,regen_jax_generated.sh,regen_verified_mlir.sh,shim_wiring_gate.py,supervise.sh}
-scripts/{audit_census,book,certs,datasets,demos,gates,jobs,lib,parity,platform,probes,stats,sweeps}/**/*.{py,sh,lean,c,md,conf,txt,tsv}
+scripts/{audit_census,bench,book,certs,datasets,demos,gates,jobs,lib,parity,platform,probes,stats,sweeps}/**/*.{py,sh,lean,c,md,conf,txt,tsv}
 scripts/platform/fixtures/*.mlir
 scripts/platform/goldens/*.npz
 

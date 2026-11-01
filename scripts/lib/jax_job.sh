@@ -22,6 +22,8 @@
 #     once per graph, not once per chunk.
 
 : "${CKPT_BASE:?jax_job.sh needs CKPT_BASE}" "${PY_REL:?jax_job.sh needs PY_REL}"
+# scripts/bench/bench.sh: a bench row trains into a scratch directory, never the conf's lineage
+[ -n "${BENCH_CKPT_DIR:-}" ] && CKPT_BASE="$BENCH_CKPT_DIR/${CKPT_BASE##*/}"
 
 # Which box, and so which python (the verified confs' _box.sh). ares trains on the repo's pinned
 # .venv (cuda12, jax_job's lock); the 3060 box has no usable .venv/bin/python — its JAX stack is
