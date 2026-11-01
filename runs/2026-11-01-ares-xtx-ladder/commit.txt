@@ -1,0 +1,5 @@
+824155aa deploy(rocm): ROCm 10.1 as wheels, no root — rocm10_setup.sh makes .venv-rocm10, rocm10_env.sh sets the plugin, the backend and the four MIOpen switches gfx1100 needs
+ M PLATFORMS.md
+ M blueprint/src/figures/platforms.tex
+ M scripts/platform/check.sh
+ M scripts/platform/env.sh

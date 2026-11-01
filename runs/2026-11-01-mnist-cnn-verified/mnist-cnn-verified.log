@@ -1,0 +1,43 @@
+I1101 03:05:22.144764  207697 service.cc:154] XLA service 0x7650a03c2df0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1101 03:05:22.144784  207697 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1101 03:05:22.304842  207697 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1101 03:05:22.304874  207697 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1101 03:05:22.312416  207697 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1101 03:05:22.358183  207738 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 8073 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 86 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.350691, test_acc = 9284/10000 = 92.840000%  [95% CI 92.32–93.33] (2007ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.094416, test_acc = 9740/10000 = 97.400000%  [95% CI 97.07–97.69] (1914ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.056008, test_acc = 9793/10000 = 97.930000%  [95% CI 97.63–98.19] (1906ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.037520, test_acc = 9839/10000 = 98.390000%  [95% CI 98.12–98.62] (1914ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.026169, test_acc = 9843/10000 = 98.430000%  [95% CI 98.17–98.66] (1942ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.017707, test_acc = 9841/10000 = 98.410000%  [95% CI 98.15–98.64] (1915ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.012429, test_acc = 9844/10000 = 98.440000%  [95% CI 98.18–98.66] (1918ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.023279, test_acc = 9851/10000 = 98.510000%  [95% CI 98.25–98.73] (1911ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.009387, test_acc = 9855/10000 = 98.550000%  [95% CI 98.30–98.77] (1898ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.005457, test_acc = 9868/10000 = 98.680000%  [95% CI 98.44–98.89] (1910ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.003720, test_acc = 9863/10000 = 98.630000%  [95% CI 98.38–98.84] (1910ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.002160, test_acc = 9860/10000 = 98.600000%  [95% CI 98.35–98.81] (1919ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

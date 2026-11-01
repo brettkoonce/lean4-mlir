@@ -1,0 +1,147 @@
+━━━ XLA/PJRT backend ━━━
+  ✓ ffi/libpjrt_ffi.so up to date
+  ✓ PJRT_PLUGIN=/home/skoonce/lean/lean4-mlir/.venv-rocm10/lib/python3.12/site-packages/jax_plugins/xla_rocm10/xla_rocm_plugin.so
+
+━━━ mnist-linear-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-linear-verified: run (gpu 0, rocm) ━━━
+→ mnist-linear-verified (GPU 0, rocm) → runs/2026-11-01-mnist-linear-verified/mnist-linear-verified.log
+I1101 03:05:04.552033  207105 service.cc:154] XLA service 0x7aea483c0d60 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1101 03:05:04.552053  207105 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1101 03:05:04.711886  207105 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1101 03:05:04.711920  207105 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1101 03:05:04.719124  207105 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1101 03:05:04.739430  207153 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 573 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 67 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+[pjrt_ffi] RESIDENT: @linear_train_step holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (190ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: test_acc = 9082/10000 = 90.820000%  [95% CI 90.24–91.37] (138ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: test_acc = 9124/10000 = 91.240000%  [95% CI 90.67–91.78] (135ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: test_acc = 9156/10000 = 91.560000%  [95% CI 91.00–92.09] (139ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: test_acc = 9167/10000 = 91.670000%  [95% CI 91.11–92.20] (144ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: test_acc = 9176/10000 = 91.760000%  [95% CI 91.20–92.28] (148ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: test_acc = 9186/10000 = 91.860000%  [95% CI 91.31–92.38] (144ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: test_acc = 9194/10000 = 91.940000%  [95% CI 91.39–92.46] (127ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (127ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (128ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (127ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: test_acc = 9210/10000 = 92.100000%  [95% CI 91.56–92.61] (128ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).
+
+━━━ mnist-mlp-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-mlp-verified: run (gpu 0, rocm) ━━━
+→ mnist-mlp-verified (GPU 0, rocm) → runs/2026-11-01-mnist-mlp-verified/mnist-mlp-verified.log
+I1101 03:05:08.590799  207329 service.cc:154] XLA service 0x745c043c2df0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1101 03:05:08.590815  207329 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1101 03:05:08.756753  207329 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1101 03:05:08.756783  207329 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1101 03:05:08.763409  207329 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1101 03:05:08.796752  207372 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 6537 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 96 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.413476, test_acc = 9200/10000 = 92.000000%  [95% CI 91.45–92.52] (413ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.191118, test_acc = 9524/10000 = 95.240000%  [95% CI 94.81–95.64] (447ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.139100, test_acc = 9640/10000 = 96.400000%  [95% CI 96.02–96.75] (482ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.109087, test_acc = 9690/10000 = 96.900000%  [95% CI 96.54–97.22] (472ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.088679, test_acc = 9718/10000 = 97.180000%  [95% CI 96.84–97.49] (453ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.073542, test_acc = 9736/10000 = 97.360000%  [95% CI 97.03–97.66] (471ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.061892, test_acc = 9747/10000 = 97.470000%  [95% CI 97.14–97.76] (440ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.052617, test_acc = 9761/10000 = 97.610000%  [95% CI 97.29–97.89] (407ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.045089, test_acc = 9772/10000 = 97.720000%  [95% CI 97.41–97.99] (488ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.038815, test_acc = 9778/10000 = 97.780000%  [95% CI 97.47–98.05] (476ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.033547, test_acc = 9777/10000 = 97.770000%  [95% CI 97.46–98.04] (374ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.029001, test_acc = 9780/10000 = 97.800000%  [95% CI 97.49–98.07] (387ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).
+
+━━━ mnist-cnn-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-cnn-verified: run (gpu 0, rocm) ━━━
+→ mnist-cnn-verified (GPU 0, rocm) → runs/2026-11-01-mnist-cnn-verified/mnist-cnn-verified.log
+I1101 03:05:22.144764  207697 service.cc:154] XLA service 0x7650a03c2df0 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1101 03:05:22.144784  207697 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1101 03:05:22.304842  207697 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1101 03:05:22.304874  207697 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1101 03:05:22.312416  207697 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1101 03:05:22.358183  207738 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 8073 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 86 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.350691, test_acc = 9284/10000 = 92.840000%  [95% CI 92.32–93.33] (2007ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.094416, test_acc = 9740/10000 = 97.400000%  [95% CI 97.07–97.69] (1914ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.056008, test_acc = 9793/10000 = 97.930000%  [95% CI 97.63–98.19] (1906ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.037520, test_acc = 9839/10000 = 98.390000%  [95% CI 98.12–98.62] (1914ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.026169, test_acc = 9843/10000 = 98.430000%  [95% CI 98.17–98.66] (1942ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.017707, test_acc = 9841/10000 = 98.410000%  [95% CI 98.15–98.64] (1915ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.012429, test_acc = 9844/10000 = 98.440000%  [95% CI 98.18–98.66] (1918ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.023279, test_acc = 9851/10000 = 98.510000%  [95% CI 98.25–98.73] (1911ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.009387, test_acc = 9855/10000 = 98.550000%  [95% CI 98.30–98.77] (1898ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.005457, test_acc = 9868/10000 = 98.680000%  [95% CI 98.44–98.89] (1910ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.003720, test_acc = 9863/10000 = 98.630000%  [95% CI 98.38–98.84] (1910ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.002160, test_acc = 9860/10000 = 98.600000%  [95% CI 98.35–98.81] (1919ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

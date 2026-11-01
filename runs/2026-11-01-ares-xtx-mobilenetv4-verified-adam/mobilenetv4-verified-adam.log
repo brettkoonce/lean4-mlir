@@ -1,0 +1,743 @@
+I1101 00:52:19.200992   37595 service.cc:154] XLA service 0x758c283c2c30 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I1101 00:52:19.201008   37595 service.cc:170]   StreamExecutor [0]: AMD Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.16.26385; Runtime: 7.16.26385; Toolkit: 7.16.26385; DNN: 1.3.0)
+I1101 00:52:19.322802   37595 se_gpu_pjrt_client.cc:1453] Using BFC allocator.
+I1101 00:52:19.322835   37595 gpu_helpers.cc:162] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: DISABLED (ROCm default — see command_buffers_disabled())
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1101 00:52:19.433702   37595 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1101 00:52:23.508677   37613 amdgpu_backend.cc:163] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/mnv4_adam_train_step.mlir (@mnv4_adam_train_step, 856 outputs, 1 replica) in 7613 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd.mlir (@mnv4_fwd, 1 outputs, 1 replica) in 564 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd_eval.mlir (@mnv4_fwd_eval, 1 outputs, 1 replica) in 289 ms
+MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mnv4_adam_train_step.mlir
+  xla/pjrt verified_mlir/mnv4_fwd.mlir
+  xla/pjrt verified_mlir/mnv4_fwd_eval.mlir
+  train 9469, val 3925; bs 32, MobileNetV4-Conv-M adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @mnv4_adam_train_step holds 699 parameter tensors (96.7 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.709822
+  step 1/295: loss=2.649336
+  step 2/295: loss=2.515712
+  step 100/295: loss=2.129476
+  step 200/295: loss=2.256407
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.111039 lr=0.000333
+  epoch 1: val_acc = 1085/3925 = 27.643312%  top5 = 2870/3925 = 73.121019%  [95% CI 26.27–29.06]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4930550537401787014)
+  step 0/295: loss=2.062715
+  step 1/295: loss=1.639517
+  step 2/295: loss=1.624067
+  step 100/295: loss=1.640879
+  step 200/295: loss=1.485346
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.751035 lr=0.000667
+  epoch 2: val_acc = 734/3925 = 18.700637%  top5 = 2415/3925 = 61.528662%  [95% CI 17.51–19.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 2881858766527169428)
+  step 0/295: loss=1.641000
+  step 1/295: loss=2.344499
+  step 2/295: loss=1.687664
+  step 100/295: loss=1.492263
+  step 200/295: loss=1.330992
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.582081 lr=0.001000
+  epoch 3: val_acc = 1983/3925 = 50.522293%  top5 = 3360/3925 = 85.605096%  [95% CI 48.96–52.09]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 18096018533248624301)
+  step 0/295: loss=1.705496
+  step 1/295: loss=1.216429
+  step 2/295: loss=1.511066
+  step 100/295: loss=1.584213
+  step 200/295: loss=1.340375
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.451473 lr=0.001000
+  epoch 4: val_acc = 2122/3925 = 54.063694%  top5 = 3588/3925 = 91.414013%  [95% CI 52.50–55.62]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 7047009849513580283)
+  step 0/295: loss=1.506316
+  step 1/295: loss=1.422625
+  step 2/295: loss=1.274599
+  step 100/295: loss=1.419646
+  step 200/295: loss=1.268380
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.331093 lr=0.000998
+  epoch 5: val_acc = 2276/3925 = 57.987261%  top5 = 3650/3925 = 92.993631%  [95% CI 56.44–59.52]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12529920450564675877)
+  step 0/295: loss=1.128810
+  step 1/295: loss=1.154591
+  step 2/295: loss=1.119611
+  step 100/295: loss=1.259443
+  step 200/295: loss=1.511283
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.254378 lr=0.000996
+  epoch 6: val_acc = 2303/3925 = 58.675159%  top5 = 3513/3925 = 89.503185%  [95% CI 57.13–60.21]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 8977064354963201923)
+  step 0/295: loss=1.057251
+  step 1/295: loss=1.118497
+  step 2/295: loss=1.242779
+  step 100/295: loss=1.173809
+  step 200/295: loss=1.126323
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.175121 lr=0.000993
+  epoch 7: val_acc = 2357/3925 = 60.050955%  top5 = 3623/3925 = 92.305732%  [95% CI 58.51–61.57]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6524879323706030756)
+  step 0/295: loss=1.139001
+  step 1/295: loss=1.182061
+  step 2/295: loss=1.404836
+  step 100/295: loss=1.454784
+  step 200/295: loss=1.059784
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.135805 lr=0.000990
+  epoch 8: val_acc = 2523/3925 = 64.280255%  top5 = 3729/3925 = 95.006369%  [95% CI 62.77–65.76]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12225318059446150188)
+  step 0/295: loss=1.166095
+  step 1/295: loss=0.903914
+  step 2/295: loss=1.124388
+  step 100/295: loss=0.870235
+  step 200/295: loss=1.325751
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.184937 lr=0.000985
+  epoch 9: val_acc = 1860/3925 = 47.388535%  top5 = 3410/3925 = 86.878981%  [95% CI 45.83–48.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 13567549338832301799)
+  step 0/295: loss=1.370229
+  step 1/295: loss=1.003037
+  step 2/295: loss=1.157756
+  step 100/295: loss=1.069514
+  step 200/295: loss=0.965742
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.127394 lr=0.000980
+  epoch 10: val_acc = 2758/3925 = 70.267516%  top5 = 3710/3925 = 94.522293%  [95% CI 68.82–71.68]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 732194683237076934)
+  step 0/295: loss=1.091506
+  step 1/295: loss=0.778244
+  step 2/295: loss=1.156994
+  step 100/295: loss=1.281863
+  step 200/295: loss=1.018620
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=1.103815 lr=0.000974
+  epoch 11: val_acc = 2746/3925 = 69.961783%  top5 = 3729/3925 = 95.006369%  [95% CI 68.51–71.38]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 15751573872233312299)
+  step 0/295: loss=0.959088
+  step 1/295: loss=0.823983
+  step 2/295: loss=0.914244
+  step 100/295: loss=1.094340
+  step 200/295: loss=0.933670
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=1.052925 lr=0.000967
+  epoch 12: val_acc = 1361/3925 = 34.675159%  top5 = 3046/3925 = 77.605096%  [95% CI 33.20–36.18]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 961759096192974373)
+  step 0/295: loss=1.457316
+  step 1/295: loss=1.593187
+  step 2/295: loss=1.338215
+  step 100/295: loss=1.005633
+  step 200/295: loss=1.159165
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=1.100092 lr=0.000959
+  epoch 13: val_acc = 2860/3925 = 72.866242%  top5 = 3704/3925 = 94.369427%  [95% CI 71.45–74.23]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 7141245698545609830)
+  step 0/295: loss=0.727168
+  step 1/295: loss=0.931100
+  step 2/295: loss=1.013406
+  step 100/295: loss=0.961331
+  step 200/295: loss=1.075981
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=1.009736 lr=0.000951
+  epoch 14: val_acc = 2844/3925 = 72.458599%  top5 = 3738/3925 = 95.235669%  [95% CI 71.04–73.83]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 7633911174667945958)
+  step 0/295: loss=1.143673
+  step 1/295: loss=1.138386
+  step 2/295: loss=0.798531
+  step 100/295: loss=0.960280
+  step 200/295: loss=0.798992
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.952798 lr=0.000941
+  epoch 15: val_acc = 2937/3925 = 74.828025%  top5 = 3780/3925 = 96.305732%  [95% CI 73.45–76.16]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 17690258435814254727)
+  step 0/295: loss=1.062810
+  step 1/295: loss=1.011329
+  step 2/295: loss=0.755693
+  step 100/295: loss=0.919285
+  step 200/295: loss=0.750683
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.956851 lr=0.000931
+  epoch 16: val_acc = 2627/3925 = 66.929936%  top5 = 3612/3925 = 92.025478%  [95% CI 65.44–68.38]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 1690740389290928646)
+  step 0/295: loss=0.720935
+  step 1/295: loss=0.941913
+  step 2/295: loss=0.905850
+  step 100/295: loss=1.008891
+  step 200/295: loss=1.069551
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=1.015031 lr=0.000921
+  epoch 17: val_acc = 2499/3925 = 63.668790%  top5 = 3496/3925 = 89.070064%  [95% CI 62.15–65.16]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 8198385254498124717)
+  step 0/295: loss=1.030160
+  step 1/295: loss=0.766325
+  step 2/295: loss=1.010132
+  step 100/295: loss=0.987199
+  step 200/295: loss=1.121986
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=1.043680 lr=0.000909
+  epoch 18: val_acc = 3022/3925 = 76.993631%  top5 = 3814/3925 = 97.171975%  [95% CI 75.65–78.28]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 9706791064371756249)
+  step 0/295: loss=0.842919
+  step 1/295: loss=0.747096
+  step 2/295: loss=0.925452
+  step 100/295: loss=0.786500
+  step 200/295: loss=1.118179
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.892206 lr=0.000897
+  epoch 19: val_acc = 3111/3925 = 79.261146%  top5 = 3793/3925 = 96.636943%  [95% CI 77.96–80.50]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 15322086458727313622)
+  step 0/295: loss=0.930695
+  step 1/295: loss=1.120185
+  step 2/295: loss=1.029736
+  step 100/295: loss=1.017037
+  step 200/295: loss=0.842658
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.872656 lr=0.000885
+  epoch 20: val_acc = 2988/3925 = 76.127389%  top5 = 3658/3925 = 93.197452%  [95% CI 74.77–77.44]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 3290604242621053193)
+  step 0/295: loss=0.769143
+  step 1/295: loss=0.713614
+  step 2/295: loss=0.825464
+  step 100/295: loss=0.957779
+  step 200/295: loss=0.892997
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=1.030614 lr=0.000871
+  epoch 21: val_acc = 2277/3925 = 58.012739%  top5 = 3414/3925 = 86.980892%  [95% CI 56.46–59.55]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 10782419947513389246)
+  step 0/295: loss=0.973119
+  step 1/295: loss=1.291558
+  step 2/295: loss=0.876290
+  step 100/295: loss=1.172736
+  step 200/295: loss=0.887889
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.989059 lr=0.000857
+  epoch 22: val_acc = 745/3925 = 18.980892%  top5 = 2491/3925 = 63.464968%  [95% CI 17.78–20.24]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5932569988418142809)
+  step 0/295: loss=1.631487
+  step 1/295: loss=1.303352
+  step 2/295: loss=1.211081
+  step 100/295: loss=1.474438
+  step 200/295: loss=1.552022
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=1.283452 lr=0.000843
+  epoch 23: val_acc = 1972/3925 = 50.242038%  top5 = 3140/3925 = 80.000000%  [95% CI 48.68–51.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12420008067588071391)
+  step 0/295: loss=1.412969
+  step 1/295: loss=1.077621
+  step 2/295: loss=1.038266
+  step 100/295: loss=1.224956
+  step 200/295: loss=1.119087
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=1.003681 lr=0.000827
+  epoch 24: val_acc = 2243/3925 = 57.146497%  top5 = 3381/3925 = 86.140127%  [95% CI 55.59–58.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4768701494829963128)
+  step 0/295: loss=1.019865
+  step 1/295: loss=1.178965
+  step 2/295: loss=1.148214
+  step 100/295: loss=1.030028
+  step 200/295: loss=0.959305
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.961350 lr=0.000812
+  epoch 25: val_acc = 3068/3925 = 78.165605%  top5 = 3825/3925 = 97.452229%  [95% CI 76.85–79.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 11129054155759786699)
+  step 0/295: loss=0.823896
+  step 1/295: loss=0.777764
+  step 2/295: loss=0.768019
+  step 100/295: loss=0.695448
+  step 200/295: loss=0.917117
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.856415 lr=0.000796
+  epoch 26: val_acc = 3254/3925 = 82.904459%  top5 = 3834/3925 = 97.681529%  [95% CI 81.69–84.05]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 13839416651809311611)
+  step 0/295: loss=0.870516
+  step 1/295: loss=0.839306
+  step 2/295: loss=0.700504
+  step 100/295: loss=0.693232
+  step 200/295: loss=0.816845
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.858719 lr=0.000779
+  epoch 27: val_acc = 3115/3925 = 79.363057%  top5 = 3814/3925 = 97.171975%  [95% CI 78.07–80.60]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5235381765433285506)
+  step 0/295: loss=0.656951
+  step 1/295: loss=0.690030
+  step 2/295: loss=0.914198
+  step 100/295: loss=0.691503
+  step 200/295: loss=0.974159
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.774563 lr=0.000762
+  epoch 28: val_acc = 3177/3925 = 80.942675%  top5 = 3843/3925 = 97.910828%  [95% CI 79.68–82.14]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6980864271272175623)
+  step 0/295: loss=0.664947
+  step 1/295: loss=0.704399
+  step 2/295: loss=0.686845
+  step 100/295: loss=0.824486
+  step 200/295: loss=0.833583
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.857558 lr=0.000744
+  epoch 29: val_acc = 3061/3925 = 77.987261%  top5 = 3700/3925 = 94.267516%  [95% CI 76.66–79.26]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 11241425695019711741)
+  step 0/295: loss=0.796303
+  step 1/295: loss=0.848833
+  step 2/295: loss=0.837291
+  step 100/295: loss=0.783344
+  step 200/295: loss=1.059182
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.861932 lr=0.000726
+  epoch 30: val_acc = 3145/3925 = 80.127389%  top5 = 3833/3925 = 97.656051%  [95% CI 78.85–81.35]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4648079934592711417)
+  step 0/295: loss=0.828126
+  step 1/295: loss=0.943602
+  step 2/295: loss=0.937088
+  step 100/295: loss=1.090491
+  step 200/295: loss=0.904123
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.862985 lr=0.000708
+  epoch 31: val_acc = 2855/3925 = 72.738854%  top5 = 3791/3925 = 96.585987%  [95% CI 71.32–74.11]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6445882061580727295)
+  step 0/295: loss=0.825790
+  step 1/295: loss=0.770266
+  step 2/295: loss=1.008118
+  step 100/295: loss=0.644294
+  step 200/295: loss=0.715552
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.777562 lr=0.000689
+  epoch 32: val_acc = 3259/3925 = 83.031847%  top5 = 3829/3925 = 97.554140%  [95% CI 81.83–84.17]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 7963515789776505263)
+  step 0/295: loss=0.666246
+  step 1/295: loss=0.703939
+  step 2/295: loss=0.636108
+  step 100/295: loss=0.743893
+  step 200/295: loss=0.788670
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.738421 lr=0.000670
+  epoch 33: val_acc = 3112/3925 = 79.286624%  top5 = 3803/3925 = 96.891720%  [95% CI 77.99–80.53]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 14720089608973565978)
+  step 0/295: loss=0.710393
+  step 1/295: loss=0.989845
+  step 2/295: loss=0.622993
+  step 100/295: loss=0.643059
+  step 200/295: loss=0.669366
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.751191 lr=0.000651
+  epoch 34: val_acc = 3274/3925 = 83.414013%  top5 = 3838/3925 = 97.783439%  [95% CI 82.22–84.54]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 17552774245585993195)
+  step 0/295: loss=0.683674
+  step 1/295: loss=0.861199
+  step 2/295: loss=0.650941
+  step 100/295: loss=0.720540
+  step 200/295: loss=0.562868
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.738481 lr=0.000631
+  epoch 35: val_acc = 3179/3925 = 80.993631%  top5 = 3784/3925 = 96.407643%  [95% CI 79.74–82.19]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 16044844211435379627)
+  step 0/295: loss=0.636948
+  step 1/295: loss=0.697949
+  step 2/295: loss=0.673663
+  step 100/295: loss=0.768064
+  step 200/295: loss=0.748042
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.715830 lr=0.000611
+  epoch 36: val_acc = 3212/3925 = 81.834395%  top5 = 3809/3925 = 97.044586%  [95% CI 80.60–83.01]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 417414617570909720)
+  step 0/295: loss=0.666154
+  step 1/295: loss=0.649822
+  step 2/295: loss=0.654334
+  step 100/295: loss=0.671466
+  step 200/295: loss=0.627239
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.682611 lr=0.000591
+  epoch 37: val_acc = 3254/3925 = 82.904459%  top5 = 3810/3925 = 97.070064%  [95% CI 81.69–84.05]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 18259013799005877030)
+  step 0/295: loss=0.752003
+  step 1/295: loss=0.634301
+  step 2/295: loss=0.563504
+  step 100/295: loss=0.625390
+  step 200/295: loss=0.705408
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.678939 lr=0.000571
+  epoch 38: val_acc = 3179/3925 = 80.993631%  top5 = 3779/3925 = 96.280255%  [95% CI 79.74–82.19]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 789346862595324719)
+  step 0/295: loss=0.631179
+  step 1/295: loss=0.651895
+  step 2/295: loss=0.601624
+  step 100/295: loss=0.634166
+  step 200/295: loss=0.671915
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.692331 lr=0.000551
+  epoch 39: val_acc = 1858/3925 = 47.337580%  top5 = 2930/3925 = 74.649682%  [95% CI 45.78–48.90]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 1752508266089774837)
+  step 0/295: loss=0.821962
+  step 1/295: loss=0.738160
+  step 2/295: loss=0.741329
+  step 100/295: loss=0.711716
+  step 200/295: loss=0.691835
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.696792 lr=0.000531
+  epoch 40: val_acc = 3223/3925 = 82.114650%  top5 = 3809/3925 = 97.044586%  [95% CI 80.88–83.28]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4279692830260209329)
+  step 0/295: loss=0.707319
+  step 1/295: loss=0.533032
+  step 2/295: loss=0.706884
+  step 100/295: loss=0.616614
+  step 200/295: loss=0.654713
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.753941 lr=0.000510
+  epoch 41: val_acc = 2807/3925 = 71.515924%  top5 = 3631/3925 = 92.509554%  [95% CI 70.08–72.91]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 15363499455519861588)
+  step 0/295: loss=0.613663
+  step 1/295: loss=0.776432
+  step 2/295: loss=0.698707
+  step 100/295: loss=0.780257
+  step 200/295: loss=0.804373
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.767934 lr=0.000490
+  epoch 42: val_acc = 3214/3925 = 81.885350%  top5 = 3824/3925 = 97.426752%  [95% CI 80.65–83.06]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 504604976437907119)
+  step 0/295: loss=0.686493
+  step 1/295: loss=0.734385
+  step 2/295: loss=0.619712
+  step 100/295: loss=0.735564
+  step 200/295: loss=0.577690
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.678492 lr=0.000469
+  epoch 43: val_acc = 3296/3925 = 83.974522%  top5 = 3785/3925 = 96.433121%  [95% CI 82.79–85.09]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 3723632728655019955)
+  step 0/295: loss=0.647447
+  step 1/295: loss=0.579323
+  step 2/295: loss=0.671241
+  step 100/295: loss=0.591239
+  step 200/295: loss=0.556051
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.614516 lr=0.000449
+  epoch 44: val_acc = 3413/3925 = 86.955414%  top5 = 3864/3925 = 98.445860%  [95% CI 85.87–87.97]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 3848470174381539399)
+  step 0/295: loss=0.571605
+  step 1/295: loss=0.527897
+  step 2/295: loss=0.621565
+  step 100/295: loss=0.722543
+  step 200/295: loss=0.612136
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.610182 lr=0.000429
+  epoch 45: val_acc = 3219/3925 = 82.012739%  top5 = 3725/3925 = 94.904459%  [95% CI 80.78–83.18]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5552543773808966059)
+  step 0/295: loss=0.677670
+  step 1/295: loss=0.549814
+  step 2/295: loss=0.626901
+  step 100/295: loss=0.660996
+  step 200/295: loss=0.587428
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.619285 lr=0.000409
+  epoch 46: val_acc = 3046/3925 = 77.605096%  top5 = 3627/3925 = 92.407643%  [95% CI 76.27–78.88]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 14822051773295628)
+  step 0/295: loss=0.610369
+  step 1/295: loss=0.635260
+  step 2/295: loss=0.585754
+  step 100/295: loss=0.532177
+  step 200/295: loss=0.530765
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.592108 lr=0.000389
+  epoch 47: val_acc = 3219/3925 = 82.012739%  top5 = 3762/3925 = 95.847134%  [95% CI 80.78–83.18]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5177191578686988565)
+  step 0/295: loss=0.557873
+  step 1/295: loss=0.629583
+  step 2/295: loss=0.538073
+  step 100/295: loss=0.571331
+  step 200/295: loss=0.573920
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.586709 lr=0.000369
+  epoch 48: val_acc = 3255/3925 = 82.929936%  top5 = 3822/3925 = 97.375796%  [95% CI 81.72–84.07]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 3301842356840832320)
+  step 0/295: loss=0.583202
+  step 1/295: loss=0.560248
+  step 2/295: loss=0.597001
+  step 100/295: loss=0.611406
+  step 200/295: loss=0.524253
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.597892 lr=0.000349
+  epoch 49: val_acc = 3364/3925 = 85.707006%  top5 = 3829/3925 = 97.554140%  [95% CI 84.58–86.77]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6698572736857287401)
+  step 0/295: loss=0.526936
+  step 1/295: loss=0.530298
+  step 2/295: loss=0.557814
+  step 100/295: loss=0.520139
+  step 200/295: loss=0.576966
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.559931 lr=0.000330
+  epoch 50: val_acc = 3330/3925 = 84.840764%  top5 = 3794/3925 = 96.662420%  [95% CI 83.68–85.93]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 13897570041909462439)
+  step 0/295: loss=0.570675
+  step 1/295: loss=0.524769
+  step 2/295: loss=0.527517
+  step 100/295: loss=0.511256
+  step 200/295: loss=0.651917
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.556311 lr=0.000311
+  epoch 51: val_acc = 3322/3925 = 84.636943%  top5 = 3803/3925 = 96.891720%  [95% CI 83.48–85.73]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 9774853642015043009)
+  step 0/295: loss=0.533360
+  step 1/295: loss=0.584315
+  step 2/295: loss=0.534851
+  step 100/295: loss=0.548369
+  step 200/295: loss=0.526399
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.550392 lr=0.000292
+  epoch 52: val_acc = 3355/3925 = 85.477707%  top5 = 3795/3925 = 96.687898%  [95% CI 84.34–86.55]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 8291675457472299155)
+  step 0/295: loss=0.521243
+  step 1/295: loss=0.539111
+  step 2/295: loss=0.514003
+  step 100/295: loss=0.624791
+  step 200/295: loss=0.657454
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.554454 lr=0.000274
+  epoch 53: val_acc = 3328/3925 = 84.789809%  top5 = 3858/3925 = 98.292994%  [95% CI 83.63–85.88]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5083975240913881782)
+  step 0/295: loss=0.522639
+  step 1/295: loss=0.556559
+  step 2/295: loss=0.526414
+  step 100/295: loss=0.513101
+  step 200/295: loss=0.535681
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.537461 lr=0.000256
+  epoch 54: val_acc = 3357/3925 = 85.528662%  top5 = 3811/3925 = 97.095541%  [95% CI 84.39–86.59]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 10034391327105902921)
+  step 0/295: loss=0.538877
+  step 1/295: loss=0.537681
+  step 2/295: loss=0.532045
+  step 100/295: loss=0.510777
+  step 200/295: loss=0.549588
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.535955 lr=0.000238
+  epoch 55: val_acc = 3371/3925 = 85.885350%  top5 = 3833/3925 = 97.656051%  [95% CI 84.76–86.94]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12015696148864942092)
+  step 0/295: loss=0.535245
+  step 1/295: loss=0.528888
+  step 2/295: loss=0.515070
+  step 100/295: loss=0.512629
+  step 200/295: loss=0.596463
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.551430 lr=0.000221
+  epoch 56: val_acc = 3340/3925 = 85.095541%  top5 = 3812/3925 = 97.121019%  [95% CI 83.95–86.18]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 492797556978082720)
+  step 0/295: loss=0.507446
+  step 1/295: loss=0.516012
+  step 2/295: loss=0.512861
+  step 100/295: loss=0.570240
+  step 200/295: loss=0.530469
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.534023 lr=0.000205
+  epoch 57: val_acc = 3325/3925 = 84.713376%  top5 = 3773/3925 = 96.127389%  [95% CI 83.55–85.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 18438568089949537865)
+  step 0/295: loss=0.562984
+  step 1/295: loss=0.517208
+  step 2/295: loss=0.550968
+  step 100/295: loss=0.527923
+  step 200/295: loss=0.517932
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.534972 lr=0.000188
+  epoch 58: val_acc = 3332/3925 = 84.891720%  top5 = 3800/3925 = 96.815287%  [95% CI 83.74–85.98]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6693462774655222579)
+  step 0/295: loss=0.510497
+  step 1/295: loss=0.534518
+  step 2/295: loss=0.522089
+  step 100/295: loss=0.531987
+  step 200/295: loss=0.552474
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.537083 lr=0.000173
+  epoch 59: val_acc = 3328/3925 = 84.789809%  top5 = 3790/3925 = 96.560510%  [95% CI 83.63–85.88]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 3086826702040481897)
+  step 0/295: loss=0.519965
+  step 1/295: loss=0.545671
+  step 2/295: loss=0.527686
+  step 100/295: loss=0.514645
+  step 200/295: loss=0.534461
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.531076 lr=0.000157
+  epoch 60: val_acc = 3351/3925 = 85.375796%  top5 = 3783/3925 = 96.382166%  [95% CI 84.24–86.45]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4223257279974258996)
+  step 0/295: loss=0.526958
+  step 1/295: loss=0.512247
+  step 2/295: loss=0.512532
+  step 100/295: loss=0.511658
+  step 200/295: loss=0.535546
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.522954 lr=0.000143
+  epoch 61: val_acc = 3345/3925 = 85.222930%  top5 = 3766/3925 = 95.949045%  [95% CI 84.08–86.30]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 597631030979949558)
+  step 0/295: loss=0.522074
+  step 1/295: loss=0.517894
+  step 2/295: loss=0.512150
+  step 100/295: loss=0.521316
+  step 200/295: loss=0.549397
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.534936 lr=0.000129
+  epoch 62: val_acc = 3342/3925 = 85.146497%  top5 = 3785/3925 = 96.433121%  [95% CI 84.00–86.22]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 11455071745400669542)
+  step 0/295: loss=0.507056
+  step 1/295: loss=0.509971
+  step 2/295: loss=0.510230
+  step 100/295: loss=0.532041
+  step 200/295: loss=0.508212
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.523963 lr=0.000116
+  epoch 63: val_acc = 3387/3925 = 86.292994%  top5 = 3801/3925 = 96.840764%  [95% CI 85.18–87.33]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 1458810093215872146)
+  step 0/295: loss=0.528469
+  step 1/295: loss=0.509248
+  step 2/295: loss=0.513914
+  step 100/295: loss=0.518446
+  step 200/295: loss=0.507965
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.520578 lr=0.000103
+  epoch 64: val_acc = 3325/3925 = 84.713376%  top5 = 3779/3925 = 96.280255%  [95% CI 83.55–85.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 2407382651679812150)
+  step 0/295: loss=0.513840
+  step 1/295: loss=0.511203
+  step 2/295: loss=0.507347
+  step 100/295: loss=0.513865
+  step 200/295: loss=0.506285
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.516040 lr=0.000091
+  epoch 65: val_acc = 3349/3925 = 85.324841%  top5 = 3774/3925 = 96.152866%  [95% CI 84.18–86.40]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12703043134282527379)
+  step 0/295: loss=0.512736
+  step 1/295: loss=0.506954
+  step 2/295: loss=0.504208
+  step 100/295: loss=0.507267
+  step 200/295: loss=0.505520
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.517135 lr=0.000079
+  epoch 66: val_acc = 3356/3925 = 85.503185%  top5 = 3777/3925 = 96.229299%  [95% CI 84.37–86.57]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 16475985406199209964)
+  step 0/295: loss=0.516593
+  step 1/295: loss=0.504781
+  step 2/295: loss=0.520795
+  step 100/295: loss=0.509100
+  step 200/295: loss=0.573333
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.514282 lr=0.000069
+  epoch 67: val_acc = 3376/3925 = 86.012739%  top5 = 3802/3925 = 96.866242%  [95% CI 84.89–87.06]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 16283165288156634732)
+  step 0/295: loss=0.503029
+  step 1/295: loss=0.507318
+  step 2/295: loss=0.505043
+  step 100/295: loss=0.575397
+  step 200/295: loss=0.519794
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.513059 lr=0.000059
+  epoch 68: val_acc = 3336/3925 = 84.993631%  top5 = 3771/3925 = 96.076433%  [95% CI 83.84–86.08]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 6005799039236791109)
+  step 0/295: loss=0.512761
+  step 1/295: loss=0.518788
+  step 2/295: loss=0.507799
+  step 100/295: loss=0.504637
+  step 200/295: loss=0.504966
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.512981 lr=0.000050
+  epoch 69: val_acc = 3364/3925 = 85.707006%  top5 = 3788/3925 = 96.509554%  [95% CI 84.58–86.77]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 1132944811866256151)
+  step 0/295: loss=0.520038
+  step 1/295: loss=0.503583
+  step 2/295: loss=0.521918
+  step 100/295: loss=0.527777
+  step 200/295: loss=0.512455
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.510558 lr=0.000041
+  epoch 70: val_acc = 3378/3925 = 86.063694%  top5 = 3791/3925 = 96.585987%  [95% CI 84.94–87.11]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 2802418000841400091)
+  step 0/295: loss=0.503651
+  step 1/295: loss=0.504044
+  step 2/295: loss=0.508342
+  step 100/295: loss=0.517834
+  step 200/295: loss=0.506847
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.511261 lr=0.000033
+  epoch 71: val_acc = 3380/3925 = 86.114650%  top5 = 3792/3925 = 96.611465%  [95% CI 85.00–87.16]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 4617845058146445392)
+  step 0/295: loss=0.502697
+  step 1/295: loss=0.512241
+  step 2/295: loss=0.516496
+  step 100/295: loss=0.526653
+  step 200/295: loss=0.511665
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.510952 lr=0.000026
+  epoch 72: val_acc = 3364/3925 = 85.707006%  top5 = 3773/3925 = 96.127389%  [95% CI 84.58–86.77]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 9271665364097514522)
+  step 0/295: loss=0.508185
+  step 1/295: loss=0.529944
+  step 2/295: loss=0.504507
+  step 100/295: loss=0.562777
+  step 200/295: loss=0.504037
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.510239 lr=0.000020
+  epoch 73: val_acc = 3379/3925 = 86.089172%  top5 = 3789/3925 = 96.535032%  [95% CI 84.97–87.14]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 16566888175833213174)
+  step 0/295: loss=0.509521
+  step 1/295: loss=0.509812
+  step 2/295: loss=0.502696
+  step 100/295: loss=0.503531
+  step 200/295: loss=0.512495
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.508970 lr=0.000015
+  epoch 74: val_acc = 3389/3925 = 86.343949%  top5 = 3792/3925 = 96.611465%  [95% CI 85.23–87.38]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 8307688716094353432)
+  step 0/295: loss=0.507785
+  step 1/295: loss=0.504167
+  step 2/295: loss=0.509702
+  step 100/295: loss=0.503095
+  step 200/295: loss=0.507254
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.509028 lr=0.000010
+  epoch 75: val_acc = 3383/3925 = 86.191083%  top5 = 3780/3925 = 96.305732%  [95% CI 85.08–87.24]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 2937875598753508813)
+  step 0/295: loss=0.502849
+  step 1/295: loss=0.511825
+  step 2/295: loss=0.504439
+  step 100/295: loss=0.523647
+  step 200/295: loss=0.502936
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.509184 lr=0.000007
+  epoch 76: val_acc = 3383/3925 = 86.191083%  top5 = 3781/3925 = 96.331210%  [95% CI 85.08–87.24]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 12627022600589055497)
+  step 0/295: loss=0.502646
+  step 1/295: loss=0.510159
+  step 2/295: loss=0.506454
+  step 100/295: loss=0.509570
+  step 200/295: loss=0.507453
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.508783 lr=0.000004
+  epoch 77: val_acc = 3391/3925 = 86.394904%  top5 = 3783/3925 = 96.382166%  [95% CI 85.29–87.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 14457242022728453952)
+  step 0/295: loss=0.504502
+  step 1/295: loss=0.504449
+  step 2/295: loss=0.505520
+  step 100/295: loss=0.503319
+  step 200/295: loss=0.505387
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.507130 lr=0.000002
+  epoch 78: val_acc = 3390/3925 = 86.369427%  top5 = 3785/3925 = 96.433121%  [95% CI 85.26–87.41]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 5438367405727017746)
+  step 0/295: loss=0.505050
+  step 1/295: loss=0.517725
+  step 2/295: loss=0.503087
+  step 100/295: loss=0.503245
+  step 200/295: loss=0.507889
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.507914 lr=0.000000
+  epoch 79: val_acc = 3387/3925 = 86.292994%  top5 = 3786/3925 = 96.458599%  [95% CI 85.18–87.33]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 16195084597681765319)
+  step 0/295: loss=0.506812
+  step 1/295: loss=0.503762
+  step 2/295: loss=0.520009
+  step 100/295: loss=0.505606
+  step 200/295: loss=0.514813
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.508774 lr=0.000000
+  epoch 80: val_acc = 3391/3925 = 86.394904%  top5 = 3785/3925 = 96.433121%  [95% CI 85.29–87.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_ares-xtx80.bin.bn (67904 floats x 2, hash 14549627160643752174)
+done (trained MobileNetV4-Conv-M adam + cosine/warmup via packed threading).

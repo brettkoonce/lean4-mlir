@@ -100,6 +100,8 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
     [ -x .venv/bin/python3 ] && PLATFORM_PY=.venv/bin/python3
     [ -z "$PLATFORM_GPU" ] && command -v rocm-smi > /dev/null 2>&1 && \
       PLATFORM_GPU=$(rocm-smi --showproductname 2>/dev/null | sed -n 's/.*Card series:[[:space:]]*//p' | head -1 | _platform_slug) || true
+    [ -z "$PLATFORM_GPU" ] && command -v amd-smi > /dev/null 2>&1 && \
+      PLATFORM_GPU=$(amd-smi static --asic 2>/dev/null | sed -n 's/.*MARKET_NAME:[[:space:]]*//p' | head -1 | _platform_slug) || true
     ;;
   xpu:*)
     # An Intel Arc: Intel's OpenXLA PJRT plugin (jax_oneapi_pjrt, platform `oneapi`) in .venv-xpu,

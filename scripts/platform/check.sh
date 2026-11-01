@@ -45,7 +45,8 @@ BACKEND=$PLATFORM_BACKEND
 case "$BACKEND" in
   cuda) if [ "$PLATFORM_KIND" = tegra ]; then SMI=(cat /etc/nv_tegra_release)   # the query form is unsupported there
         else SMI=(nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader); fi ;;
-  rocm) SMI=(rocm-smi --showproductname --showdriverversion) ;;
+  rocm) if command -v rocm-smi >/dev/null; then SMI=(rocm-smi --showproductname --showdriverversion)
+        else SMI=(amd-smi static --asic --driver); fi ;;   # 10.1's wheels ship amd-smi only
   xpu)  SMI=(xpu-smi discovery) ;;
   neuron) SMI=(neuron-ls) ;;
 esac

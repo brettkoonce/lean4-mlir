@@ -1,0 +1,12 @@
+[08:57:08] sweep start: SUITE=bbn, 5 jobs, GPUs 0, seeds [1 2 3 4 5] -> runs/2026-11-01-ares-xtx-bbn-seeds
+[08:57:08] gpu0  cifar8wb_bbn_s1  start  (cifar8wb-bbn-ablation)
+[09:51:27] gpu0  cifar8wb_bbn_s1  OK   54m19s  75.750000% / 76.770000% / 74.990000% / 76.000000% / 77.870000% / 73.290000%
+[09:51:27] gpu0  cifar8wb_bbn_s2  start  (cifar8wb-bbn-ablation)
+[10:45:47] gpu0  cifar8wb_bbn_s2  OK   54m20s  75.860000% / 76.990000% / 76.960000% / 73.110000% / 76.780000% / 75.850000%
+[10:45:47] gpu0  cifar8wb_bbn_s3  start  (cifar8wb-bbn-ablation)
+[11:40:08] gpu0  cifar8wb_bbn_s3  OK   54m21s  77.870000% / 78.100000% / 76.340000% / 76.400000% / 76.710000% / 74.230000%
+[11:40:08] gpu0  cifar8wb_bbn_s4  start  (cifar8wb-bbn-ablation)
+[12:34:26] gpu0  cifar8wb_bbn_s4  OK   54m18s  76.940000% / 76.760000% / 75.650000% / 76.200000% / 77.750000% / 73.490000%
+[12:34:26] gpu0  cifar8wb_bbn_s5  start  (cifar8wb-bbn-ablation)
+[13:28:45] gpu0  cifar8wb_bbn_s5  OK   54m19s  77.430000% / 77.700000% / 75.720000% / 76.250000% / 77.850000% / 74.980000%
+[13:28:45] sweep complete: 5/5 jobs done

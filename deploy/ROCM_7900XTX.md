@@ -1,9 +1,12 @@
-# AMD Radeon RX 7900 XTX — the verified MNIST, CIFAR and Imagenette tiers on ROCm 7.2.4
+# AMD Radeon RX 7900 XTX — the verified MNIST, CIFAR and Imagenette tiers on ROCm 7.2.4 and 10.1
 
-**Status: the software works; minerva's power does not, yet.** On minerva's 7900 XTX
+**Status: done — the whole ladder, all seven Imagenette nets, on ares (§ Measured on ares).**
+The card that kept resetting minerva moved to ares on 2026-11-01 and ran the ladder straight
+through on ROCm 10.1 — 13 hours of load, ResNet-50 at a 295 W mean, no reset, no `amdgpu`
+error — so minerva's resets were minerva's, not the card's (§2). Before that, on minerva's 7900 XTX
 (2026-10-25 → 31), ROCm 7.2.4: the suite (21 pass, 3 two-device skips), MNIST, CIFAR's six arms, the batch-BN gradient
 check, five seeds and width grid, and five of the seven Imagenette nets at 80 epochs, every one
-inside or at the edge of CUDA's range (§ Measured). **ResNet-50 and MobileNetV4 are not done:**
+inside or at the edge of CUDA's range (§ Measured). **There, ResNet-50 and MobileNetV4 never finished:**
 from the evening of 10-25 the box resets itself under full load — seven times, on kernel
 6.8 and 7.0, at the stock 303 W and capped at 275 W, with no error in any log (§2). One MIOpen trap besides: from an **empty MIOpen database** ViT-Tiny does
 not train on any current ROCm, and the fix is one environment variable (§3).
@@ -85,6 +88,53 @@ the recabling — `runs/2026-10-{26,30,31}-xtx-convnext-verified-adam/`). ViT is
 CUDA's range, by 7 images of 3,925; MobileNetV2, EfficientNet and ResNet-34 sit at or above its top.
 
 Junction temperature reached 96–100 °C on every Imagenette net, memory 84–90 °C.
+
+## Measured on ares (ROCm 10.1)
+
+ares (Threadripper PRO 5955WX, 1200 W supply, kernel 6.8.0-142, Ubuntu 24.04), the same 7900 XTX
+moved from minerva, in the board's slot at Gen4 x16, stock 303 W cap, beside four idle 4060 Tis.
+ROCm 10.1 from the wheels, no root and no `/opt/rocm`: `deploy/rocm10_setup.sh` and
+`. deploy/rocm10_env.sh` (`jax-rocm10-pjrt` 0.11.1, HIP runtime 7.16.26385, MIOpen 3.6.1 from an
+**empty** database, the four switches on). The ladder ran unattended and straight through, no
+blocks or breaks, 2026-11-01 00:52–13:46 UTC: MobileNetV4 and ResNet-50 by hand, the rest by
+[`runs/2026-11-01-ares-xtx-ladder/sweep.sh`](../runs/2026-11-01-ares-xtx-ladder/sweep.sh), whose
+1 Hz sensor log (`sensors.csv`, `sync`ed every line), queue logs and suite log are beside it.
+
+| | ares, 10.1 | minerva, 7.2.4 | CUDA |
+|---|---|---|---|
+| suite, tiers 0–2 | 21 pass, 3 skips ([`runs/platform/2026-11-01-ares-rocm-2/`](../runs/platform/2026-11-01-ares-rocm-2/)) | 21 + 3 | — |
+| MNIST linear / MLP / CNN, 12 ep | **92.10 / 97.80 / 98.60 %** | 92.10 / 97.82 / 98.76 | 92.10 / 97.77 / 98.78 |
+| CIFAR-10 `lake run cifar`, 6 × 40 ep | no BN 71.12 / 73.42 / 74.15 %, BN 74.76 / **77.13** / 74.55 % | best 76.54 | 76.3 best |
+| batch-BN gradient check | passes both tiers | passes | passes |
+| batch-BN, 5 seeds × 6 arms | per-arm means 74.37–77.39 %, each range overlapping CUDA's | 75.65–77.83 | 75.29–78.01 |
+| batch-BN head-width grid, 10 widths × 25 ep | 76.23–78.52 %, each width within 0.91 of CUDA's | 74.97–78.16 | 75.98–77.85 |
+
+Run directories: `runs/2026-11-01-mnist-*`, `runs/2026-11-01-cifar8w*-ablation/`,
+[`runs/2026-11-01-ares-xtx-bbn-seeds/`](../runs/2026-11-01-ares-xtx-bbn-seeds/),
+[`runs/2026-11-01-ares-xtx-cifar8wb-bbn-grid-xla/`](../runs/2026-11-01-ares-xtx-cifar8wb-bbn-grid-xla/).
+Seeds, per arm, mean (range): SGD 76.77 (75.75–77.87), Nesterov 77.26 (76.76–78.10), AdamW 75.93
+(74.99–76.96), bf16 SGD 75.59 (73.11–76.40), bf16 Nesterov 77.39 (76.71–77.87), bf16 AdamW 74.37
+(73.29–75.85). bf16 SGD is again the loose arm; its range meets CUDA's (76.29–78.08) by 0.11.
+
+Imagenette, 80 epochs, one run each, `LEAN_MLIR_CKPT_TAG=ares-xtx80`, each in one piece:
+
+| net | top-1 (95 % CI) | minerva | B50 | CUDA, 5 seeds | wall | mean / peak W | junction |
+|---|---|---|---|---|---|---|---|
+| ResNet-34 | **90.47 %** (89.51–91.35) | 90.50 | 89.68 | 89.68–90.37 | 39 min | 265 / 280 | 94 °C |
+| ResNet-50 | **90.34 %** (89.38–91.23) | — reset | 89.61 | 89.58–89.96 | 68 min | 295 / 313 | 92 °C |
+| MobileNetV2 | **89.30 %** (88.29–90.23) | 88.92 | 88.71 | 88.74–89.32 | 50 min | 260 / 278 | 88 °C |
+| MobileNetV4-Conv-M | **86.39 %** (85.29–87.43) | — | 86.06 | 85.15–86.90 | 53 min | 251 / 275 | 90 °C |
+| EfficientNet-B0 | **89.45 %** (88.45–90.37) | 90.22 | 90.55 | 89.45–90.50 | 55 min | 259 / 275 | 89 °C |
+| ConvNeXt-T | **82.60 %** (81.38–83.75) | 81.96 | 82.65 | 82.27 (one run) | 102 min | 286 / 305 | 94 °C |
+| ViT-Tiny | **69.35 %** (67.89–70.77) | 67.64 | 68.46 | 67.82–69.17 | 37 min | 222 / 243 | 89 °C |
+
+Every net is inside CUDA's five-seed range or above it. ResNet-50 sat at the 303 W cap for 40 % of
+its seconds — the heaviest load of the seven, and the one that reset minerva a minute in.
+
+A fresh clone needs three things the runbook above assumes: `gcc -fPIC -O2 -shared ffi/pjrt_ffi.c
+-ldl -o ffi/libpjrt_ffi.so` (the trainers' shim; the suite builds its own), `numpy` in `.venv`
+(the suite's tier 2; `jax/requirements-rocm-lock.txt` pins 2.4.4), and — on a wheels-only box —
+`amd-smi` standing in for `rocm-smi`, which `check.sh` and `env.sh` now accept.
 
 ## What to expect
 
@@ -173,8 +223,15 @@ What it is not: the kernel (6.8 and 7.0 both), the riser (out since 10-25), the 
 (the card ran hotter on 10-25 without a reset), the supply's capacity (1000 W, this card alone)
 and the power cap (275 W reset too). What fits: the 7900 XTX's millisecond load spikes — up to
 ~1.5–2× its rated power, invisible to a 1 Hz log (one reading of 431 W on 10-25) — tripping the
-supply's protection or the board's power delivery. Untested: the card in another box, the B50's
-BIOS 5601 rolled back to 3601, an ATX 3.x supply.
+supply's protection or the board's power delivery. Untested: the B50's BIOS 5601 rolled back to
+3601, an ATX 3.x supply.
+
+**The card in another box (2026-11-01): it is the box.** On ares — 1200 W supply, Gen4 x16 —
+the same card ran the whole ladder in one 13-hour stretch (00:52–13:46 UTC) (§ Measured on ares), ResNet-50 at a
+295 W mean and 313 W peak, ConvNeXt at 286 W, junction up to 101 °C, with no reset and nothing in
+the kernel journal. ares's firmware keeps AER for itself (`_OSC: platform does not support [AER
+LTR DPC]`), so a corrected link error could pass unlogged; but the box stayed up, which minerva
+could not do for two minutes of ResNet-50.
 
 **Load-test every card after a BIOS, kernel or riser change.** The B50's changes were checked on
 the B50 and nothing else; the cost was a day.

@@ -1,0 +1,24 @@
+ROCm 10.1: /home/skoonce/lean/lean4-mlir/.venv-rocm10/lib/python3.12/site-packages/jax_plugins/xla_rocm10/xla_rocm_plugin.so (MIOpen switches on, db /home/skoonce/.cache/miopen-rocm10.1)
+=== 2026-11-01 02:53:40 START build
+=== 2026-11-01 03:05:02 END build rc=0
+=== 2026-11-01 03:05:02 START mnist
+=== 2026-11-01 03:05:54 END mnist rc=0
+=== 2026-11-01 03:05:54 START gradcheck
+=== 2026-11-01 03:05:59 END gradcheck rc=0
+=== 2026-11-01 03:05:59 START cifar
+=== 2026-11-01 04:12:55 END cifar rc=0
+=== 2026-11-01 04:12:55 START resnet34
+=== 2026-11-01 04:52:06 END resnet34 rc=0
+=== 2026-11-01 04:52:06 START mobilenetv2
+=== 2026-11-01 05:42:24 END mobilenetv2 rc=0
+=== 2026-11-01 05:42:24 START vit
+=== 2026-11-01 06:19:20 END vit rc=0
+=== 2026-11-01 06:19:20 START efficientnet
+=== 2026-11-01 07:14:43 END efficientnet rc=0
+=== 2026-11-01 07:14:43 START convnext
+=== 2026-11-01 08:57:07 END convnext rc=0
+=== 2026-11-01 08:57:07 START seeds
+=== 2026-11-01 13:28:45 END seeds rc=0
+=== 2026-11-01 13:28:45 START grid
+=== 2026-11-01 13:46:45 END grid rc=0
+=== 2026-11-01 13:46:45 ALLDONE

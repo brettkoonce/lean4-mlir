@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-01T00:51:55Z",
+  "run": "2026-11-01-ares-rocm-2",
+  "core": {
+    "repo_sha": "824155aa5cd83cf9107efb0159e0178efb934f66",
+    "repo_dirty": true,
+    "lean_toolchain": "leanprover/lean4:v4.35.0",
+    "shim_source_sha": "d8d048279e12fa99",
+    "shim_binary_sha": "e1d75ea737b20f0f",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "2ad630804963b99d",
+    "suite_sha": "e185b7cd1b818a32",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "rocm",
+    "host": "ares",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "AMD Radeon RX 7900 XTX",
+        "memory": null,
+        "driver": null
+      }
+    ],
+    "gpu_count_visible": 1,
+    "visible_devices": "0",
+    "driver": null,
+    "runtime": {
+      "driver": "7.16.26385",
+      "runtime": "7.16.26385",
+      "toolkit": "7.16.26385",
+      "dnn": "1.3.0"
+    },
+    "plugin_path": "/home/skoonce/lean/lean4-mlir/.venv-rocm10/lib/python3.12/site-packages/jax_plugins/xla_rocm10/xla_rocm_plugin.so",
+    "plugin_package": "jax_rocm10_pjrt==0.11.1+rocm10.1.0",
+    "plugin_sha": "e5a9b884061c39c5",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "rocm",
+    "platform_version": "rocm 71626385",
+    "kernel": "6.8.0-142-generic",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}
