@@ -121,6 +121,11 @@ On the suite, 10.1 is 17 of 21 from an empty database (the three ViT rows and Re
 ViT 71 ms with the switches; the switches cost 7–8 % where they change anything. Nothing here
 argues for moving off 7.2.4.
 
+On a box without root, the wheels are the way in: `bash deploy/rocm10_setup.sh` makes
+`.venv-rocm10` (Python 3.12, no apt, no `/opt/rocm`), and `. deploy/rocm10_env.sh` sets
+`PJRT_PLUGIN`, the backend, the four switches and a database of 10.1's own for every run in that
+shell. The only root step is your user in the `render` group, for `/dev/kfd` and the render node.
+
 ## §2 The bus drops, then the resets
 
 The 7900 XTX ran on minerva from 2026-08-24 to 10-10 on BIOS 3601 and kernel 6.8 with no bus
