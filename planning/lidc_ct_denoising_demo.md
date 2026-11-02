@@ -1,22 +1,37 @@
-# lidc_ct_denoising_demo.md — low-dose CT denoising on LIDC-IDRI (Image generation)
+# lidc_ct_denoising_demo.md — full-dose CT synthesised from low dose, LIDC-IDRI + Mayo (Image generation)
 
-Scoped 2026-10-07 on ares from `planning/demo_slate.md` §3. Status log at the bottom (§9).
-Branch `lidc-denoising` (rebased onto `origin/main` 026f9974 on 2026-10-10), checked out in the
+Scoped 2026-10-07 on ares from `planning/demo_slate.md` §3; re-framed 2026-11-02 (§0, §10).
+Status log at §9. Branch `lidc-denoising` (rebased onto `origin/main` 19c52c9a on 2026-11-02;
+first pushed to `origin/lidc-denoising` the same day, before the rebase), checked out in the
 worktree `../lean4-jax-mlir-lidc` (its `.lake/packages` and `data` are symlinks into the main
 checkout): these scripts, the loader and this doc live there until the demo lands, so the shared
 checkout stays clear for the ImageNet work.
 
 ## 0. The one-paragraph version
 
-The chapter's image-generation slot has entries and no demo. This one asks a question a reader
-can be wrong about: **does a denoiser keep the nodules?** An MSE UNet wins PSNR by regressing
-to the mean and erases small, low-contrast nodules; a diffusion denoiser keeps texture and can
-invent it. LIDC-IDRI gives the instrument the field's own paired set lacks — four radiologists'
-outlines of every nodule, with size and characteristics — so the finding is contrast-to-noise by
-nodule size beside PSNR/SSIM, not "looks sharper". The low-dose arm is simulated in the
-projection domain, which is how the field's reference pairs (Mayo, TCIA) are made too, and the
-simulator is checked against them (§3). Every net is one already in the kit; the only new code
-is the data path (done, §2–§5) and a loader.
+The chapter's image-generation slot has entries and no demo. This one is a real-world use of
+image synthesis, not a new method: **given a low-dose chest CT, generate the full-dose scan it
+stands in for** — less radiation for the patient, the image the radiologist is used to reading.
+A conditional diffusion model is the generator. The baselines are what a reader would try first:
+classical filters (Gaussian, TV, BM3D), an MSE-trained UNet and Noise2Noise. Their result (§9,
+2026-10-11) sets up the generator's case: the nets keep ≥ 97% of nodule contrast where the
+filters lose up to 31%, but the MSE net's output is the *average* of the full-dose images
+consistent with its input, and an average is softer than any scan. A generator draws *one*
+plausible full-dose image, so it should give the grain back — and the check every synthesis use
+needs is whether it invents or drops findings doing so.
+
+So the demo quantifies four things (§10): fidelity to the full dose (PSNR / SSIM / RMSE, which a
+sampler must lose a little of — the full dose carries ≈ 36 HU of its own noise); **texture**
+(the noise power spectrum against the full dose's — "too soft" as a number); **findings** (the
+radiologists' nodules kept, blobs invented in unmarked lung, the spread across samples); and
+**generalisation** to a held-out dataset the nets never see. LIDC-IDRI (CC BY 3.0) supplies the
+training set and the instrument — four radiologists' outlines of every nodule. The low-dose arm is
+simulated in the projection domain (§3), as the field's reference pairs are; those pairs, Mayo's
+LDCT-and-Projection-data (CC BY 4.0, chest and abdomen open since July 2026), are the held-out
+test: other patients, another institution, Siemens scanners, sharper kernels, and the vendor's
+own noise insertion instead of ours. Every net is one already in the kit (the BraTS UNet's
+layers, the MNIST DDPM's diffusion step); the new code is the data path (done, §2–§5), a loader
+(done) and a sampler (§10).
 
 ## 1. The question and the arms
 
@@ -27,13 +42,14 @@ is the data path (done, §2–§5) and a loader.
 | classical filter | BM3D or TV, CPU, no training | the pre-deep-learning bracket |
 | MSE UNet | `unetBrats`'s layers at 1 in / 1 out channel, patch-trained, residual (predicts the noise) | the regression-to-the-mean arm |
 | Noise2Noise | the same net trained low₁ → low₂ (two independent realisations are in every record) | the no-clean-target arm |
-| conditional diffusion | the DDPM UNet's layers with the low-dose image as a conditioning channel (SR3 / Palette form), ε-prediction | the texture-keeping, texture-inventing arm |
+| conditional diffusion | `unetCtDenoise`'s layers with the low-dose image and t as input channels, diffusing the residual (§10) | **the generator** — the demo's subject |
 
-Scored on val volumes: PSNR / SSIM (soft-tissue and lung windows), and **nodule
-contrast-to-noise** — mean HU inside the reader-consensus outline minus the surrounding lung,
-over the surrounding std — by nodule size bin (<3, 3–6, 6–10, >10 mm), with the four readers'
-agreement count as a weight. The expected finding is the chapter's theme: MSE wins PSNR and
-loses the <6 mm bins; diffusion keeps them and hallucinates some.
+Scored on the LIDC val volumes and on the Mayo chest pairs (§10): PSNR / SSIM / body RMSE;
+the noise power spectrum and local grain over flat soft tissue against the full dose's; nodule
+**contrast kept** — (inside the reader-consensus outline − the surrounding lung ring) as a
+fraction of the full dose's, by size and texture (LIDC only: Mayo has no reader outlines); blobs
+in unmarked lung against the full dose's count; the spread across samples. (The 2026-10-07 plan
+expected MSE to lose the < 6 mm nodules; it keeps them, §9 — the filters lose them.)
 
 ## 2. Data on disk (`data/lidc/`, gitignored)
 
@@ -97,7 +113,9 @@ C002 (Siemens, B50f, 273 mA, 1.5 mm; 20 mid-volume slices) by the estimator abov
 inserted 196.7, total 208.2; **inserted/own 2.99 against the 3.00 its dose predicts, total/own
 3.15 against √10 = 3.16.** The "added variance = (1/dose − 1) × own" rule is the field's
 construction to 1%, by this estimator. `scripts/probes/lidc_mayo_noise_check.py` reproduces it
-(300 MB, `data/lidc/mayo/`).
+(300 MB, `data/lidc/mayo/`). The same collection is the held-out test set (§10.4): 50 chest
+patients have both image arms (all Siemens; the 49 GE chest patients have full-dose images and
+projections only), 17,313 slice pairs, 18.2 GB as DICOM, CC BY 4.0, no login.
 
 Simplifications, named: parallel-beam geometry (not fan/helical); no bowtie filter, so the
 periphery is noisier than a scanner's; one μ_water, no beam hardening; one apodisation where each
@@ -152,8 +170,11 @@ Next: a `DatasetKind.lidc` beside
 | 1 | loader + `unetCtDenoise` + `lidc-denoise-train` (**done 2026-10-10**, §9; `DatasetKind.lidc` not needed: the demo trainer drives the DDPM ε-loss step directly) + a render of `unetCtDenoise`; a 1-patient sanity fit | the net overfits one volume; low→full PSNR rises above the floor |
 | 2 | MSE UNet, patch-trained on the 240 train patients (**run 2026-10-10**, §9); scoring script (PSNR/SSIM + nodule CNR by size) | beats the floor and BM3D on PSNR; the nodule table exists |
 | 3 | Noise2Noise with the same net (**done 2026-10-10**: 44.55 vs 44.60 dB, §9) | within ~0.3 dB of phase 2 (the classic result) |
-| 4 | conditional diffusion (the DDPM UNet, SR3 form), sampling strip | nodule CNR in the <6 mm bins beats MSE; the hallucination rate is measured (nodule-sized objects where no reader drew one) |
-| 5 | the section: one figure (a nodule, five arms), one table (PSNR/SSIM + CNR by size) | the user's one-figure-one-table rule |
+| 4 | the generator: conditional residual diffusion + DDIM sampler, and the texture / invention scorers (§10.1–§10.3) | smoke fit: samples on the fitted volume score near the MSE net's RMSE, NPS nearer the full dose's than MSE's |
+| 4a | the held-out set: Mayo chest pairs converted to the record format; NPS of our simulated noise vs. the vendor's (§10.4) | the two noise spectra agree in shape (peak frequency within ~10%) at matched σ |
+| 4b | the 10%-dose LIDC build (Mayo chest is 10% of routine dose), MSE + diffusion retrained at 10% (§10.4) | the build's achieved/target σ as phase 0's |
+| 5 | runs and scoring: diffusion at 25% and 10%, every arm on Mayo with no retraining (§10.5) | texture ratio nearer 1 than MSE's; nodule contrast kept ≥ 95%; invented blobs near the full dose's count; the ranking reported as found on Mayo |
+| 6 | the section: one figure, one table (§10.6); a render of `unetCtDenoise`; land on main | the user's one-figure-one-table rule; the book's float gates |
 
 ## 7. Open decisions
 
@@ -161,8 +182,12 @@ Next: a `DatasetKind.lidc` beside
 - Classical arm: ~~BM3D vs. TV~~ both run, with a Gaussian beside them, and BM3D with the
   measured noise spectrum (2026-10-11, §9). Its knob was chosen at its grid's edge (3× the
   spectrum); a wider grid would smooth more and keep less nodule contrast.
-- Diffusion sampling budget (DDIM steps) and whether to report the posterior std as an
-  uncertainty map beside the sample.
+- ~~Diffusion form, η, step sweep~~: decided 2026-11-02 (§10.1) — residual, η = 1, 50 steps, no
+  sweep. The per-pixel spread across samples is reported (§10.3), as an invention check rather
+  than as an uncertainty product.
+- ~~Held-out set~~: Mayo chest, all 50 paired patients, at its own 10% dose with nets trained on
+  a 10% LIDC build (§10.4). Noise2Noise is not retrained at 10% (its 25% result stands; the
+  10% build keeps one realisation to fit the disk, §8).
 - ~~Whether the <3 mm nodules are scored on their 3 mm stand-in disks or dropped~~: scored, as a
   row of their own (242 of the 395 val nodules; 2026-10-11, §9).
 
@@ -172,6 +197,11 @@ Before this demo `/` had 92 GB free of 1.9 TB. The DICOM subset is 39 GB, the pa
 Mayo's check 0.3 GB. The 2026-10-07 prune survey (two copies of the ImageNet tarballs at 145 GB
 each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-orin-build` caches
 59 GB; `.lake/build/distogram_*` 49 GB; …) is in the session's memory notes, not executed.
+
+2026-11-02: 48 GB free. The §10 additions: Mayo's 50 chest pairs are fetched one patient at a
+time, converted to records (every 4th slice, ≈ 4,300 pairs in the N = 1 format, (3 + 2)·S² ≈ 1.3 MB,
+≈ 5.6 GB), and their DICOM deleted; the 10%-dose LIDC build with one realisation is ≈ 19 GB
+beside the 25% build's 27 GB. Together ≈ 25 GB, leaving ≈ 23 GB.
 
 ## 9. Status log
 
@@ -293,3 +323,102 @@ each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-or
   (b) a < 3 mm nodule (the row's most typical by contrast kept: TV 79%, BM3D 76%, nets 95%),
   a 10 mm ground-glass one, the split's largest (32 mm), in full / quarter / TV / BM3D / MSE /
   N2N; (c) HU profiles through the first two. Every nodule is chosen by a rule in the script.
+
+- 2026-11-02: re-framed as a synthesis use case (§0, §10): the diffusion model is the generator,
+  the other arms its baselines; measured by fidelity, texture (NPS), findings (kept / invented /
+  unstable) and a held-out set, Mayo chest (50 paired patients, open under CC BY 4.0 since July
+  2026). Decided: residual diffusion, η = 1, 50 steps, no sweep; a 10%-dose LIDC build to match
+  Mayo. Branch rebased onto `origin/main` 19c52c9a (clean; PJRT shim rebuilt, the LIDC targets
+  rebuilt, `lidc_loader_check.py` and `test-dataset-record-sizes` pass).
+
+## 10. The generator, the measurements and the held-out set (2026-10-11, re-framed 2026-11-02)
+
+**Why the generator is the subject.** The 2026-10-07 plan (§0 then) expected the MSE UNet to
+erase small, faint nodules and diffusion to keep them. The nodule table (§9, 2026-10-11) says
+the regression nets keep ≥ 97% of nodule contrast in every bin; the filters are what lose small
+nodules. What the nets lose is texture: their output is the posterior **mean** of the full dose
+given the low dose, softer than any scan (the user's read of the samples, 2026-11-02: "too
+soft"). The full dose is not clean either — its own noise is ≈ 36 HU (median `sigma_full_hu`
+over the val slices) beside the ≈ 62 HU the simulator adds. A diffusion model **samples** from
+that posterior, so it should put the grain back, and possibly structure that is not there. The
+demo is the real-world synthesis task — low dose in, a full-dose image out — with the checks
+such a use needs. A sample must cost RMSE (its error to the target is ≈ √2 × the posterior
+spread above the mean's); that is the expected result, so RMSE is reported, not ranked on.
+
+### 10.1 The model (decided 2026-11-02; no new codegen)
+
+- Diffuse the residual, x₀ = (full − low) / 100 HU (std ≈ 0.7), conditioned on the low dose: the
+  net sees [x_t, low / 1000, 8 sin/cos channels of t] (`Ddpm.prependSinCosT`, nFreq 4, as
+  `MainDiffusion2d`) and predicts ε. The sample is low + 100·x̂₀, written in the dump format, so
+  every scorer reads it unchanged. The residual form makes the MSE arm exactly this sampler's
+  mean: the comparison is sample against mean on one variable. (The SR3 / Palette image form,
+  x₀ = full / 1000, is the alternative not taken.)
+- Net: `unetCtDenoise`'s layers with a 10-channel stem (≈ 7.85M params), cosine ᾱ, T = 1000,
+  `Ddpm.stepInputs` + `trainStepAdamF32Ddpm` — the MNIST DDPM's path at 256² patches, 60k steps
+  (2× the regression arms' 30k), Adam 5e-4 cosine, as theirs.
+- Sampler: DDIM with η = 1 (ancestral — every step adds fresh noise, so the grain is the model's,
+  not suppressed), 50 steps, at 512² (`Ddpm.ddimCoefs` / `ddimStep`; η and the step count are
+  flags, no sweep).
+- New code: one C helper to concatenate channel blocks ([B,1,H,W] ⊕ [B,1,H,W]); `--arm=diff`
+  in `lidc-denoise-train`; a sampler exe (`lidc-denoise-sample`) writing one dump per sample
+  seed. Gate on the smoke volume first (the phase-1 recipe).
+
+### 10.2 Texture — "too soft" as a number
+
+- The 2-D noise power spectrum (NPS, the CT physics measure of noise texture), radially
+  averaged, over flat soft-tissue ROIs (64², local std below a threshold in the full dose, no
+  reader mark), of output − (the full dose's local mean); against the full dose's own NPS on the
+  same ROIs. Reported: the integral ratio (grain magnitude) and the mean frequency ratio (grain
+  coarseness — a soft output sits at low frequency). 1.0 / 1.0 = the scan's grain.
+- The simpler local-std ratio (7 × 7 std over the same pixels, output / full) beside it.
+
+### 10.3 Findings — kept, invented, unstable
+
+- Kept: the contrast-kept table (§9), per sample, with its spread across samples.
+- Invented: blobs (LoG at 1–3 mm scales, above a contrast threshold) in lung no reader marked,
+  per slice, against the full dose's own count on the same pixels; reported as excess per slice.
+- Unstable: the per-pixel std across 4 samples, inside nodules vs. in plain lung — where the
+  generator is unsure is where invention would show.
+
+### 10.4 The held-out set — Mayo chest
+
+- **Data.** TCIA LDCT-and-Projection-data (CC BY 4.0; §3): 50 chest patients with both image
+  arms, Siemens, 17,313 slice pairs, 18.2 GB as DICOM. A converter
+  (`scripts/datasets/preprocess_mayo.py`) fetches one patient at a time, writes every 4th slice
+  in the §5 record format with N = 1 (full, low, an all-zero mask) and deletes the DICOM
+  (≈ 4,300 records, ≈ 5.6 GB, §8). No Mayo image is used for training or for choosing a knob.
+- **What differs from training.** Patients, institution, scanners (Siemens vs LIDC's mix),
+  reconstruction kernels (sharper), slice thickness, and the noise insertion (the vendor's,
+  not our simulator) — the held-out claim is about all of these at once.
+- **Dose.** Mayo chest is 10% of routine dose; the LIDC build is 25%. So a second LIDC build at
+  `--dose 0.10` (one realisation, ≈ 19 GB, ≈ 4 h on 30 cores) trains the MSE net and the
+  generator at Mayo's dose; the classical filters re-tune their knob on it. Mayo abdomen (25%)
+  is not used: no lung, no nodules.
+- **First check, no GPU.** The NPS of our simulated noise (low − full) against Mayo's inserted
+  noise at matched σ: if the shapes agree, results on our pairs speak for a scanner's.
+- **What Mayo can't do.** It has no reader outlines, so nodule contrast kept stays an LIDC
+  result; Mayo reports fidelity, texture and invented blobs. Its low-dose arm is itself
+  simulated (by the vendor) — it is the field's reference, not a second real low-dose scan.
+
+### 10.5 Runs and compute (4× 4060 Ti; eval forward at 512² ≈ 0.11 s)
+
+| run | where | cost |
+|---|---|---|
+| 10% LIDC build | CPU, 30 workers | ≈ 4 h (waits for the GPU job's data loader, or is paused with it) |
+| MSE at 10% | 1 GPU, 30k steps | ≈ 1.3 h |
+| diffusion at 25% and at 10% | 1 GPU each, 60k steps | ≈ 2.5 h each, in parallel |
+| sampling, per dose: 1,205 nodule slices + 400 others, one sample | 50 DDIM steps ≈ 5.5 s a slice | ≈ 2.5 GPU-h |
+| sampling, per dose: 4 samples of 200 slices (spread) | | ≈ 1.2 GPU-h |
+| sampling on Mayo at 10%: 1,000 slices (20 a patient), one sample | | ≈ 1.5 GPU-h |
+| regression nets + filters on Mayo, all ≈ 4,300 slices | GPU minutes; BM3D ≈ 45 min CPU | small |
+
+Total ≈ 15 GPU-hours: ≈ 2.5 h wall for the three trainings side by side, then ≈ 2.5 h of
+sampling over four cards. The user pauses the running GPU job when the slot is needed.
+
+### 10.6 The section
+
+One figure: (a) a Mayo low-dose slice and its generated full dose beside the real one (the
+object first); (b) nodule crops (LIDC) in full / low / BM3D / MSE / two diffusion samples;
+(c) the radial NPS of full dose, MSE and diffusion. One table: arms × {body RMSE, NPS integral
+and mean-frequency ratio, nodule contrast kept (all / < 3 mm), excess blobs}, LIDC at 25% and
+10%, and Mayo at 10%.
