@@ -1,7 +1,7 @@
 # deploy/rocm10_env.sh — source from the repo root to train on ROCm 10.1 (the wheels
 # deploy/rocm10_setup.sh puts in .venv-rocm10) instead of the pinned 7.2.4:
 #
-#   . deploy/rocm10_env.sh && ./run.sh resnet50-verified-adam 0 rocm
+#   . deploy/rocm10_env.sh && lake run train r50 0 rocm
 #
 # Per process: nothing here touches /opt/rocm or the 7.2.4 .venv, so both stacks live on one box.
 

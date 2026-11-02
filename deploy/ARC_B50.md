@@ -52,7 +52,7 @@ bash deploy/arc_setup.sh smoke           # resume from a rung after fixing it
 Everything is teed to `runs/<date>-arc-setup/setup.log`, with the box's kernel, GPU, BAR, link,
 runtime and package versions in `manifest.txt` beside it. Each trainer's own log lands under
 `runs/<date>-<trainer>/`, as on the other platforms. Imagenette is not a rung: run it by hand
-(`lake run imagenette`, or one net with `./run.sh <net> 0 xpu`) once §4 is settled on your box.
+(`lake run imagenette`, or one net with `lake run train <net> 0 xpu`) once §4 is settled on your box.
 
 ## What is Arc-specific
 
@@ -378,7 +378,7 @@ A logged 4-minute ResNet-34 load. Pass means more than 5 minutes at 70 W. It has
 ```bash
 ulimit -c unlimited
 LEAN_MLIR_MAX_STEPS=1300 LEAN_MLIR_PROBE_WARM=20 LEAN_MLIR_SKIP_EVAL=1 LEAN_MLIR_CKPT_TAG=hwtest \
-  PLATFORM_BACKEND=xpu ./run.sh resnet34-verified-adam 0 xpu
+  PLATFORM_BACKEND=xpu lake run train r34 0 xpu
 ```
 
 Alongside it, log the sensors from `/sys/bus/pci/devices/0000:0d:00.0/hwmon/hwmon*/` once a

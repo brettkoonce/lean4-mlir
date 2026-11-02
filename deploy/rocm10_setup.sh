@@ -3,7 +3,7 @@
 #
 #   bash deploy/rocm10_setup.sh          # from the repo root; makes .venv-rocm10, checks the card
 #   . deploy/rocm10_env.sh               # then, in each shell that trains
-#   ./run.sh mobilenetv4-verified-adam 0 rocm
+#   lake run train mnv4 0 rocm
 #
 # ROCm 10 is TheRock's build of the userspace (HIP, hipBLASLt, MIOpen, the compiler). It never touches
 # the kernel driver: the distribution's in-tree amdgpu (any kernel >= ~6.2 has gfx1100) is all it needs.
@@ -57,5 +57,5 @@ cat <<EOF
 Done. In each shell that trains:
   . deploy/rocm10_env.sh
   scripts/platform/check.sh                         # the suite first
-  ./run.sh mobilenetv4-verified-adam 0 rocm
+  lake run train mnv4 0 rocm                        # one net; lake run imagenette for the seven
 EOF

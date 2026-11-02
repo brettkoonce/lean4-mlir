@@ -64,6 +64,8 @@ for a in "${@:2}"; do
   else pass+=("$a"); fi
 done
 
+# A backend word alone (`./run.sh r34 rocm`) is the backend on GPU 0.
+case "${own[0]:-}" in cuda|rocm|xpu|neuron|metal|llvm-cpu|vmvx) [ -z "${own[1]:-}" ] && own=(0 "${own[0]}") ;; esac
 gpu="${own[0]:-0}"
 # The platform profile: the backend when none is named, and the device variable it selects on.
 . scripts/platform/env.sh

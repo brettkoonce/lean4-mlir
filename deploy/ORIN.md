@@ -169,8 +169,8 @@ Mathlib's cache rather than building it:
 
 ```bash
 lake exe cache get
-lake build mnist-cnn-verified && ./run.sh mnist-cnn-verified
-lake build cifar-verified     && ./run.sh cifar-verified
+lake run train cnn                   # mnist-cnn-verified: built, run, transcript teed
+lake run train cifar-verified
 lake run mnist                       # linear, MLP and CNN in sequence
 ```
 

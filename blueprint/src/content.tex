@@ -6075,14 +6075,13 @@ so much harder than just leaving identity there?
 \section{Run it first}
 \label{sec:r34_runit}
 
-Before any of the math, train the thing. Four commands and about fifty
+Before any of the math, train the thing. Three commands and about fifty
 minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
-lake build resnet34-verified-adam
-./.lake/build/bin/resnet34-verified-adam data
+lake run train r34                            # = resnet34-verified-adam
 \end{verbatim}
 
 \begin{sloppypar}
@@ -7445,10 +7444,10 @@ separate stories.
 \medskip\noindent It runs with:
 
 \begin{verbatim}
-lake run r34-default-bf16-4gpu
+lake run imagenet start r34      # the job r34-default-bf16-4gpu
 \end{verbatim}
 
-\noindent The job config behind that name,
+\noindent The job's config,
 \texttt{scripts/jobs/r34-default-bf16-4gpu.conf}, carries the device list,
 both replica knobs, the variant, the per-replica batch and the feed setting;
 \S\ref{sec:getting_started_track4} says what the supervisor behind it does.
@@ -7740,8 +7739,8 @@ bottleneck backbone substituted, and each recipe is its own render:
 They run with:
 
 \begin{verbatim}
-lake run r50-2018-bf16-4gpu
-lake run r50-a3-wxclip4x128-bf16-4gpu
+lake run imagenet start r50      # the job r50-2018-bf16-4gpu
+lake run imagenet start a3       # the job r50-a3-wxclip4x128-bf16-4gpu
 \end{verbatim}
 
 \noindent On 2018 the run finished at $\mathbf{76.99\%}$ top-1 and
@@ -8093,14 +8092,13 @@ efficiency without losing much expressive power.
 \section{Run it first}
 \label{sec:mnv2_runit}
 
-Before the factorization, train the factorized network. Four commands,
+Before the factorization, train the factorized network. Three commands,
 and under forty minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
-lake build mobilenetv2-verified-adam
-./.lake/build/bin/mobilenetv2-verified-adam data
+lake run train mnv2                           # = mobilenetv2-verified-adam
 \end{verbatim}
 
 \begin{sloppypar}
@@ -9411,7 +9409,7 @@ inside the statement.
 it matches the other ImageNet drivers. The job:
 
 \begin{verbatim}
-lake run mnv2-default-4gpu
+lake run imagenet start mnv2     # the job mnv2-default-4gpu
 \end{verbatim}
 
 \noindent The run finished at \textbf{71.69\%} top-1 and \textbf{90.52\%}
@@ -9872,14 +9870,13 @@ attention's arrival in vision.
 \section{Run it first}
 \label{sec:enet_runit}
 
-Before the attention mechanism, train the network that uses it. Four
+Before the attention mechanism, train the network that uses it. Three
 commands, and about forty-five minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
-lake build efficientnet-verified-adam
-./.lake/build/bin/efficientnet-verified-adam data
+lake run train enet                           # = efficientnet-verified-adam
 \end{verbatim}
 
 \begin{sloppypar}
@@ -10894,8 +10891,8 @@ which takes the count from 4,020,358 to \textbf{5,288,548}. That second
 number is B0's canonical $5.29$M.
 
 \medskip\noindent The artifact the run used is
-\texttt{emarmstfdp64dropdowneps0001bf16}, the render \texttt{lake run
-enet-default-4gpu} trains, with BatchNorm synchronised over the four
+\texttt{emarmstfdp64dropdowneps0001bf16}, the render \texttt{lake run imagenet start enet} (the job
+\texttt{enet-default-4gpu}) trains, with BatchNorm synchronised over the four
 replicas; its recipe is the one stated at the top of this section.
 
 \medskip\noindent\textbf{Two of those rows are easy to get wrong, and the
@@ -11119,15 +11116,14 @@ convnet baseline.
 \section{Run it first}
 \label{sec:convnext_runit}
 
-Before the two new primitives, train the network that needs them. Four
+Before the two new primitives, train the network that needs them. Three
 commands, and the heaviest per-epoch net in the book still finishes
 inside an hour and a half:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
-lake build convnext-verified-adam
-./.lake/build/bin/convnext-verified-adam data
+lake run train cnx                            # = convnext-verified-adam
 \end{verbatim}
 
 \begin{sloppypar}
@@ -12269,7 +12265,7 @@ enter the graph at all, because they are data-side and ride the shim. It
 ran as the chapter's row in \texttt{lake run imagenet}:
 
 \begin{verbatim}
-lake run cnx-default-emabf16-4gpu
+lake run imagenet start cnx      # the job cnx-default-emabf16-4gpu
 \end{verbatim}
 
 \noindent It finished at $\mathbf{82.15\%}$ top-1 and $\mathbf{95.91\%}$
@@ -12493,14 +12489,13 @@ What's new is how high the composition rule can be pushed.
 \label{sec:vit_runit}
 
 Before any of the attention mathematics, train the network that needs
-it. Four commands, and the last network in Part 1 is also the quickest
+it. Three commands, and the last network in Part 1 is also the quickest
 one in it:
 
 \begin{verbatim}
 lake exe cache get                         # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh  # 330 MB dl, 2.4 GB unpacked
-lake build vit-verified-adam
-./.lake/build/bin/vit-verified-adam data
+lake run train vit                         # = vit-verified-adam
 \end{verbatim}
 
 \begin{sloppypar}
@@ -14564,7 +14559,7 @@ pair the step is the render's through that equality rather than a
 theorem's, with the EMA tail outside it as before. It runs with:
 
 \begin{verbatim}
-lake run vit-default-emabf16-4gpu
+lake run imagenet start vit      # the job vit-default-emabf16-4gpu
 \end{verbatim}
 
 \noindent The run finished at $\mathbf{71.61\%}$ top-1 and
@@ -19120,8 +19115,8 @@ MULTICOM and ColabFold on three targets --- and GDT\_TS within a point.
 Folding a target's true distogram recovers its structure (TM-score 0.9999
 on T1235-D1) and the mirror scores 0.34. The packed training pools are
 checked against the per-chain files before any run, and a 64-chain
-memorization probe must leave the separation prior. And \texttt{lake exe
-distogram-casp smoke} finite-differences the emitted gradient of the pair
+memorization probe must leave the separation prior. And \texttt{lake run demo
+casp smoke} finite-differences the emitted gradient of the pair
 tile's weights, a body weight and each head's bias against the step's own
 first Adam moment, and checks that the evaluation forward's loss at one
 batch's statistics is the training step's. The trainer is
@@ -19248,7 +19243,7 @@ the random and scripted-tracker baselines as lines.}
 
 \paragraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is the
 mean points per game over twenty fresh games after training, with the standard
-error; the baselines over a hundred games (\texttt{lake exe pong-env 100}). Each
+error; the baselines over a hundred games (\texttt{lake run demo pong env 100}). Each
 arm is 500k agent steps on one card, five to seven minutes for a state run and
 27 for a pixel run.
 
@@ -20071,11 +20066,38 @@ Appendix~\ref{app:verification}.
     oleans download in $\sim$30 seconds.
   \item \textbf{A run refuses to start over a missing shim} (ImageNet tier).
     Run \texttt{scripts/gen\_shims.sh}; Appendix~\ref{app:imagenet_tier}.
-  \item \textbf{\texttt{lake run <job> plan} refuses with ``OLDER than the render''}
-    (ImageNet tier). The job's precheck compares the binary's timestamp with its
+  \item \textbf{\texttt{lake run imagenet <name>} refuses with ``OLDER than the render''}
+    (ImageNet tier). The row's precheck compares the binary's timestamp with its
     render's, and a regenerated render trips it. \texttt{lake build <exe>}
-    clears it; a bare \texttt{lake run <job>} builds first and never sees it.
+    clears it, and \texttt{lake build imagenet} does so for every row.
 \end{itemize}
+
+
+\section*{Every run command}
+
+Everything this book trains or runs is a \texttt{lake run} verb and a short
+name, and Table~\ref{tab:run_commands} is the whole list. Each verb builds
+its target, runs it through \texttt{run.sh} with the GPU and backend set, and
+tees the transcript to \texttt{runs/<date>-<exe>/}; bare, each prints its own
+names. The GPU slot takes a device index, or a backend word alone
+(\texttt{lake run train r34 rocm}); \texttt{--iree} selects the second
+lowerer.
+
+\begin{table}[H]
+\centering
+\caption{Every \texttt{lake run} verb and the short names it takes. \texttt{train}'s names are the chapter nets in order; \texttt{demo}'s groups are the demos of Part~2 in the book's order, a group's entries in brackets.}
+\label{tab:run_commands}
+\small
+\begin{tabular}{@{}p{0.27\textwidth}p{0.42\textwidth}p{0.27\textwidth}@{}}
+\textbf{Command} & \textbf{Names} & \textbf{Runs} \\[2pt]
+\hline \\[-6pt]
+\cellleft \texttt{lake run mnist}, \texttt{cifar}, \texttt{imagenette} & \cellleft the tier's nets, every one & \cellleft the ladder above; \texttt{imagenette-orin} on the Jetson \\[4pt]
+\cellleft \texttt{lake run train <net> [gpu] [backend]} & \cellleft linear, mlp, cnn; cifar8w, cifar8w-bn, cifar8wb-bbn; r34, r50, mnv2, mnv4, enet, cnx, vit & \cellleft one chapter net; any \texttt{lean\_exe} name, or a prefix that picks out one net, also works \\[4pt]
+\cellleft \texttt{lake run demo <group> [entry] [args]} & \cellleft yolo [visdrone, neudet, neudet448]; signs; plant-leaf; rs-bands; brats [train, r34, predict, eval] (Chapter~11) \newline shakespeare [bigram, gpt]; ddpm [train, sample, score]; diffusion-2d; gw; ising; casp (Chapter~12) \newline pong [env, dqn]; leduc [env, cfr]; ttt [env, alphazero, muzero] (Chapter~13) & \cellleft one demo; a one-entry group takes its arguments straight after the group, and everything after the entry goes to the demo \\[4pt]
+\cellleft \texttt{lake run imagenet [start | once] [name ...]} & \cellleft r34, r50, a3, a2, a1, mnv2, mnv4, enet, cnx, cnxs, cnxb, vit, vits, vitb & \cellleft the ImageNet tier, Appendix~\ref{app:imagenet_tier}: bare it plans, \texttt{start} supervises, \texttt{once} runs once; \texttt{list} names the jobs \\[4pt]
+\cellleft \texttt{lake run bench [plan] <name ...|all>} & \cellleft the same & \cellleft the net's verified job and its JAX reference, timed against each other; \texttt{--jax} or \texttt{--verified} for one side \\
+\end{tabular}
+\end{table}
 
 
 \chapter{On Verification}
@@ -20906,83 +20928,6 @@ favour, at one seed per arm (\S\ref{sec:r50_pjrt}).
 precision or accumulation shape and never in recipe, plus
 \texttt{selftest}, which exercises the supervisor without a GPU.
 
-\section*{This tier needs Python}
-
-ImageNet data does not sit in a directory the way MNIST and Imagenette do. It
-is streamed from tfds through a generated per-net shim, a Python
-script emitted from that net's own reference \texttt{TrainConfig}, so the
-augmentation the verified trainer consumes is the augmentation its
-JAX reference trains on by construction, and
-\texttt{scripts/shim\_wiring\_gate.py} checks the pairing. Generate them
-before the first run:
-
-\begin{verbatim}
-scripts/gen_shims.sh
-\end{verbatim}
-
-Each net names its own shim, and the driver refuses to start if the named file
-is absent.
-
-\section*{Running one}
-
-Single device, on the driver's own defaults:
-
-\begin{verbatim}
-LEAN_MLIR_MEM_FRACTION=0.97 .lake/build/bin/resnet34-imagenet-verified data
-\end{verbatim}
-
-The defaults are the recipe: the \texttt{mom256} render at batch $256$, a
-peak learning rate of $0.1$, $90$ epochs. The one knob a single card needs
-is the allocator's: at batch $256$ the fp32 step peaks above the
-$11.68$\,GiB the PJRT shim reserves by default on a 16\,GB card, and
-$0.97$ reserves $15.11$. Table~\ref{tab:imagenet_knobs} is the rest.
-
-\begin{table}[H]
-\centering
-\caption{The ImageNet drivers' environment knobs.}
-\label{tab:imagenet_knobs}
-\small
-\begin{tabular}{@{}p{0.3\textwidth}p{0.3\textwidth}p{0.34\textwidth}@{}}
-\textbf{Variable} & \textbf{Sets} & \textbf{Note} \\[2pt]
-\hline \\[-6pt]
-\cellleft \texttt{LEAN\_MLIR\_MEM\_FRACTION} & \cellleft the device memory the shim reserves & \cellleft $0.97$ on a 16\,GB card at batch 256 \\[4pt]
-\cellleft \texttt{LEAN\_MLIR\_VARIANT} & \cellleft which render the driver loads & \cellleft the batch is baked into the graph, not a runtime dimension \\[4pt]
-\cellleft \texttt{LEAN\_MLIR\_BATCH} & \cellleft the batch that variant was rendered at & \cellleft a mismatch is a shape error at the first invoke \\[4pt]
-\cellleft \texttt{LEAN\_MLIR\_BASE\_LR\_U} & \cellleft the base learning rate, in millionths & \cellleft \texttt{100000} = 0.1; an integer because this toolchain has no \texttt{String.toFloat?} \\[4pt]
-\cellleft \texttt{LEAN\_MLIR\_EPOCHS} & \cellleft the schedule's length & \cellleft \texttt{LEAN\_MLIR\_MAX\_EPOCHS} only caps a longer schedule, for a checkpointed prefix \\[4pt]
-\cellleft \texttt{PJRT\_REPLICAS} and \texttt{LEAN\_MLIR\_REPLICAS} & \cellleft data parallelism: the shim's client and compile options, and the driver's data-parallel invoke & \cellleft set only one and the run fails with ``compiled for $N$ replicas''; the job configs set both \\[4pt]
-\cellleft \texttt{LEAN\_MLIR\_LOWERER} & \cellleft \texttt{xla} or \texttt{iree} & \cellleft collectives exist only on the PJRT path, so this tier is XLA-only \\
-\end{tabular}
-\end{table}
-
-\noindent ResNet-50's driver defaults to the AdamW rate $0.001$ and its 2018
-render is heavy-ball, so left unset there it under-steps by
-$\sim$100$\times$, which looks like a broken render rather than a wrong
-knob. One card is the shape for a smoke test, not for the schedule. The
-four-card one, with every knob taken from the job's own config, is
-\texttt{lake run r34-default-bf16-4gpu once}, and \texttt{plan} prints the
-wall-clock on file --- the next section.
-
-\section*{Running one for a day and a half}
-
-These are multi-day runs, so they go through a supervisor
-(\texttt{scripts/supervise.sh}) that owns the device list, the epoch budget and
-the restart policy, and the job's own name is the command:
-
-\begin{verbatim}
-lake run r34-default-bf16-4gpu        # supervised: resumes, restarts on AER/heat/stall
-lake run r34-default-bf16-4gpu plan   # precheck and wall-clock on file; runs nothing
-lake run r34-default-bf16-4gpu once   # one foreground run, the job's env, no restarts
-lake run imagenet                # every row's plan, in chapter order; runs nothing
-lake run imagenet start          # the rows in order, each resuming from its checkpoint
-\end{verbatim}
-
-\noindent \texttt{lake run imagenet} is the tier itself, the ladder's top rung.
-Bare, it only plans, because its fourteen rows --- the seven of
-Table~\ref{tab:track4_runners} and seven of the eight side quests of
-Table~\ref{tab:track4_side_quests} --- are weeks of four-card time;
-\texttt{start} is the confirmation.
-
 \section*{How the numbers are scored}
 
 Every top-1 and top-5 in this book follows one validation protocol, the
@@ -21034,6 +20979,86 @@ Five things are matched, and each uses \texttt{timm} as the reference:
     the recipe's training size; the test-resolution scorer is for
     comparing a checkpoint against \texttt{timm}'s.
 \end{itemize}
+
+\section*{This tier needs Python}
+
+ImageNet data does not sit in a directory the way MNIST and Imagenette do. It
+is streamed from tfds through a generated per-net shim, a Python
+script emitted from that net's own reference \texttt{TrainConfig}, so the
+augmentation the verified trainer consumes is the augmentation its
+JAX reference trains on by construction, and
+\texttt{scripts/shim\_wiring\_gate.py} checks the pairing. Generate them
+before the first run:
+
+\begin{verbatim}
+scripts/gen_shims.sh
+\end{verbatim}
+
+Each net names its own shim, and the driver refuses to start if the named file
+is absent.
+
+\section*{Running one}
+
+One card is the smoke test, every knob at the driver's default:
+
+\begin{verbatim}
+LEAN_MLIR_MEM_FRACTION=0.97 lake run train resnet34-imagenet-verified
+\end{verbatim}
+
+The defaults are the recipe: the \texttt{mom256} render at batch $256$, a
+peak learning rate of $0.1$, $90$ epochs. The one knob a single card needs
+is the allocator's: at batch $256$ the fp32 step peaks above the
+$11.68$\,GiB the PJRT shim reserves by default on a 16\,GB card, and
+$0.97$ reserves $15.11$. The four-card run never sets a knob by hand; its
+job's config carries them all. Table~\ref{tab:imagenet_knobs} is what it
+carries.
+
+\begin{table}[H]
+\centering
+\caption{The knobs a job's config sets; the one-card smoke test is where you set them yourself.}
+\label{tab:imagenet_knobs}
+\small
+\begin{tabular}{@{}p{0.3\textwidth}p{0.3\textwidth}p{0.34\textwidth}@{}}
+\textbf{Variable} & \textbf{Sets} & \textbf{Note} \\[2pt]
+\hline \\[-6pt]
+\cellleft \texttt{LEAN\_MLIR\_MEM\_FRACTION} & \cellleft the device memory the shim reserves & \cellleft $0.97$ on a 16\,GB card at batch 256 \\[4pt]
+\cellleft \texttt{LEAN\_MLIR\_VARIANT} & \cellleft which render the driver loads & \cellleft the batch is baked into the graph, not a runtime dimension \\[4pt]
+\cellleft \texttt{LEAN\_MLIR\_BATCH} & \cellleft the batch that variant was rendered at & \cellleft a mismatch is a shape error at the first invoke \\[4pt]
+\cellleft \texttt{LEAN\_MLIR\_BASE\_LR\_U} & \cellleft the base learning rate, in millionths & \cellleft \texttt{100000} = 0.1; an integer because this toolchain has no \texttt{String.toFloat?} \\[4pt]
+\cellleft \texttt{LEAN\_MLIR\_EPOCHS} & \cellleft the schedule's length & \cellleft \texttt{LEAN\_MLIR\_MAX\_EPOCHS} only caps a longer schedule, for a checkpointed prefix \\[4pt]
+\cellleft \texttt{PJRT\_REPLICAS} and \texttt{LEAN\_MLIR\_REPLICAS} & \cellleft data parallelism: the shim's client and compile options, and the driver's data-parallel invoke & \cellleft set only one and the run fails with ``compiled for $N$ replicas''; the job configs set both \\[4pt]
+\cellleft \texttt{LEAN\_MLIR\_LOWERER} & \cellleft \texttt{xla} or \texttt{iree} & \cellleft collectives exist only on the PJRT path, so this tier is XLA-only \\
+\end{tabular}
+\end{table}
+
+\noindent ResNet-50's driver defaults to the AdamW rate $0.001$ and its 2018
+render is heavy-ball, so left unset there it under-steps by
+$\sim$100$\times$, which looks like a broken render rather than a wrong
+knob. One card is the shape for a smoke test, not for the schedule. The
+four-card one, with every knob taken from the job's own config, is
+\texttt{lake run imagenet once r34}; without \texttt{once} it only plans, and
+prints the wall-clock on file --- the next section.
+
+\section*{Running one for a day and a half}
+
+These are multi-day runs, so they go through a supervisor
+(\texttt{scripts/supervise.sh}) that owns the device list, the epoch budget and
+the restart policy, and the row's short name is the command
+(\texttt{lake run imagenet list} has them, with the job behind each):
+
+\begin{verbatim}
+lake run imagenet r34            # precheck and wall-clock on file; runs nothing
+lake run imagenet start r34      # supervised: resumes, restarts on AER/heat/stall
+lake run imagenet once r34       # one foreground run, the job's env, no restarts
+lake run imagenet                # every row's plan, in chapter order; runs nothing
+lake run imagenet start          # the rows in order, each resuming from its checkpoint
+\end{verbatim}
+
+\noindent \texttt{lake run imagenet} is the tier itself, the ladder's top rung.
+Bare, it only plans, because its fourteen rows --- the seven of
+Table~\ref{tab:track4_runners} and seven of the eight side quests of
+Table~\ref{tab:track4_side_quests} --- are weeks of four-card time;
+\texttt{start} is the confirmation.
 
 \section*{Side quests}
 

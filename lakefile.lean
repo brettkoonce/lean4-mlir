@@ -2410,7 +2410,8 @@ private def trainAliases : List (String × String) :=
     `<net>` is any `lean_exe` name, a short name from `trainAliases` (`r34`, `vit`, `cnn`, …), or a
     prefix that picks out one tier net (`resnet34`, `efficientnet`). The GPU and backend default as
     in the tiers (`$LEAN_DEMO_GPU`, else the device variable already set, else 0; the backend
-    `scripts/platform/env.sh` detects). The lowerer is XLA unless `--iree` is given or the backend
+    `scripts/platform/env.sh` detects); a backend word alone (`lake run train r34 rocm`) is the
+    backend on GPU 0. The lowerer is XLA unless `--iree` is given or the backend
     is `llvm-cpu` / `vmvx`, IREE on the CPU. With no `<net>`, it lists the tier nets and their short
     names. -/
 script train (args) do
@@ -2441,9 +2442,13 @@ script train (args) do
   let some net := net?
     | IO.eprintln s!"no trainer named '{arg}'\n{usage}\n\nthe tier nets (short name, target):\n{listing}"
       return 1
-  let backend? := pos[2]?
+  -- `lake run train r34 rocm`: a backend word alone in the GPU slot names the backend.
+  let backendWords := ["cuda", "rocm", "xpu", "neuron", "metal", "llvm-cpu", "vmvx"]
+  let (gpu?, backend?) := match pos[1]?, pos[2]? with
+    | some w, none => if backendWords.contains w then (none, some w) else (some w, none)
+    | g, b => (g, b)
   let cpu := backend?.any (· ∈ ["llvm-cpu", "vmvx"])
-  runDemoGroup [net] (xla := !(iree || cpu)) (gpu? := pos[1]?) (backend? := backend?)
+  runDemoGroup [net] (xla := !(iree || cpu)) (gpu? := gpu?) (backend? := backend?)
 
 /-- The demos of Chapters 11–13, in the book's order: (group, chapter, tagline, entries), each
     entry (short name, `lean_exe`). A one-entry group's short name is unused — the group runs it. -/

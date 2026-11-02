@@ -40,7 +40,7 @@ python3 -m venv .venv && .venv/bin/pip install jax-rocm7-pjrt==0.11.0   # the pl
 export PATH=/opt/rocm/bin:$PATH
 scripts/platform/check.sh                     # the suite, tiers 0–2 (§ Measured)
 lake run mnist && lake run cifar              # the MNIST and CIFAR tiers
-lake run imagenette                           # or one net: ./run.sh <net>-verified-adam 0 rocm
+lake run imagenette                           # or one net: lake run train r34 0 rocm
 ```
 
 `HIP_VISIBLE_DEVICES` picks the card, as `CUDA_VISIBLE_DEVICES` does on NVIDIA; `run.sh`'s GPU
