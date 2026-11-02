@@ -82,7 +82,7 @@ the other. The first failing tier narrows the layer further.
 | backend | state | first step |
 |---|---|---|
 | CUDA | trains today (4x 4060 Ti) | tiers 0-3 to produce the first baseline |
-| ROCm | code pruned; `pjrt_ffi.c` still has the plugin path and the `is_rocm` branch | tiers 0-1 on the future MI300 cloud box |
+| ROCm | tiers 0-2 pass on a 7900 XTX, ROCm 7.2.4 and the 10.1 wheels (2026-10-25, 2026-11-01; `deploy/ROCM_7900XTX.md`) | — |
 | Intel XPU | Intel's OpenXLA plugin (reported to target JAX 0.11.2; we pin 0.11.0) | section 6 |
 
 ## 6. Intel Arc Pro B60
@@ -136,7 +136,7 @@ a device, which is expected.
    Fault injection is recorded in `tolerances.tsv`'s header; the two deep bf16 rows are thin.
 3. Tier 3: wrap the existing gate scripts.
 4. Intel pre-purchase check (section 6), then the B60 shim items 1-2 behind tier 0.
-5. ROCm tiers 0-1 when the MI300 box exists.
+5. ~~ROCm tiers 0-1 when the MI300 box exists.~~ Done on a 7900 XTX instead, tiers 0-2 (`runs/platform/2026-11-01-ares-rocm-2/`).
 6. Later: a `workflow_dispatch` job on a labelled self-hosted runner calling the same script.
 
 ## 8. Open
