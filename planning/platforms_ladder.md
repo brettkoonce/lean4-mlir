@@ -44,7 +44,7 @@ The side quests (A2/A1, MNv4-500, ConvNeXt-S/B, ViT-S/B) are imagenet-rung jobs 
 | NVIDIA CUDA 12 (ares) and CUDA 13 (3060 box) | working; every rung on record between them | — |
 | Intel Arc Pro B50 (minerva) | working; suite, mnist, cifar, imagenette on record | — |
 | Jetson Orin Nano | running; mnist, cifar on record, imagenette (`imagenette-orin`) in progress | the tsv cell when it lands |
-| AMD Radeon RX 7900 XTX | working; the whole ladder on record twice — ROCm 7.2.4 on minerva (five Imagenette nets, 2026-10-25 → 31) and the 10.1 wheels on ares (all seven, 2026-11-01); runbook `deploy/ROCM_7900XTX.md` | — |
+| AMD Radeon RX 7900 XTX | working; the whole ladder on record on the ROCm 10.1 wheels on ares (all seven, 2026-11-01); the tsv row is that one, the 7.2.4 run on minerva (five nets, 2026-10-25 → 31) stays in the runbook, `deploy/ROCM_7900XTX.md` | — |
 | Apple M1 / Metal | mnist run on the laptop (92.10 / 97.79 / 98.71, deploy/MAC.md), not in the tsv | pick the form it runs in (the suite + mnist, or mnist alone), record it in the tsv |
 | AWS Trainium | waiting on AWS approval; the probe plan is planning/book_copy_audit_2026-10-21.md §5 | a `neuron` arm in `env.sh`, an expected file, `deploy/TRAINIUM.md`, a tsv row |
 | TPU (TFRC) | the plan after Trainium: the primary sequence and the side quests, i.e. every imagenet-rung row, on TFRC time | a tsv row; the imagenet column is where it would show |

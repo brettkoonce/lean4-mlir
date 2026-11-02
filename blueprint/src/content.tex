@@ -452,12 +452,14 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
 \begin{verbatim}
 python3 -m venv .venv && . .venv/bin/activate
 pip install jax-cuda12-pjrt     # NVIDIA, CUDA 12 -- the PJRT plugin ONLY
-pip install jax-rocm7-pjrt      # AMD            -- no jax, no jaxlib
+bash deploy/rocm10_setup.sh     # AMD, ROCm 10.1 -- plugin + libraries, as wheels
 pip install jax-oneapi-pjrt 'jax-oneapi-plugin[with-oneapi]'   # Intel Arc
 \end{verbatim}
-    Match the wheel to your CUDA or ROCm version; the Arc's plugin brings its
-    oneAPI runtime with it, and \texttt{deploy/arc\_setup.sh} does that
-    install end to end. A Mac takes a Metal plugin instead, which
+    Match the wheel to your CUDA version. On AMD the ROCm 10.1 wheels bring
+    ROCm itself, no root, into a venv of their own, and
+    \texttt{deploy/rocm10\_env.sh} points the shim at it; the Arc's plugin
+    brings its oneAPI runtime with it, and \texttt{deploy/arc\_setup.sh} does
+    that install end to end. A Mac takes a Metal plugin instead, which
     \texttt{deploy/MAC.md} installs. The shim finds the plugin in the repo's
     \texttt{.venv}; one anywhere else is named by \texttt{\$PJRT\_PLUGIN}
     (Appendix~\ref{app:getting_started}).
@@ -19752,9 +19754,10 @@ has, which is not a failure, and n/a where nothing can.
 \input{figures/platforms}
 \end{table}
 
-The CUDA 12 and ROCm pins are the lock files under \texttt{jax/}; the CUDA
+The CUDA 12 pin is the lock file under \texttt{jax/}, the ROCm 10.1 pins are
+in \texttt{deploy/rocm10\_setup.sh}; the CUDA
 13 box's is \texttt{scripts/jobs/\_box.sh}, the Orin's its build script, the
-Mac's and the Arc's their setup scripts. Three of the rows are there to make
+Mac's and the Arc's their setup scripts. Four of the rows are there to make
 a point. The Orin is the core sequence on a commodity computer rather than a
 training box --- the board, a plugin built for it and the tier's memory
 recipe, nothing else. The Imagenette tier runs there end to end, seven nets
@@ -19763,7 +19766,10 @@ landing within a quarter of a point of its five-seed range in
 Table~\ref{tab:imagenette_five}; \texttt{deploy/ORIN.md} is its runbook. The Mac
 is the same point on a laptop: Metal through a PJRT plugin, unified memory
 (nothing is staged to the device), float32 only (the MNIST renders use no
-float64), and \texttt{deploy/MAC.md} is its runbook. The Arc is the third
+float64), and \texttt{deploy/MAC.md} is its runbook. The 7900 XTX is the
+second vendor's desktop card: AMD's PJRT plugin on the ROCm 10.1 wheels;
+\texttt{deploy/ROCM\_7900XTX.md} is its runbook.
+The Arc is the third
 vendor's desktop card through the same seam, Intel's PJRT plugin and nothing
 else from this side, with one shim workaround for a race in Intel's SYCL
 runtime, and \texttt{deploy/ARC\_B50.md} is its runbook. A new box is

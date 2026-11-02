@@ -11,7 +11,6 @@
 \cellleft 4$\times$ RTX 4060 Ti & \cellleft \texttt{jax\_cuda12\_pjrt} 0.11.0 in the pinned \texttt{.venv} & \cellleft tiers 0–2, 22 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft R34; R50 at 2018 and RSB-A3 \\[4pt]
 \cellleft 4$\times$ RTX 3060 & \cellleft \texttt{xla\_cuda13} in \texttt{/\allowbreak home/\allowbreak skoonce/\allowbreak .venv-cuda}, \texttt{SHIM\_PYTHON} required & \cellleft tiers 0–2, 24 pass & \cellleft -- & \cellleft -- & \cellleft -- & \cellleft all seven, and MNv4 \\[4pt]
 \cellleft Jetson Orin Nano 8 GB & \cellleft jax v0.11.1 built for sm\_87 by \texttt{deploy/\allowbreak build\_orin\_pjrt\_plugin.sh}, staged by \texttt{orin\_setup.sh} & \cellleft tiers 0–2, 20 pass & \cellleft the CNN & \cellleft the 8-conv CNN, with and without BN & \cellleft all seven & \cellleft n/a \\[4pt]
-\cellleft AMD Radeon RX 7900 XTX 24 GB & \cellleft \texttt{jax-rocm7-pjrt} 0.11.0 in the pinned \texttt{.venv}, ROCm 7.2.4 apt-pinned by \texttt{deploy/\allowbreak rocm724\_install.sh} & \cellleft tiers 0–2, 21 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms; batch-BN & \cellleft five of seven & \cellleft n/a \\[4pt]
 \cellleft AMD Radeon RX 7900 XTX 24 GB & \cellleft \texttt{jax-rocm10-pjrt} 0.11.1 with ROCm 10.1 in \texttt{.venv-rocm10}, made by \texttt{deploy/\allowbreak rocm10\_setup.sh} (no root) & \cellleft tiers 0–2, 21 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms; batch-BN & \cellleft all seven & \cellleft n/a \\[4pt]
 \cellleft Intel Arc Pro B50 16 GB & \cellleft \texttt{jax\_oneapi\_pjrt} 0.11.2 (platform \texttt{oneapi}) with its oneAPI runtime wheels in \texttt{.venv-xpu}, made by \texttt{deploy/\allowbreak arc\_setup.sh} & \cellleft tiers 0–2, 21 pass & \cellleft linear, MLP, CNN & \cellleft the 8-conv CNN, six arms & \cellleft all seven & \cellleft n/a \\[4pt]
 \cellleft Apple M1 MacBook Air & \cellleft \texttt{jax-graft} 0.0.5 (\texttt{metal-pjrt-core}, platform \texttt{mtl}) in the repo's \texttt{.venv} & \cellleft -- & \cellleft linear, MLP, CNN & \cellleft -- & \cellleft -- & \cellleft n/a \\[4pt]
@@ -21,7 +20,6 @@
 \textbf{4$\times$ RTX 4060 Ti}\quad CUDA 12, driver 575; runbook README.\\
 \textbf{4$\times$ RTX 3060}\quad CUDA 13.3, driver 610; runbook scripts/jobs/\_box.sh.\\
 \textbf{Jetson Orin Nano 8 GB}\quad sm\_87, JetPack 6.2, unified memory; runbook deploy/ORIN.md.\\
-\textbf{AMD Radeon RX 7900 XTX 24 GB}\quad ROCm 7.2.4, gfx1100, kernel 6.8 / 7.0; runbook deploy/ROCM\_7900XTX.md.\\
 \textbf{AMD Radeon RX 7900 XTX 24 GB}\quad ROCm 10.1 wheels, gfx1100, kernel 6.8; runbook deploy/ROCM\_7900XTX.md.\\
 \textbf{Intel Arc Pro B50 16 GB}\quad Battlemage, oneAPI, kernel 7.0; runbook deploy/ARC\_B50.md.\\
 \textbf{Apple M1 MacBook Air}\quad Metal, macOS 26, unified memory; runbook deploy/MAC.md.\\
