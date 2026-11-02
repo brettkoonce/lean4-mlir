@@ -3462,7 +3462,10 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "def load_train_state(path, template):\n" ++
   "    d = np.load(path)\n" ++
   "    n = len(jax.tree.leaves(template))\n" ++
-  "    leaves = [jnp.asarray(d[f'l{i}']) for i in range(n)]\n" ++
+  -- host arrays: `jnp.asarray` put every leaf (params + optimizer moments) on device 0 before the
+  -- replicated `device_put`, which OOM'd GPU 0 on the R50 A2 resume at the default arena
+  -- (2026-11-02; the trainers each held the restored copy on device 0 for the whole run)
+  "    leaves = [np.asarray(d[f'l{i}']) for i in range(n)]\n" ++
   "    return jax.tree.unflatten(jax.tree.structure(template), leaves), int(d['step'])\n\n" ++
   "if __name__ == \"__main__\":\n" ++
   "    print(\"" ++ spec.name ++ " · Lean 4 → JAX\")\n" ++
@@ -3568,6 +3571,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    if _resume:\n" ++
   "        _rstate, _global_step = load_train_state(_resume, " ++ stateTuple ++ ")\n" ++
   "        " ++ stateTuple ++ " = jax.device_put(_rstate, replicated_sharding)\n" ++
+  "        del _rstate\n" ++
   "        _start_epoch = _global_step // steps_per_epoch\n" ++
   "        print(f'Resumed full train state from {_resume}: step={_global_step} (epoch {_start_epoch + 1}/{EPOCHS})')\n" ++
   "    for epoch in range(_start_epoch, EPOCHS):\n" ++

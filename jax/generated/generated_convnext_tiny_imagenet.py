@@ -1822,7 +1822,7 @@ def _prune_bin_ckpts(base):
 def load_train_state(path, template):
     d = np.load(path)
     n = len(jax.tree.leaves(template))
-    leaves = [jnp.asarray(d[f'l{i}']) for i in range(n)]
+    leaves = [np.asarray(d[f'l{i}']) for i in range(n)]
     return jax.tree.unflatten(jax.tree.structure(template), leaves), int(d['step'])
 
 if __name__ == "__main__":
@@ -1906,6 +1906,7 @@ if __name__ == "__main__":
     if _resume:
         _rstate, _global_step = load_train_state(_resume, (params, opt_state, ema_params))
         (params, opt_state, ema_params) = jax.device_put(_rstate, replicated_sharding)
+        del _rstate
         _start_epoch = _global_step // steps_per_epoch
         print(f'Resumed full train state from {_resume}: step={_global_step} (epoch {_start_epoch + 1}/{EPOCHS})')
     for epoch in range(_start_epoch, EPOCHS):
