@@ -1,0 +1,141 @@
+# 2026-11-02 09:14:50 UTC  bash -c 
+  set -u
+  base=/home/skoonce/bench_ckpt/20261102091448/r34-default-jax-4gpu/resnet34_imagenet
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_resnet34_imagenet.py
+
+# t_s	line
+0.001	[jax] fresh start
+0.480	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+0.480	I0000 00:00:1793610890.924375 1091567 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1.279	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1.279	I0000 00:00:1793610891.723665 1091567 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2.439	ResNet-34 (ImageNet) · Lean 4 → JAX
+2.439	  Conv(3→64,7x7/2)+BN → Pool(3x3) → Res3(64→64,s1) → Res4(64→128,s2) → Res6(128→256,s2) → Res3(256→512,s2) → GAP → 512→1000
+2.439	
+2.439	ImageNet (1000-class) — tfds streaming pipeline
+2.439	lr=0.100000  batch_size=256 (4 devices x 64)  epochs=90  params=21797672
+2.439	steps_per_epoch=5004  total_steps=450360
+2.439	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+2.439	Starting training...
+24.643	  step 100/450360  loss=7.0021  lr=0.0004  (188.0ms/step avg)
+36.290	  step 200/450360  loss=6.9377  lr=0.0008  (152.0ms/step avg)
+47.962	  step 300/450360  loss=6.9134  lr=0.0012  (141.0ms/step avg)
+59.660	  step 400/450360  loss=6.9266  lr=0.0016  (135.0ms/step avg)
+71.364	  step 500/450360  loss=6.9394  lr=0.002  (131.0ms/step avg)
+83.075	  step 600/450360  loss=6.9151  lr=0.0024  (129.0ms/step avg)
+94.784	  step 700/450360  loss=6.8849  lr=0.0028  (127.0ms/step avg)
+106.495	  step 800/450360  loss=6.8289  lr=0.0032  (126.0ms/step avg)
+118.173	  step 900/450360  loss=6.8813  lr=0.0036  (125.0ms/step avg)
+129.865	  step 1000/450360  loss=6.851  lr=0.004  (124.0ms/step avg)
+141.561	  step 1100/450360  loss=6.807  lr=0.0044  (123.0ms/step avg)
+153.257	  step 1200/450360  loss=6.8082  lr=0.0048  (123.0ms/step avg)
+164.935	  step 1300/450360  loss=6.693  lr=0.0052  (122.0ms/step avg)
+176.611	  step 1400/450360  loss=6.7195  lr=0.0056  (122.0ms/step avg)
+188.269	  step 1500/450360  loss=6.6687  lr=0.006  (122.0ms/step avg)
+199.936	  step 1600/450360  loss=6.5676  lr=0.00639  (121.0ms/step avg)
+211.618	  step 1700/450360  loss=6.6477  lr=0.00679  (121.0ms/step avg)
+223.309	  step 1800/450360  loss=6.6008  lr=0.00719  (121.0ms/step avg)
+234.987	  step 1900/450360  loss=6.6214  lr=0.00759  (121.0ms/step avg)
+246.656	  step 2000/450360  loss=6.6077  lr=0.00799  (120.0ms/step avg)
+258.354	  step 2100/450360  loss=6.5421  lr=0.00839  (120.0ms/step avg)
+270.085	  step 2200/450360  loss=6.4808  lr=0.00879  (120.0ms/step avg)
+281.775	  step 2300/450360  loss=6.4554  lr=0.00919  (120.0ms/step avg)
+293.453	  step 2400/450360  loss=6.5538  lr=0.00959  (120.0ms/step avg)
+305.117	  step 2500/450360  loss=6.5385  lr=0.00999  (120.0ms/step avg)
+316.791	  step 2600/450360  loss=6.4105  lr=0.01039  (120.0ms/step avg)
+328.450	  step 2700/450360  loss=6.4639  lr=0.01079  (119.0ms/step avg)
+340.132	  step 2800/450360  loss=6.3657  lr=0.01119  (119.0ms/step avg)
+351.787	  step 2900/450360  loss=6.4351  lr=0.01159  (119.0ms/step avg)
+363.439	  step 3000/450360  loss=6.3718  lr=0.01199  (119.0ms/step avg)
+375.084	  step 3100/450360  loss=6.3504  lr=0.01239  (119.0ms/step avg)
+386.725	  step 3200/450360  loss=6.3456  lr=0.01279  (119.0ms/step avg)
+398.369	  step 3300/450360  loss=6.3482  lr=0.01319  (119.0ms/step avg)
+410.037	  step 3400/450360  loss=6.2947  lr=0.01359  (119.0ms/step avg)
+421.678	  step 3500/450360  loss=6.3543  lr=0.01399  (119.0ms/step avg)
+433.338	  step 3600/450360  loss=6.2148  lr=0.01439  (119.0ms/step avg)
+444.997	  step 3700/450360  loss=6.1939  lr=0.01479  (119.0ms/step avg)
+456.651	  step 3800/450360  loss=6.1763  lr=0.01519  (119.0ms/step avg)
+468.292	  step 3900/450360  loss=6.1354  lr=0.01559  (119.0ms/step avg)
+479.936	  step 4000/450360  loss=6.1164  lr=0.01599  (119.0ms/step avg)
+491.588	  step 4100/450360  loss=6.0979  lr=0.01639  (118.0ms/step avg)
+503.237	  step 4200/450360  loss=6.0592  lr=0.01679  (118.0ms/step avg)
+514.866	  step 4300/450360  loss=5.9667  lr=0.01719  (118.0ms/step avg)
+526.530	  step 4400/450360  loss=6.0717  lr=0.01759  (118.0ms/step avg)
+538.173	  step 4500/450360  loss=6.0116  lr=0.01799  (118.0ms/step avg)
+549.837	  step 4600/450360  loss=5.9649  lr=0.01839  (118.0ms/step avg)
+561.508	  step 4700/450360  loss=5.9959  lr=0.01878  (118.0ms/step avg)
+573.160	  step 4800/450360  loss=6.0533  lr=0.01918  (118.0ms/step avg)
+584.832	  step 4900/450360  loss=5.8491  lr=0.01958  (118.0ms/step avg)
+596.484	  step 5000/450360  loss=5.826  lr=0.01998  (118.0ms/step avg)
+596.791	  Running validation ...
+615.099	[Epoch 1] lr=0.02 loss(train_avg)=6.4699 val_top1=2423/50000 (0.0485) val_top5=0.1435 val_loss=5.633  [591.0s train, 18.3s val]
+615.177	saved 37 param-groups to /home/skoonce/bench_ckpt/20261102091448/r34-default-jax-4gpu/resnet34_imagenet_e1.bin (87190688 bytes)
+615.303	  saved full train state -> /home/skoonce/bench_ckpt/20261102091448/r34-default-jax-4gpu/resnet34_imagenet_e1.state.npz (292 arrays, step=5004)
+626.489	  step 5100/450360  loss=5.9187  lr=0.02038  (122.0ms/step avg)
+638.103	  step 5200/450360  loss=5.925  lr=0.02078  (122.0ms/step avg)
+649.727	  step 5300/450360  loss=5.8596  lr=0.02118  (121.0ms/step avg)
+661.370	  step 5400/450360  loss=5.816  lr=0.02158  (121.0ms/step avg)
+672.998	  step 5500/450360  loss=5.7674  lr=0.02198  (121.0ms/step avg)
+684.650	  step 5600/450360  loss=5.8139  lr=0.02238  (121.0ms/step avg)
+696.325	  step 5700/450360  loss=5.6307  lr=0.02278  (121.0ms/step avg)
+707.983	  step 5800/450360  loss=5.7328  lr=0.02318  (121.0ms/step avg)
+719.609	  step 5900/450360  loss=5.6591  lr=0.02358  (121.0ms/step avg)
+731.257	  step 6000/450360  loss=5.777  lr=0.02398  (121.0ms/step avg)
+742.892	  step 6100/450360  loss=5.6824  lr=0.02438  (121.0ms/step avg)
+754.538	  step 6200/450360  loss=5.5769  lr=0.02478  (121.0ms/step avg)
+766.173	  step 6300/450360  loss=5.5812  lr=0.02518  (121.0ms/step avg)
+777.809	  step 6400/450360  loss=5.6205  lr=0.02558  (121.0ms/step avg)
+789.466	  step 6500/450360  loss=5.5057  lr=0.02598  (121.0ms/step avg)
+801.115	  step 6600/450360  loss=5.6993  lr=0.02638  (121.0ms/step avg)
+812.756	  step 6700/450360  loss=5.5557  lr=0.02678  (120.0ms/step avg)
+824.415	  step 6800/450360  loss=5.4118  lr=0.02718  (120.0ms/step avg)
+836.068	  step 6900/450360  loss=5.4251  lr=0.02758  (120.0ms/step avg)
+847.724	  step 7000/450360  loss=5.5368  lr=0.02798  (120.0ms/step avg)
+859.379	  step 7100/450360  loss=5.4247  lr=0.02838  (120.0ms/step avg)
+871.015	  step 7200/450360  loss=5.2499  lr=0.02878  (120.0ms/step avg)
+882.673	  step 7300/450360  loss=5.4903  lr=0.02918  (120.0ms/step avg)
+894.330	  step 7400/450360  loss=5.4928  lr=0.02958  (120.0ms/step avg)
+905.973	  step 7500/450360  loss=5.2307  lr=0.02998  (120.0ms/step avg)
+917.632	  step 7600/450360  loss=5.3618  lr=0.03038  (120.0ms/step avg)
+929.291	  step 7700/450360  loss=5.3506  lr=0.03078  (120.0ms/step avg)
+940.929	  step 7800/450360  loss=5.0527  lr=0.03118  (120.0ms/step avg)
+952.587	  step 7900/450360  loss=5.2579  lr=0.03157  (120.0ms/step avg)
+964.248	  step 8000/450360  loss=5.1683  lr=0.03197  (120.0ms/step avg)
+975.932	  step 8100/450360  loss=5.1629  lr=0.03237  (120.0ms/step avg)
+987.595	  step 8200/450360  loss=5.1213  lr=0.03277  (120.0ms/step avg)
+999.249	  step 8300/450360  loss=5.1959  lr=0.03317  (120.0ms/step avg)
+1010.933	  step 8400/450360  loss=5.1642  lr=0.03357  (120.0ms/step avg)
+1022.598	  step 8500/450360  loss=5.0805  lr=0.03397  (120.0ms/step avg)
+1034.259	  step 8600/450360  loss=4.9837  lr=0.03437  (120.0ms/step avg)
+1045.920	  step 8700/450360  loss=4.9744  lr=0.03477  (120.0ms/step avg)
+1057.576	  step 8800/450360  loss=5.1393  lr=0.03517  (120.0ms/step avg)
+1069.234	  step 8900/450360  loss=4.9957  lr=0.03557  (119.0ms/step avg)
+1080.894	  step 9000/450360  loss=4.9535  lr=0.03597  (119.0ms/step avg)
+1092.563	  step 9100/450360  loss=5.0931  lr=0.03637  (119.0ms/step avg)
+1104.240	  step 9200/450360  loss=4.9114  lr=0.03677  (119.0ms/step avg)
+1115.887	  step 9300/450360  loss=4.9904  lr=0.03717  (119.0ms/step avg)
+1127.559	  step 9400/450360  loss=4.946  lr=0.03757  (119.0ms/step avg)
+1139.210	  step 9500/450360  loss=4.9361  lr=0.03797  (119.0ms/step avg)
+1150.881	  step 9600/450360  loss=4.6369  lr=0.03837  (119.0ms/step avg)
+1162.557	  step 9700/450360  loss=4.9467  lr=0.03877  (119.0ms/step avg)
+1174.234	  step 9800/450360  loss=4.8903  lr=0.03917  (119.0ms/step avg)
+1185.883	  step 9900/450360  loss=4.8146  lr=0.03957  (119.0ms/step avg)
+1197.527	  step 10000/450360  loss=4.7907  lr=0.03997  (119.0ms/step avg)
+1198.301	  Running validation ...
+1215.952	[Epoch 2] lr=0.04 loss(train_avg)=5.3277 val_top1=8324/50000 (0.1665) val_top5=0.3664 val_loss=4.3299  [583.0s train, 17.7s val]
+1216.042	saved 37 param-groups to /home/skoonce/bench_ckpt/20261102091448/r34-default-jax-4gpu/resnet34_imagenet_e2.bin (87190688 bytes)
+1216.165	  saved full train state -> /home/skoonce/bench_ckpt/20261102091448/r34-default-jax-4gpu/resnet34_imagenet_e2.state.npz (292 arrays, step=10008)
+1216.165	[bench] 2 epoch(s) measured — stopping the process group

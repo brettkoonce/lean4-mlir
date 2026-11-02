@@ -159,6 +159,10 @@ pool backward and join this tier. If Tier 1a holds, they do not.
 - **Tier 2 queued** by `runs/2026-10-30-r50-a3-seeds/queue.sh`: seeds 2 and 3 per arm, JAX s2
   launched 2026-10-30 08:54 UTC. Both confs take `RUN_SEED`; the JAX emitter reads
   `LEAN_MLIR_SEED_OFFSET`.
+- **2026-11-02, Tier 2** (`runs/2026-10-30-r50-a3-seeds/RESULTS.md`). Three seeds per arm: JAX 77.60 /
+  77.66 / 77.64, verified 78.08 / 77.82 / 77.77. Verified leads every seed, but seeds 2 and 3 pair at
+  p = 0.22 and 0.31 (+0.16, +0.13); only seed 1 (ares, pre-10-28 pool backward) separates. The 0.47 does
+  not survive seeds; the Mixup/CutMix placement test is not needed. Book not edited.
 
 ## After each run
 

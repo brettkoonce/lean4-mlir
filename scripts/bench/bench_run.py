@@ -25,7 +25,8 @@ import argparse, json, os, re, signal, socket, subprocess, sys, threading, time
 
 IMAGENET_TRAIN = 1281167
 
-JAX_EPOCH = re.compile(r'^\[Epoch (\d+)\].*?val_top1=\d+/\d+ \(([\d.]+)\).*\[([\d.]+)s train, ([\d.]+)s val\]')
+# val runs every few epochs on some trainers (ViT: 5); the rest end "[Xs train, val skipped]"
+JAX_EPOCH = re.compile(r'^\[Epoch (\d+)\](?:.*?val_top1=\d+/\d+ \(([\d.]+)\))?.*\[([\d.]+)s train, (?:([\d.]+)s val|val skipped)\]')
 JAX_STEP = re.compile(r'^\s+step (\d+)/(\d+)\s+loss=\S+.*\(([\d.]+)ms/step avg\)')
 JAX_SPE = re.compile(r'steps_per_epoch=(\d+)')
 VER_TRAIN_END = re.compile(r'^Epoch (\d+)/(\d+): loss=')
@@ -192,8 +193,8 @@ def main():
                 steps.append((t, cur, g - (cur - 1) * spe if spe else g))
             elif m := JAX_EPOCH.match(line):
                 k = int(m[1])
-                ep_end[k], top1[k] = t, f"{100 * float(m[2]):.3f}"
-                jax_train[k], jax_val[k] = float(m[3]), float(m[4])
+                ep_end[k], top1[k] = t, f"{100 * float(m[2]):.3f}" if m[2] else ""
+                jax_train[k], jax_val[k] = float(m[3]), float(m[4] or 0)
         else:
             if m := VER_STEP.match(line):
                 steps.append((t, cur, int(m[1])))

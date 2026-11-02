@@ -1,0 +1,20 @@
+━━━ seed 2
+  JAX      re-scored 38833  trainer's e100 38829
+  verified bitmap    38911  log's e100     38911
+⛔ s2: a bitmap does not reproduce its run's own count — not pairing
+━━━ seed 3
+  JAX      re-scored 38821  trainer's e100 38821
+  verified bitmap    38886  log's e100     38886
+  n = 50000
+  JAX s3     38821/50000 = 77.64%   95% CI 77.27–78.01
+  verified s3 38886/50000 = 77.77%   95% CI 77.41–78.13
+  unpaired gap: +0.13 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 36834   both wrong 9127   only JAX s3 1987   only verified s3 2052
+  discordant: 4039 of 50000 (8.1%) — the only images the test looks at
+  McNemar exact two-sided p = 0.3139   (chi2 w/ continuity = 1.01)
+  ✗ NOT significant at p<0.05 — the 65 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.

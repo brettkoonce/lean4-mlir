@@ -1,0 +1,21 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793610802.792470 1088724 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793610803.629824 1088724 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+=== r50-a3 jax s2 f32 ===
+eval dtype: f32 forward (EVAL_DTYPE=f32); the module's DT=bfloat16 CONV_DT=bfloat16
+backend=gpu devices=1
+gen=generated/generated_resnet50_imagenet_rsbfaithful.py
+state=/home/skoonce/r50_a3_jax_2611s2/resnet50_imagenet_rsbfaithful.state.npz
+eval protocol: 224px, crop_pct=0.950000 (timm resize-then-crop, antialiased)
+state tuple (from the module): (params, opt_state, bn_state)
+  params=161 bn=106 opt=323 leaves -> 590 total (file has 590) ✓
+loaded step=62500
+scoring the live weights + running BN buffers
+
+── scoring at 224px, crop_pct 0.95 — train (the module's own)
+   per-image top-1 bitmap -> ../runs/2026-10-30-r50-a3-seeds/pairs/jax_s2_f32.bin (50000 bytes, 38833 set) — pair with scripts/demos/mcnemar.py
+   top-1: 38833/50000 = 77.67%   top-5: 46821/50000 = 93.64%
+
+=== FULL VAL (f32 forward (EVAL_DTYPE=f32)) ===
+224px crop 0.95   top-1  77.67%  top-5  93.64%  (50000 images)  train (the module's own)

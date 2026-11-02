@@ -396,13 +396,13 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet34in_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 10 |
-| `resnet34in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 11 |
+| `resnet34in_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 11 |
+| `resnet34in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 12 |
 | `resnet34in_mom256_train_step.mlir` | train_step | `mom256` | momentum, batch 256 | 0.5 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | — |
 | `resnet34in_momdp128_train_step.mlir` | train_step | `momdp128` | momentum, data-parallel, batch 128 per replica | 0.6 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | — |
 | `resnet34in_momdp64_train_step.mlir` | train_step | `momdp64` | momentum, data-parallel, batch 64 per replica | 0.6 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 3 |
 | `resnet34in_momdp64bf16_train_step.mlir` | train_step | `momdp64bf16` | momentum, data-parallel, bf16, batch 64 per replica | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 6 |
-| `resnet34in_momdp64wxbf16_train_step.mlir` | train_step | `momdp64wxbf16` | momentum, data-parallel, no decay on norm/bias, bf16, batch 64 per replica | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 2 |
+| `resnet34in_momdp64wxbf16_train_step.mlir` | train_step | `momdp64wxbf16` | momentum, data-parallel, no decay on norm/bias, bf16, batch 64 per replica | 0.7 | `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` | 3 |
 
 ## `resnet50` — 4 artifacts, 2.5 MB
 
@@ -449,15 +449,15 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet50in160_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 10 |
-| `resnet50in160_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
+| `resnet50in160_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 15 |
+| `resnet50in160_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 17 |
 | `resnet50in160_lamb64bce_train_step.mlir` | train_step | `lamb64bce` | LAMB, BCE loss, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc4x64bce_train_step.mlir` | train_step | `lambacc4x64bce` | LAMB, grad-accum ×4, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 1 |
 | `resnet50in160_lambacc8x64bce_train_step.mlir` | train_step | `lambacc8x64bce` | LAMB, grad-accum ×8, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxbce_train_step.mlir` | train_step | `lambacc8x64wxbce` | LAMB, grad-accum ×8, no decay on norm/bias, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxclipbce_train_step.mlir` | train_step | `lambacc8x64wxclipbce` | LAMB, grad-accum ×8, no decay on norm/bias, grad clip, BCE loss, micro-batch 64 | 1.4 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxclipbcebf16_train_step.mlir` | train_step | `lambacc8x64wxclipbcebf16` | LAMB, grad-accum ×8, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 64 | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
-| `resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipbcebf16` | LAMB, data-parallel, grad-accum ×4, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 10 |
+| `resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipbcebf16` | LAMB, data-parallel, grad-accum ×4, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 15 |
 | `resnet50in160_lambaccdp8x128bce_train_step.mlir` | train_step | `lambaccdp8x128bce` | LAMB, data-parallel, grad-accum ×8, BCE loss, micro-batch 128 per replica | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambaccdp8x64bce_train_step.mlir` | train_step | `lambaccdp8x64bce` | LAMB, data-parallel, grad-accum ×8, BCE loss, micro-batch 64 per replica | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambaccdp8x64wxbce_train_step.mlir` | train_step | `lambaccdp8x64wxbce` | LAMB, data-parallel, grad-accum ×8, no decay on norm/bias, BCE loss, micro-batch 64 per replica | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
@@ -526,7 +526,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitin_emadp256x4wxdropeps0000001bf16_fwd.mlir` | fwd | `emadp256x4wxdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp256x4wxdropeps0000001erfbf16_fwd.mlir` | fwd | `emadp256x4wxdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp256x4wxdropeps0000001smxbf16_fwd.mlir` | fwd | `emadp256x4wxdropeps0000001smxbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
-| `vitin_emadp256x4wxdropeps0000001smxerfbf16_fwd.mlir` | fwd | `emadp256x4wxdropeps0000001smxerfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 4 |
+| `vitin_emadp256x4wxdropeps0000001smxerfbf16_fwd.mlir` | fwd | `emadp256x4wxdropeps0000001smxerfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 5 |
 | `vitin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitin_adam128erf_train_step.mlir` | train_step | `adam128erf` | AdamW, exact GELU, batch 128 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
@@ -561,7 +561,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitin_emadp256x4wxdropeps0000001bf16_train_step.mlir` | train_step | `emadp256x4wxdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 1.5 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp256x4wxdropeps0000001erfbf16_train_step.mlir` | train_step | `emadp256x4wxdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 1.5 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp256x4wxdropeps0000001smxbf16_train_step.mlir` | train_step | `emadp256x4wxdropeps0000001smxbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 1.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
-| `vitin_emadp256x4wxdropeps0000001smxerfbf16_train_step.mlir` | train_step | `emadp256x4wxdropeps0000001smxerfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 1.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
+| `vitin_emadp256x4wxdropeps0000001smxerfbf16_train_step.mlir` | train_step | `emadp256x4wxdropeps0000001smxerfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, max-shifted softmax, exact GELU, bf16, norm ε 0.000001, batch 256 per replica × 4 replicas | 1.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 3 |
 
 ## `vitsin` — 22 artifacts, 27.6 MB
 

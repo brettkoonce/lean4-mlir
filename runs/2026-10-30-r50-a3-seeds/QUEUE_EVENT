@@ -1,0 +1,10 @@
+2026-10-30 00:30:25 UTC  ▶ queue armed; waiting for tier1-sweeps
+2026-10-30 08:54:27 UTC  ✅ tier1-sweeps done (imagenette 35/35)
+2026-10-30 08:54:47 UTC  ▶ launched r50a3-jax-s2 (r50-a3-jax-4gpu, RUN_SEED=2, RUNDIR=runs/2026-10-30-r50-a3-jax-s2)
+2026-10-30 23:29:57 UTC  ✅ r50a3-jax-s2 COMPLETE
+2026-10-30 23:30:17 UTC  ▶ launched r50a3-ver-s2 (r50-a3-wxclip4x128-bf16-4gpu, RUN_SEED=2, RUNDIR=runs/2026-10-30-r50-a3-ver-s2)
+2026-10-31 21:42:30 UTC  ✅ r50a3-ver-s2 COMPLETE
+2026-10-31 21:42:50 UTC  ▶ launched r50a3-jax-s3 (r50-a3-jax-4gpu, RUN_SEED=3, RUNDIR=runs/2026-10-30-r50-a3-jax-s3)
+2026-11-01 12:13:00 UTC  ✅ r50a3-jax-s3 COMPLETE
+2026-11-01 12:13:20 UTC  ▶ launched r50a3-ver-s3 (r50-a3-wxclip4x128-bf16-4gpu, RUN_SEED=3, RUNDIR=runs/2026-10-30-r50-a3-ver-s3)
+2026-11-02 09:12:31 UTC  ✅ r50a3-ver-s3 COMPLETE — queue finished; A2 may resume (paused at e77)

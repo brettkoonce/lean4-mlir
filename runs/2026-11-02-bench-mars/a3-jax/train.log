@@ -1,0 +1,56 @@
+# 2026-11-02 10:05:40 UTC  bash -c 
+  set -u
+  base=/home/skoonce/bench_ckpt/20261102091448/r50-a3-jax-4gpu/resnet50_imagenet_rsbfaithful
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_resnet50_imagenet_rsbfaithful.py
+
+# t_s	line
+0.001	[jax] fresh start
+0.584	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+0.585	I0000 00:00:1793613940.894410 1103510 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1.548	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1.548	I0000 00:00:1793613941.857450 1103510 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2.899	ResNet-50 (ImageNet) · Lean 4 → JAX
+2.899	  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+2.899	
+2.899	ImageNet (1000-class) — tfds streaming pipeline
+2.899	lr=0.008000  batch_size=2048 (4 devices x 512)  epochs=100  params=25557032
+2.899	steps_per_epoch=625  total_steps=62500
+2.899	grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+2.899	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+2.899	Starting training...
+98.994	  step 100/62500  loss=0.606  lr=0.0001  (885.0ms/step avg)
+177.960	  step 200/62500  loss=0.4884  lr=0.0001  (837.0ms/step avg)
+256.919	  step 300/62500  loss=0.3786  lr=0.0001  (821.0ms/step avg)
+335.882	  step 400/62500  loss=0.2803  lr=0.0001  (813.0ms/step avg)
+414.836	  step 500/62500  loss=0.1968  lr=0.0001  (809.0ms/step avg)
+493.782	  step 600/62500  loss=0.1306  lr=0.0001  (805.0ms/step avg)
+513.380	  Running validation ...
+513.380	  eval: f32 forward (evalF32)
+531.239	[Epoch 1] lr=0.0001 loss(train_avg)=0.3844 val_top1=53/50000 (0.0011) val_top5=0.0048 val_loss=7.0362  [502.9s train, 17.9s val]
+531.341	saved 54 param-groups to /home/skoonce/bench_ckpt/20261102091448/r50-a3-jax-4gpu/resnet50_imagenet_rsbfaithful_e1.bin (102228128 bytes)
+531.594	  saved full train state -> /home/skoonce/bench_ckpt/20261102091448/r50-a3-jax-4gpu/resnet50_imagenet_rsbfaithful_e1.state.npz (590 arrays, step=625)
+590.780	  step 700/62500  loss=0.008  lr=0.00168  (829.0ms/step avg)
+669.661	  step 800/62500  loss=0.0079  lr=0.00168  (824.0ms/step avg)
+748.556	  step 900/62500  loss=0.0143  lr=0.00168  (820.0ms/step avg)
+827.465	  step 1000/62500  loss=0.0142  lr=0.00168  (817.0ms/step avg)
+906.354	  step 1100/62500  loss=0.0141  lr=0.00168  (814.0ms/step avg)
+985.256	  step 1200/62500  loss=0.014  lr=0.00168  (812.0ms/step avg)
+1024.563	  Running validation ...
+1024.564	  eval: f32 forward (evalF32)
+1042.169	[Epoch 2] lr=0.00168 loss(train_avg)=0.0123 val_top1=1947/50000 (0.0389) val_top5=0.1226 val_loss=5.8518  [493.0s train, 17.6s val]
+1042.263	saved 54 param-groups to /home/skoonce/bench_ckpt/20261102091448/r50-a3-jax-4gpu/resnet50_imagenet_rsbfaithful_e2.bin (102228128 bytes)
+1042.485	  saved full train state -> /home/skoonce/bench_ckpt/20261102091448/r50-a3-jax-4gpu/resnet50_imagenet_rsbfaithful_e2.state.npz (590 arrays, step=1250)
+1042.485	[bench] 2 epoch(s) measured — stopping the process group
