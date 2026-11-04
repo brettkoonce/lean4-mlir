@@ -1,0 +1,14 @@
+data/lidc/val.bin: 4282 records (N = 2); scoring 200 of them (records_spread.txt); arms: bm3d = out/bm3d/val.eps.f32, bm3dpsd = out/bm3dpsd/val.eps.f32, gauss = out/gauss/val.eps.f32, mse = out/mse/lidc_val.eps.f32, n2n = out/n2n/lidc_val.eps.f32, tv = out/tv/val.eps.f32
+  200/200 records
+
+200 records; texture on 121 calibrated slices, 1511 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    110.86                      (f̄ 0.235 /mm; ∫NPS = residual variance, 40.7 HU rms per slice)
+low dose             85.76   3.398 [ 3.194,  3.589]    1.758 [ 1.596,  1.943]    2.513 [ 2.315,  2.598]      296.74   189.15    13.71
+BM3D                 64.03   0.459 [ 0.412,  0.509]    0.482 [ 0.430,  0.536]    0.175 [ 0.142,  0.185]       23.43    10.12    96.32
+BM3D-PSD             62.57   0.395 [ 0.347,  0.447]    0.425 [ 0.379,  0.474]    0.176 [ 0.158,  0.204]       13.71     5.68   101.94
+Gaussian             63.47   1.496 [ 1.451,  1.547]    1.113 [ 1.022,  1.221]    1.468 [ 1.417,  1.562]       75.22    27.05    59.78
+MSE UNet             49.20   0.662 [ 0.613,  0.710]    0.634 [ 0.614,  0.660]    0.538 [ 0.510,  0.568]       59.74    11.18    60.09
+Noise2Noise          48.59   0.662 [ 0.617,  0.716]    0.628 [ 0.603,  0.657]    0.535 [ 0.507,  0.563]       53.53     8.74    64.05
+TV                   60.93   0.591 [ 0.547,  0.634]    0.606 [ 0.561,  0.658]    0.474 [ 0.421,  0.525]       24.02     9.52    94.86
+(blobs on 200 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)

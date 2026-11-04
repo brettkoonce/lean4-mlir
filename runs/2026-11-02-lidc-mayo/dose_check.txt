@@ -1,0 +1,15 @@
+Mayo chest, all 50 paired patients (data/mayo/val.bin, 4,348 records = every 4th matched slice,
+4,331 with >= 500 flat soft-tissue pixels), scripts/datasets/preprocess_mayo.py's per-slice
+estimator (the median 7x7 local std over flat soft tissue; low - full is exactly the inserted noise).
+Predicted at 10% dose: inserted/own = 3.00, total/own = 3.16.
+
+  all calibrated slices: inserted/own 3.43 [IQR 3.07, 3.76]   total/own 3.57 [3.22, 3.87]
+  per patient (median of the patient's slices): inserted/own 2.73 .. 3.48 .. 4.60,
+      total/own 2.90 .. 3.62 .. 4.69; 21/50 within +-10% of 3.00, 29 above 3.3, none below 2.7
+  the ratio rises with the patient's own noise (r = 0.68) and tube current (r = 0.51):
+      C179 2.73 (169 mA, own 60 HU) ... C267 4.60 (452 mA, own 81 HU)
+  C002 (the 2026-10-07 check, 2.99 / 3.15) sits at the low end of the set.
+
+All 50: Siemens (SOMATOM Definition AS+ 32, Flash 18), B50f, 120 kVp, 1.5 mm; tube current 103-650 mA,
+the low-dose header repeats the full-dose mA (the arm is simulated, not re-scanned); pixel spacing
+0.586-0.977 mm (median 0.742). 17,313 slices matched by z in every patient, none unmatched.

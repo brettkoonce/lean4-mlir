@@ -1,0 +1,185 @@
+{
+ "pairs": "data/lidc10/val.bin",
+ "records": 1605,
+ "arms": {
+  "low dose": {
+   "arm": "low dose",
+   "label": "low dose",
+   "rmse_body": 122.83886131641034,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    9.172413980728672,
+    8.894871411001398,
+    9.430918774152289
+   ],
+   "mean_frequency_ratio": [
+    1.9060688935719872,
+    1.8324232323516318,
+    1.978807066597485
+   ],
+   "local_std_ratio": [
+    4.155821111376352,
+    4.094854494003996,
+    4.243742722770092
+   ],
+   "blobs_per_slice": 497.21183800623055,
+   "invented_per_slice": 414.6323987538941,
+   "dropped_per_slice": 8.174454828660435,
+   "blob_slices": 1605
+  },
+  "bm3d": {
+   "arm": "bm3d",
+   "label": "BM3D",
+   "rmse_body": 68.72931956274299,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    0.5006672148167712,
+    0.4768896687192737,
+    0.5256580310263314
+   ],
+   "mean_frequency_ratio": [
+    0.7825471471330325,
+    0.737401647405589,
+    0.8273177944086265
+   ],
+   "local_std_ratio": [
+    0.2199061528566885,
+    0.20970055190289838,
+    0.23224465108406495
+   ],
+   "blobs_per_slice": 13.366355140186917,
+   "invented_per_slice": 7.9894080996884735,
+   "dropped_per_slice": 74.65794392523364,
+   "blob_slices": 1605
+  },
+  "diff.k0": {
+   "arm": "diff.k0",
+   "label": "diffusion k0",
+   "rmse_body": 73.35343149729364,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    1.1041821417089481,
+    1.0888699560445783,
+    1.1206596614470867
+   ],
+   "mean_frequency_ratio": [
+    0.9708116047086236,
+    0.9514953493965701,
+    0.9922960437105379
+   ],
+   "local_std_ratio": [
+    1.2218939011245251,
+    1.2068658448329266,
+    1.2459259910440241
+   ],
+   "blobs_per_slice": 81.71152647975077,
+   "invented_per_slice": 41.593769470404986,
+   "dropped_per_slice": 39.85233644859813,
+   "blob_slices": 1605
+  },
+  "gauss": {
+   "arm": "gauss",
+   "label": "Gaussian",
+   "rmse_body": 66.005369281124,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    1.385642953647859,
+    1.3673176424625801,
+    1.4050164239615652
+   ],
+   "mean_frequency_ratio": [
+    0.7893224452873883,
+    0.7663779801386449,
+    0.8151313027560512
+   ],
+   "local_std_ratio": [
+    1.3475524287875382,
+    1.3266012225258883,
+    1.3852537328559384
+   ],
+   "blobs_per_slice": 14.537694704049844,
+   "invented_per_slice": 3.9165109034267913,
+   "dropped_per_slice": 68.94953271028038,
+   "blob_slices": 1605
+  },
+  "mse": {
+   "arm": "mse",
+   "label": "MSE UNet",
+   "rmse_body": 46.14474443680835,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    0.5637481346509381,
+    0.5436001211749452,
+    0.5851768826700013
+   ],
+   "mean_frequency_ratio": [
+    0.5161822841918993,
+    0.5072104771284972,
+    0.5270029612361103
+   ],
+   "local_std_ratio": [
+    0.423539616826239,
+    0.4133817593137425,
+    0.4333359243660626
+   ],
+   "blobs_per_slice": 36.56386292834891,
+   "invented_per_slice": 6.621806853582554,
+   "dropped_per_slice": 49.65981308411215,
+   "blob_slices": 1605
+  },
+  "tv": {
+   "arm": "tv",
+   "label": "TV",
+   "rmse_body": 66.50007199555978,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    0.9353559829012624,
+    0.9054813763732736,
+    0.9668737472996161
+   ],
+   "mean_frequency_ratio": [
+    0.861498377523341,
+    0.8425099762293727,
+    0.8817088275554574
+   ],
+   "local_std_ratio": [
+    0.747288789056418,
+    0.7202606883510079,
+    0.7804047472148729
+   ],
+   "blobs_per_slice": 21.54018691588785,
+   "invented_per_slice": 12.44423676012461,
+   "dropped_per_slice": 70.67227414330218,
+   "blob_slices": 1605
+  }
+ },
+ "spread": {},
+ "settings": {
+  "tile": 64,
+  "grid": 32,
+  "blur_px": 8.0,
+  "edge_x_sigma": 2.5,
+  "soft_hu": [
+   -200.0,
+   300.0
+  ],
+  "blob_window_hu": [
+   -1000.0,
+   -300.0
+  ],
+  "blob_threshold": 0.15,
+  "blob_match_px": 3.0
+ }
+}

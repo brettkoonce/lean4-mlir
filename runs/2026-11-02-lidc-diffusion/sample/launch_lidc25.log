@@ -1,0 +1,10 @@
+Build completed successfully (6673 jobs).
+21:07 lidc25 k=0: 2 shards launched on GPUs 0 3
+data/lidc/out/diff/lidc_val.k0.eps.f32: 803 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 71.701101 → sample 53.774343 HU over 803 slices
+21:23 lidc25 k=1: 2 shards launched on GPUs 0 3
+data/lidc/out/diff/lidc_val.k1.eps.f32: 100 samples (k = 1, 50 steps, η = 1.000000); body RMSE floor 85.813956 → sample 74.906480 HU over 100 slices
+21:25 lidc25 k=2: 2 shards launched on GPUs 0 3
+data/lidc/out/diff/lidc_val.k2.eps.f32: 100 samples (k = 2, 50 steps, η = 1.000000); body RMSE floor 85.813956 → sample 74.338963 HU over 100 slices
+21:27 lidc25 k=3: 2 shards launched on GPUs 0 3
+data/lidc/out/diff/lidc_val.k3.eps.f32: 100 samples (k = 3, 50 steps, η = 1.000000); body RMSE floor 85.813956 → sample 74.199284 HU over 100 slices
+sampling done

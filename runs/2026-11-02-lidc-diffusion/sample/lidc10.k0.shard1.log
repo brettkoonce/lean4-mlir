@@ -1,0 +1,171 @@
+I1102 22:06:49.681285  347133 service.cc:154] XLA service 0x71373c01e180 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1102 22:06:49.681329  347133 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1102 22:06:49.683303  347133 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1102 22:06:49.683341  347133 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1102 22:06:49.693495  347133 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+W1102 22:06:50.204146  347292 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.75GiB (12613312184 bytes) by rematerialization; only reduced to 24.98GiB (26818052128 bytes), down from 24.98GiB (26818052128 bytes) originally
+I1102 22:06:51.050903  347253 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 44 bytes spill stores, 44 bytes spill loads
+
+I1102 22:06:51.743884  347275 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 788 bytes spill stores, 788 bytes spill loads
+
+I1102 22:06:54.065371  347259 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 9108 bytes spill stores, 9120 bytes spill loads
+
+I1102 22:06:54.126420  347299 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 892 bytes spill stores, 892 bytes spill loads
+
+I1102 22:06:54.404040  347261 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 28 bytes spill stores, 28 bytes spill loads
+
+I1102 22:06:54.659200  347294 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 536 bytes spill stores, 536 bytes spill loads
+
+I1102 22:06:54.832695  347286 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 56 bytes spill stores, 56 bytes spill loads
+
+W1102 22:06:55.453254  347279 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.79GiB (12655245394 bytes) by rematerialization; only reduced to 24.78GiB (26605256736 bytes), down from 24.78GiB (26605256736 bytes) originally
+I1102 22:06:56.304613  347305 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 32 bytes spill stores, 32 bytes spill loads
+
+W1102 22:07:03.197730  347275 bfc_allocator.cc:590] Allocator (GPU_0_bfc) ran out of memory trying to allocate 24.94GiB (rounded to 26784498176) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+I1102 22:07:03.197803  347275 bfc_allocator.cc:1375] BFCAllocator dump for GPU_0_bfc
+I1102 22:07:03.197807  347275 bfc_allocator.cc:1382] Bin (256): 	Total Chunks: 2, Chunks in use: 2. 512B allocated for chunks. 512B in use in bin. 32B client-requested in use in bin.
+I1102 22:07:03.197813  347275 bfc_allocator.cc:1382] Bin (512): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197817  347275 bfc_allocator.cc:1382] Bin (1024): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197821  347275 bfc_allocator.cc:1382] Bin (2048): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197825  347275 bfc_allocator.cc:1382] Bin (4096): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197839  347275 bfc_allocator.cc:1382] Bin (8192): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197842  347275 bfc_allocator.cc:1382] Bin (16384): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197845  347275 bfc_allocator.cc:1382] Bin (32768): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197847  347275 bfc_allocator.cc:1382] Bin (65536): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197849  347275 bfc_allocator.cc:1382] Bin (131072): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197852  347275 bfc_allocator.cc:1382] Bin (262144): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197855  347275 bfc_allocator.cc:1382] Bin (524288): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197857  347275 bfc_allocator.cc:1382] Bin (1048576): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197860  347275 bfc_allocator.cc:1382] Bin (2097152): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197862  347275 bfc_allocator.cc:1382] Bin (4194304): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197865  347275 bfc_allocator.cc:1382] Bin (8388608): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197867  347275 bfc_allocator.cc:1382] Bin (16777216): 	Total Chunks: 1, Chunks in use: 1. 17.69MiB allocated for chunks. 17.69MiB in use in bin. 17.69MiB client-requested in use in bin.
+I1102 22:07:03.197871  347275 bfc_allocator.cc:1382] Bin (33554432): 	Total Chunks: 2, Chunks in use: 2. 64.00MiB allocated for chunks. 64.00MiB in use in bin. 64.00MiB client-requested in use in bin.
+I1102 22:07:03.197874  347275 bfc_allocator.cc:1382] Bin (67108864): 	Total Chunks: 1, Chunks in use: 1. 112.00MiB allocated for chunks. 112.00MiB in use in bin. 112.00MiB client-requested in use in bin.
+I1102 22:07:03.197877  347275 bfc_allocator.cc:1382] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197879  347275 bfc_allocator.cc:1382] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:03.197882  347275 bfc_allocator.cc:1398] Bin for 24.94GiB was 256.00MiB, Chunk State: 
+I1102 22:07:03.197885  347275 bfc_allocator.cc:1411] Next region of size 12543066112
+I1102 22:07:03.197889  347275 bfc_allocator.cc:1437] InUse at 302000000 of size 117440512 tag lower next 1
+I1102 22:07:03.197892  347275 bfc_allocator.cc:1437] InUse at 309000000 of size 18546688 tag lower next 2
+I1102 22:07:03.197894  347275 bfc_allocator.cc:1437] InUse at 30a1b0000 of size 33554432 tag lower next 3
+I1102 22:07:03.197897  347275 bfc_allocator.cc:1437] InUse at 30c1b0000 of size 256 tag lower next 4
+I1102 22:07:03.197899  347275 bfc_allocator.cc:1437] InUse at 30c1b0100 of size 33554432 tag lower next 5
+I1102 22:07:03.197901  347275 bfc_allocator.cc:1437] InUse at 30e1b0100 of size 256 tag lower next 6
+I1102 22:07:03.197903  347275 bfc_allocator.cc:1437] Free  at 30e1b0200 of size 12339969536 tag central_gap next 18446744073709551615
+I1102 22:07:03.197905  347275 bfc_allocator.cc:1442]      Summary of in-use Chunks by size: 
+I1102 22:07:03.197911  347275 bfc_allocator.cc:1445] 2 Chunks of size 256 totalling 512B
+I1102 22:07:03.197914  347275 bfc_allocator.cc:1445] 1 Chunks of size 18546688 totalling 17.69MiB
+I1102 22:07:03.197916  347275 bfc_allocator.cc:1445] 2 Chunks of size 33554432 totalling 64.00MiB
+I1102 22:07:03.197919  347275 bfc_allocator.cc:1445] 1 Chunks of size 117440512 totalling 112.00MiB
+I1102 22:07:03.197921  347275 bfc_allocator.cc:1465] Sum Total of in-use chunks: 193.69MiB
+I1102 22:07:03.197923  347275 bfc_allocator.cc:1467] Allocator memory summary: rounded request 24.94GiB, total free in pool 11.49GiB, largest free chunk usable by lower end 11.49GiB, unallocated bytes 0B, pool size 11.68GiB, pool limit 11.68GiB
+I1102 22:07:03.197927  347275 bfc_allocator.cc:1478] Spatial partitioning summary for lower end: central gap 11.49GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+I1102 22:07:03.197930  347275 bfc_allocator.cc:1489] Allocator region growth hint: next region allocation target 23.36GiB (growth disabled; fixed-size pool; not an attempted allocation).
+I1102 22:07:03.197933  347275 bfc_allocator.cc:1498] Stats: 
+Limit:                        11.68GiB
+InUse:                       193.69MiB
+MaxInUse:                      8.39GiB
+NumAllocs:                         508
+MaxAllocSize:                  8.32GiB
+Reserved:                           0B
+PeakReserved:                       0B
+PeakAllocated:                          0B
+LargestFreeBlock:             11.49GiB
+
+W1102 22:07:03.197938  347275 bfc_allocator.cc:601] **__________________________________________________________________________________________________
+E1102 22:07:03.481953  347250 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1102 22:07:16.479666  347294 bfc_allocator.cc:590] Allocator (GPU_0_bfc) ran out of memory trying to allocate 24.76GiB (rounded to 26588480000) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+I1102 22:07:16.479724  347294 bfc_allocator.cc:1375] BFCAllocator dump for GPU_0_bfc
+I1102 22:07:16.479729  347294 bfc_allocator.cc:1382] Bin (256): 	Total Chunks: 3, Chunks in use: 3. 768B allocated for chunks. 768B in use in bin. 48B client-requested in use in bin.
+I1102 22:07:16.479735  347294 bfc_allocator.cc:1382] Bin (512): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479740  347294 bfc_allocator.cc:1382] Bin (1024): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479745  347294 bfc_allocator.cc:1382] Bin (2048): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479750  347294 bfc_allocator.cc:1382] Bin (4096): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479756  347294 bfc_allocator.cc:1382] Bin (8192): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479761  347294 bfc_allocator.cc:1382] Bin (16384): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479766  347294 bfc_allocator.cc:1382] Bin (32768): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479771  347294 bfc_allocator.cc:1382] Bin (65536): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479776  347294 bfc_allocator.cc:1382] Bin (131072): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479798  347294 bfc_allocator.cc:1382] Bin (262144): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479802  347294 bfc_allocator.cc:1382] Bin (524288): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479806  347294 bfc_allocator.cc:1382] Bin (1048576): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479809  347294 bfc_allocator.cc:1382] Bin (2097152): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479813  347294 bfc_allocator.cc:1382] Bin (4194304): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479816  347294 bfc_allocator.cc:1382] Bin (8388608): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479819  347294 bfc_allocator.cc:1382] Bin (16777216): 	Total Chunks: 3, Chunks in use: 3. 54.75MiB allocated for chunks. 54.75MiB in use in bin. 54.75MiB client-requested in use in bin.
+I1102 22:07:16.479824  347294 bfc_allocator.cc:1382] Bin (33554432): 	Total Chunks: 2, Chunks in use: 1. 74.94MiB allocated for chunks. 32.00MiB in use in bin. 32.00MiB client-requested in use in bin.
+I1102 22:07:16.479828  347294 bfc_allocator.cc:1382] Bin (67108864): 	Total Chunks: 1, Chunks in use: 1. 64.00MiB allocated for chunks. 64.00MiB in use in bin. 64.00MiB client-requested in use in bin.
+I1102 22:07:16.479832  347294 bfc_allocator.cc:1382] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479835  347294 bfc_allocator.cc:1382] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1102 22:07:16.479838  347294 bfc_allocator.cc:1398] Bin for 24.76GiB was 256.00MiB, Chunk State: 
+I1102 22:07:16.479842  347294 bfc_allocator.cc:1411] Next region of size 12543066112
+I1102 22:07:16.479847  347294 bfc_allocator.cc:1437] InUse at 302000000 of size 67108864 tag lower next 2
+I1102 22:07:16.479850  347294 bfc_allocator.cc:1437] InUse at 306000000 of size 23855104 tag lower next 1
+I1102 22:07:16.479853  347294 bfc_allocator.cc:1437] InUse at 3076c0000 of size 16777216 tag lower next 3
+I1102 22:07:16.479855  347294 bfc_allocator.cc:1437] InUse at 3086c0000 of size 256 tag lower next 7
+I1102 22:07:16.479858  347294 bfc_allocator.cc:1437] InUse at 3086c0100 of size 16777216 tag lower next 8
+I1102 22:07:16.479860  347294 bfc_allocator.cc:1437] InUse at 3096c0100 of size 256 tag lower next 9
+I1102 22:07:16.479862  347294 bfc_allocator.cc:1437] Free  at 3096c0200 of size 45022976 tag lower next 4
+I1102 22:07:16.479865  347294 bfc_allocator.cc:1437] InUse at 30c1b0100 of size 33554432 tag lower next 5
+I1102 22:07:16.479867  347294 bfc_allocator.cc:1437] InUse at 30e1b0100 of size 256 tag lower next 6
+I1102 22:07:16.479870  347294 bfc_allocator.cc:1437] Free  at 30e1b0200 of size 12339969536 tag central_gap next 18446744073709551615
+I1102 22:07:16.479873  347294 bfc_allocator.cc:1442]      Summary of in-use Chunks by size: 
+I1102 22:07:16.479875  347294 bfc_allocator.cc:1445] 3 Chunks of size 256 totalling 768B
+I1102 22:07:16.479879  347294 bfc_allocator.cc:1445] 2 Chunks of size 16777216 totalling 32.00MiB
+I1102 22:07:16.479882  347294 bfc_allocator.cc:1445] 1 Chunks of size 23855104 totalling 22.75MiB
+I1102 22:07:16.479885  347294 bfc_allocator.cc:1445] 1 Chunks of size 33554432 totalling 32.00MiB
+I1102 22:07:16.479888  347294 bfc_allocator.cc:1445] 1 Chunks of size 67108864 totalling 64.00MiB
+I1102 22:07:16.479891  347294 bfc_allocator.cc:1465] Sum Total of in-use chunks: 150.75MiB
+I1102 22:07:16.479898  347294 bfc_allocator.cc:1467] Allocator memory summary: rounded request 24.76GiB, total free in pool 11.53GiB, largest free chunk usable by lower end 11.49GiB, unallocated bytes 0B, pool size 11.68GiB, pool limit 11.68GiB
+I1102 22:07:16.479902  347294 bfc_allocator.cc:1478] Spatial partitioning summary for lower end: central gap 11.49GiB, largest same-end binned free chunk 42.94MiB, largest binned free chunk from any end 42.94MiB. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+I1102 22:07:16.479907  347294 bfc_allocator.cc:1489] Allocator region growth hint: next region allocation target 23.36GiB (growth disabled; fixed-size pool; not an attempted allocation).
+I1102 22:07:16.479910  347294 bfc_allocator.cc:1498] Stats: 
+Limit:                        11.68GiB
+InUse:                       150.75MiB
+MaxInUse:                      8.39GiB
+NumAllocs:                        2140
+MaxAllocSize:                  8.32GiB
+Reserved:                           0B
+PeakReserved:                       0B
+PeakAllocated:                          0B
+LargestFreeBlock:             11.49GiB
+
+W1102 22:07:16.479917  347294 bfc_allocator.cc:601] **__________________________________________________________________________________________________
+E1102 22:07:17.935438  347265 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__diff_s0_lidc10_fwd_eval512_b4.mlir (@forward_eval, 1 outputs, 1 replica) in 29616 ms
+UNet CT denoiser (LIDC, 1-channel HU to noise) diff s0 lidc10: 7851617 params; data/lidc10/val.bin: 4282 records (N = 1), 1605 requested, 0 already in data/lidc10/out/diff/lidc10_val.k0.eps.f32.records, 401 to draw in shard 1/4; 50 DDIM steps, η = 1.000000, k = 0, batch 4
+  [1/401] record 8: body RMSE floor 62.056216 → sample 32.148059 HU; pooled 62.056216 → 32.148059; 4286 ms/slice
+  [2/401] record 39: body RMSE floor 77.633043 → sample 38.167820 HU; pooled 71.088070 → 35.600982; 2187 ms/slice
+  [3/401] record 45: body RMSE floor 82.772360 → sample 41.003885 HU; pooled 75.419572 → 37.596953; 1488 ms/slice
+  [20/401] record 205: body RMSE floor 95.914435 → sample 44.169280 HU; pooled 88.065970 → 41.487681; 1126 ms/slice
+  [40/401] record 378: body RMSE floor 94.085618 → sample 43.895589 HU; pooled 115.676555 → 56.471294; 1130 ms/slice
+  [60/401] record 507: body RMSE floor 38.036152 → sample 18.746834 HU; pooled 105.071995 → 51.069636; 1130 ms/slice
+  [80/401] record 713: body RMSE floor 87.326256 → sample 38.246116 HU; pooled 104.959525 → 51.748667; 1129 ms/slice
+  [100/401] record 939: body RMSE floor 42.321661 → sample 22.936073 HU; pooled 104.644218 → 51.484837; 1127 ms/slice
+  [120/401] record 1121: body RMSE floor 48.246684 → sample 23.996593 HU; pooled 103.482051 → 50.262078; 1127 ms/slice
+  [140/401] record 1265: body RMSE floor 66.564821 → sample 33.436621 HU; pooled 99.456443 → 48.166467; 1128 ms/slice
+  [160/401] record 1458: body RMSE floor 142.465304 → sample 65.562440 HU; pooled 98.957923 → 47.537547; 1128 ms/slice
+  [180/401] record 1677: body RMSE floor 80.202666 → sample 39.316151 HU; pooled 103.063326 → 49.656908; 1128 ms/slice
+  [200/401] record 1864: body RMSE floor 188.991616 → sample 91.440730 HU; pooled 106.416577 → 51.547678; 1128 ms/slice
+  [220/401] record 2140: body RMSE floor 87.195532 → sample 41.417134 HU; pooled 109.319537 → 53.782160; 1128 ms/slice
+  [240/401] record 2366: body RMSE floor 113.021483 → sample 52.588137 HU; pooled 108.818848 → 53.269650; 1128 ms/slice
+  [260/401] record 2549: body RMSE floor 216.299435 → sample 112.171593 HU; pooled 112.863474 → 56.784386; 1129 ms/slice
+  [280/401] record 2775: body RMSE floor 83.234009 → sample 43.517680 HU; pooled 127.302726 → 75.933949; 1129 ms/slice
+  [300/401] record 3035: body RMSE floor 94.233430 → sample 44.684776 HU; pooled 125.448216 → 74.369681; 1129 ms/slice
+  [320/401] record 3283: body RMSE floor 193.177254 → sample 111.685903 HU; pooled 125.022824 → 73.572806; 1129 ms/slice
+  [340/401] record 3645: body RMSE floor 94.470696 → sample 49.948999 HU; pooled 129.905036 → 80.335270; 1129 ms/slice
+  [360/401] record 3872: body RMSE floor 96.426915 → sample 51.863676 HU; pooled 129.557229 → 79.515094; 1129 ms/slice
+  [380/401] record 3994: body RMSE floor 61.834434 → sample 34.365648 HU; pooled 127.094726 → 77.911381; 1129 ms/slice
+  [400/401] record 4252: body RMSE floor 72.397661 → sample 35.098976 HU; pooled 125.605214 → 76.618549; 1128 ms/slice
+  [401/401] record 4258: body RMSE floor 79.727874 → sample 37.180657 HU; pooled 125.518105 → 76.550508; 1136 ms/slice
+data/lidc10/out/diff/lidc10_val.k0.eps.f32: 401 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 125.518105 → sample 76.550508 HU over 401 slices

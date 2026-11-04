@@ -1,0 +1,5 @@
+data/lidc/val.bin: 200 slices (200 of 4282 records scored) — low-dose floor → denoised
+  RMSE body     85.76 →   73.79 HU
+  RMSE whole    72.60 →   63.61 HU
+  PSNR          38.22 →   41.11 dB (4096 HU range, mean over slices)
+  SSIM         0.7872 →  0.7974 (soft-tissue window)

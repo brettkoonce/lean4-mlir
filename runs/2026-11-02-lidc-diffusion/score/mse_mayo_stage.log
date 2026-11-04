@@ -1,0 +1,3 @@
+rmse HU vs the scanned slice: low-dose floor → denoised (mse, seed 0, step 30000)
+  data/mayo/val.bin (4348 slices): whole 202.072810 → 94.987564, body 233.066400 → 109.396443
+scores in runs/2026-11-02-lidc-diffusion/score/

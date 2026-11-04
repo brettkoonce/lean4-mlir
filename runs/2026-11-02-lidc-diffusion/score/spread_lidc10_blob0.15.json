@@ -1,0 +1,280 @@
+{
+ "pairs": "data/lidc10/val.bin",
+ "records": 200,
+ "arms": {
+  "low dose": {
+   "arm": "low dose",
+   "label": "low dose",
+   "rmse_body": 146.4532401708033,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    8.161387216009802,
+    7.542504131412261,
+    8.738943653836673
+   ],
+   "mean_frequency_ratio": [
+    1.944343555354937,
+    1.7368821399181376,
+    2.1844830995516604
+   ],
+   "local_std_ratio": [
+    4.053220928755826,
+    3.689441771173831,
+    4.150087057842145
+   ],
+   "blobs_per_slice": 683.89,
+   "invented_per_slice": 563.74,
+   "dropped_per_slice": 11.79,
+   "blob_slices": 200
+  },
+  "bm3d": {
+   "arm": "bm3d",
+   "label": "BM3D",
+   "rmse_body": 93.7332081507221,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    0.48281718373527377,
+    0.42460533903895903,
+    0.54509578572307
+   ],
+   "mean_frequency_ratio": [
+    0.6872810694511117,
+    0.5630367291357217,
+    0.8076440770036062
+   ],
+   "local_std_ratio": [
+    0.20333363734906593,
+    0.1698399574497912,
+    0.22904689953662397
+   ],
+   "blobs_per_slice": 33.41,
+   "invented_per_slice": 19.655,
+   "dropped_per_slice": 96.8,
+   "blob_slices": 200
+  },
+  "diff.k0": {
+   "arm": "diff.k0",
+   "label": "diffusion k0",
+   "rmse_body": 101.14674900812844,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.1105664621862499,
+    1.0703811810413608,
+    1.1521796741961865
+   ],
+   "mean_frequency_ratio": [
+    0.9903491933410751,
+    0.9410268807973763,
+    1.0503615156449824
+   ],
+   "local_std_ratio": [
+    1.1987993629475815,
+    1.1133394570938326,
+    1.2959270450200784
+   ],
+   "blobs_per_slice": 111.185,
+   "invented_per_slice": 59.75,
+   "dropped_per_slice": 58.995,
+   "blob_slices": 200
+  },
+  "diff.k1": {
+   "arm": "diff.k1",
+   "label": "diffusion k1",
+   "rmse_body": 101.34671603517552,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.1087246408349056,
+    1.06802931453355,
+    1.1498859467695874
+   ],
+   "mean_frequency_ratio": [
+    0.9948082881811461,
+    0.9488807405283021,
+    1.0501171747659976
+   ],
+   "local_std_ratio": [
+    1.215878071785592,
+    1.1411578641926388,
+    1.2679766974241675
+   ],
+   "blobs_per_slice": 111.965,
+   "invented_per_slice": 60.035,
+   "dropped_per_slice": 58.015,
+   "blob_slices": 200
+  },
+  "diff.k2": {
+   "arm": "diff.k2",
+   "label": "diffusion k2",
+   "rmse_body": 100.95011747331606,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.1204539553288193,
+    1.0795896156100195,
+    1.162785909695885
+   ],
+   "mean_frequency_ratio": [
+    0.9946730569957685,
+    0.9464635464238823,
+    1.0547504978669442
+   ],
+   "local_std_ratio": [
+    1.2049745108044556,
+    1.146364592386605,
+    1.255992124271979
+   ],
+   "blobs_per_slice": 110.8,
+   "invented_per_slice": 58.82,
+   "dropped_per_slice": 58.56,
+   "blob_slices": 200
+  },
+  "diff.k3": {
+   "arm": "diff.k3",
+   "label": "diffusion k3",
+   "rmse_body": 101.00405635095909,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.1028603550597382,
+    1.0636371381447636,
+    1.147387282525043
+   ],
+   "mean_frequency_ratio": [
+    0.9809865655558586,
+    0.931153731049772,
+    1.041592372451231
+   ],
+   "local_std_ratio": [
+    1.1920252882253335,
+    1.1510400881269103,
+    1.2891849212204705
+   ],
+   "blobs_per_slice": 112.63,
+   "invented_per_slice": 60.375,
+   "dropped_per_slice": 58.34,
+   "blob_slices": 200
+  },
+  "gauss": {
+   "arm": "gauss",
+   "label": "Gaussian",
+   "rmse_body": 83.09631342159874,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.2952105390238562,
+    1.2582364404798412,
+    1.3427264437412265
+   ],
+   "mean_frequency_ratio": [
+    0.7863489867757419,
+    0.7164056989367615,
+    0.8647028846678417
+   ],
+   "local_std_ratio": [
+    1.286123165311557,
+    1.2235357069250952,
+    1.3967870565830067
+   ],
+   "blobs_per_slice": 19.335,
+   "invented_per_slice": 7.265,
+   "dropped_per_slice": 97.61,
+   "blob_slices": 200
+  },
+  "mse": {
+   "arm": "mse",
+   "label": "MSE UNet",
+   "rmse_body": 61.619627528916,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    0.5908066230868755,
+    0.5286335745502471,
+    0.6527546867207145
+   ],
+   "mean_frequency_ratio": [
+    0.5159594572441506,
+    0.4903041006806555,
+    0.5525238015311095
+   ],
+   "local_std_ratio": [
+    0.4133817593137425,
+    0.38865671364348514,
+    0.43905371653900105
+   ],
+   "blobs_per_slice": 37.54,
+   "invented_per_slice": 7.445,
+   "dropped_per_slice": 79.66,
+   "blob_slices": 200
+  },
+  "tv": {
+   "arm": "tv",
+   "label": "TV",
+   "rmse_body": 86.67966960485323,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    0.8672503892475043,
+    0.784242120570688,
+    0.9645200404289848
+   ],
+   "mean_frequency_ratio": [
+    0.8388774979515173,
+    0.7773901982292358,
+    0.8978936897038082
+   ],
+   "local_std_ratio": [
+    0.677824030922568,
+    0.5914373425799117,
+    0.7837555394102599
+   ],
+   "blobs_per_slice": 46.985,
+   "invented_per_slice": 28.07,
+   "dropped_per_slice": 90.925,
+   "blob_slices": 200
+  }
+ },
+ "spread": {
+  "diff": {
+   "samples": 4,
+   "std_nodule": 32.185723558380374,
+   "std_lung": 16.693322018630983,
+   "std_soft": 23.17363396799273,
+   "rmse_body_mean_of_samples": 78.10300498782274,
+   "rmse_body_samples": [
+    101.14674900812844,
+    101.34671603517552,
+    100.95011747331606,
+    101.00405635095909
+   ]
+  }
+ },
+ "settings": {
+  "tile": 64,
+  "grid": 32,
+  "blur_px": 8.0,
+  "edge_x_sigma": 2.5,
+  "soft_hu": [
+   -200.0,
+   300.0
+  ],
+  "blob_window_hu": [
+   -1000.0,
+   -300.0
+  ],
+  "blob_threshold": 0.15,
+  "blob_match_px": 3.0
+ }
+}

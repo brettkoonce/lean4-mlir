@@ -1,0 +1,48 @@
+The 10% generator's samples on Mayo (data/mayo/out/diff/mayo_val.k0.eps.f32, 1,000 records = records_mayo.txt),
+per-record body RMSE (full >= -950) against the low-dose floor and the 10% MSE net, 2026-11-02 22:35:
+
+  percentiles (floor / sample / mse): p50 202/132/82   p90 320/559/162   p99 470/1970/303   max 729/4214/514
+  sqrt(mean of squares) over the 1,000: floor 230, sample 455, mse 111
+  the sample is worse than the floor on 274 of 1,000 records
+
+  worst 12 by sample RMSE (record, patient, slice, floor, sample, mse, max |sample| HU, inserted sigma, mA):
+   3835 C258  320  floor    729  sample    4214  mse    514  max|s|    27569  sig_add  821.2  mA  343
+   3831 C258  304  floor    686  sample    3937  mse    487  max|s|    28433  sig_add  747.5  mA  343
+   4002 C267  332  floor    534  sample    3045  mse    395  max|s|    23749  sig_add  634.7  mA  452
+   3827 C258  288  floor    573  sample    2908  mse    389  max|s|    24952  sig_add  577.5  mA  343
+    759 C052  340  floor    481  sample    2873  mse    346  max|s|    25293  sig_add  413.5  mA  289
+   3998 C267  316  floor    518  sample    2710  mse    378  max|s|    23968  sig_add  558.9  mA  452
+   4095 C268  368  floor    402  sample    2300  mse    266  max|s|    20492  sig_add  334.7  mA  161
+    574 C030  300  floor    468  sample    2144  mse    360  max|s|    18365  sig_add  531.2  mA  650
+   1839 C130  376  floor    398  sample    2143  mse    298  max|s|    20507  sig_add  397.6  mA  388
+   1657 C124  380  floor    393  sample    2098  mse    288  max|s|    19008  sig_add  373.1  mA  298
+    755 C052  324  floor    377  sample    1969  mse    258  max|s|    23797  sig_add  330.0  mA  289
+   2959 C219  340  floor    351  sample    1837  mse    213  max|s|    18961  sig_add  363.2  mA  255
+  patients with the largest median sample/floor: C030 3.02, C130 2.06, C124 1.93, C267 1.92, C232 1.57, C296 1.46
+  smallest: C162 0.50, C099 0.50, C227 0.51, C202 0.53
+
+Reading: the worst slices are the lower chest and shoulders of large patients, where Mayo's insertion puts 300–800 HU
+of noise — far outside the 10% build's training range (median added sigma 117 HU) — and there the ancestral DDIM
+sampler diverges (|sample| in the tens of thousands of HU). The MSE net degrades gracefully on the same slices
+(514 at worst). Where the noise is within range the generator works (median slice 202 -> 132 HU). Two mitigations,
+neither applied here: clamp the sample to the HU range each step (bounds, does not fix, the tail), or train across
+a wider dose range. The 25%-trained generator on the same slices does not diverge (its sample stays near the floor,
+median ratio ~0.97) — it draws residuals at its own 62 HU scale and leaves the rest.
+
+Per-record medians over 40 records (the first table of the analysis): mean(low - full) over the body +7.5 HU on
+Mayo (0.7 on the 10% val); mean(pred - true) -25 (diff10), -11 (diff25), -9 (mse10), -8 (mse25) HU; rms(pred - true)
+125 / 124 / 85 / 103.
+
+By the slice's inserted-noise level (body std of low - full), 2026-11-02 23:20; the 10% LIDC training build's added
+noise is 117 HU at the median and 341 at its maximum (3 x sigma_full). Medians of per-record body RMSE:
+
+  bin (HU)        n   floor   diff10  diff25  mse10   | worse than floor: diff10 diff25 mse10
+     0-120      46     110       69      68     49   |      0%      0%     0%
+   120-180     344     156       93      94     64   |      1%      0%     0%
+   180-250     353     212      158     134     90   |     24%      0%     0%
+   250-350     194     286      400     203    132   |     64%      7%     0%
+   350-inf      63     391      793     317    194   |    100%     25%     0%
+
+Below the training median the 10% generator behaves as on LIDC (69 against the MSE net's 49: ~sqrt 2). From about
+180 HU — still inside the training range, but the top of it, and sharper-kernel noise — it starts to run away, and
+above 250 HU it is worse than doing nothing on most slices. The MSE net never is.

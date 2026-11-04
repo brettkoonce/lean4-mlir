@@ -1,0 +1,29 @@
+data/mayo/val.bin: 4348 records (N = 1); scoring 1000 of them (records_mayo.txt); arms: bm3d = out/bm3d/val.eps.f32, diff.k0 = out/diff/mayo_val.k0.eps.f32, diff25.k0 = out/diff25/mayo_val.k0.eps.f32, gauss = out/gauss/val.eps.f32, mse = out/mse/mayo_val.eps.f32, mse25 = out/mse25/mayo_val.eps.f32, n2n25 = out/n2n25/mayo_val.eps.f32, tv = out/tv/val.eps.f32
+  200/1000 records
+  400/1000 records
+  600/1000 records
+  800/1000 records
+  1000/1000 records
+
+1000 records; texture on 244 calibrated slices, 793 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    162.22                      (f̄ 0.438 /mm; ∫NPS = residual variance, 59.2 HU rms per slice)
+low dose            235.04  13.954 [12.601, 15.593]    1.102 [ 1.085,  1.121]    3.672 [ 3.574,  3.701]     2113.21  1902.78    11.07
+BM3D                141.15   2.448 [ 1.196,  4.043]    1.021 [ 0.989,  1.046]    0.329 [ 0.277,  0.366]       36.25    25.04   152.29
+diffusion k0        457.83  55.320 [14.367, 112.511]    1.068 [ 1.051,  1.098]    1.390 [ 1.326,  1.444]      418.21   329.46    91.98
+diffusion, 25 % k0    227.12  18.159 [ 5.680, 35.961]    1.006 [ 0.982,  1.056]    1.518 [ 1.482,  1.575]      294.14   217.04    95.77
+Gaussian             93.28   1.012 [ 0.870,  1.180]    0.517 [ 0.491,  0.545]    0.844 [ 0.829,  0.853]       11.71     4.93   154.45
+MSE UNet            112.08   1.820 [ 1.162,  2.576]    1.109 [ 1.086,  1.134]    0.804 [ 0.762,  0.873]      135.06    75.81   108.75
+MSE UNet, 25 %      137.52   3.162 [ 2.252,  4.332]    1.113 [ 1.087,  1.148]    1.246 [ 1.195,  1.294]      316.60   221.32    79.05
+Noise2Noise, 25 %    137.08   3.266 [ 2.197,  4.468]    1.116 [ 1.090,  1.148]    1.226 [ 1.180,  1.274]      265.75   182.38    88.93
+TV                  125.99   2.212 [ 1.446,  3.147]    0.893 [ 0.860,  0.917]    0.809 [ 0.774,  0.862]      100.19    76.84   138.91
+(blobs on 1000 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+→ runs/2026-11-02-lidc-diffusion/score/texture_mayo.json
+Traceback (most recent call last):
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir-lidc/scripts/demos/lidc_texture.py", line 374, in <module>
+    main()
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir-lidc/scripts/demos/lidc_texture.py", line 302, in main
+    for r in tex_rows:
+             ^^^^^^^^
+NameError: name 'tex_rows' is not defined
+MAYO_TABLES_DONE

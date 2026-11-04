@@ -1,0 +1,5 @@
+data/mayo/val.bin: 4348 slices — low-dose floor → denoised
+  RMSE body    233.07 →  133.68 HU
+  RMSE whole   202.07 →  118.63 HU
+  PSNR          27.22 →   32.53 dB (4096 HU range, mean over slices; 2 with identical arms left out)
+  SSIM         0.6558 →  0.7102 (soft-tissue window)

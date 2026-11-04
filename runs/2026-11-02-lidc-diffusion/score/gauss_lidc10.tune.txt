@@ -1,0 +1,10 @@
+gauss: tuned on 48 slices of data/lidc10/train.bin (body RMSE, floor 147.69 HU)
+  0.3     145.94 HU
+  0.4     130.24 HU
+  0.5     106.69 HU
+  0.6      91.07 HU
+  0.75     80.94 HU
+  1.0      77.58 HU
+  1.5      86.09 HU
+  chosen 1.0
+  4282 val records → data/lidc10/out/gauss/val.eps.f32

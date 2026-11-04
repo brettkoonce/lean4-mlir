@@ -1,0 +1,9 @@
+tv: tuned on 48 slices of data/lidc10/train.bin (body RMSE, floor 147.69 HU)
+  0.01    136.53 HU
+  0.02    126.69 HU
+  0.03    118.07 HU
+  0.05    104.06 HU
+  0.08     89.54 HU
+  0.12     78.71 HU
+  chosen 0.12 ⚠ at the grid's edge
+  4348 val records → data/mayo/out/tv/val.eps.f32

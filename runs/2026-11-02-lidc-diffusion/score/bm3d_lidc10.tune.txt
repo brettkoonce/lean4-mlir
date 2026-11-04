@@ -1,0 +1,11 @@
+bm3d: tuned on 48 slices of data/lidc10/train.bin (body RMSE, floor 147.69 HU)
+  0.04    142.73 HU
+  0.06    136.33 HU
+  0.08    128.69 HU
+  0.1     120.76 HU
+  0.13    109.47 HU
+  0.16     99.85 HU
+  0.2      90.03 HU
+  0.25     81.81 HU
+  chosen 0.25 ⚠ at the grid's edge
+  4282 val records → data/lidc10/out/bm3d/val.eps.f32

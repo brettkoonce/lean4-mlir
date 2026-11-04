@@ -1,0 +1,2 @@
+runs/2026-11-02-lidc-diffusion/score.sh: line 38: continue: only meaningful in a `for', `while', or `until' loop
+runs/2026-11-02-lidc-diffusion/score.sh: line 41: syntax error near unexpected token `&'

@@ -1,0 +1,24 @@
+data/lidc/val.bin: 4282 records (N = 2); scoring 1605 of them (records_val.txt); arms: bm3d = out/bm3d/val.eps.f32, bm3dpsd = out/bm3dpsd/val.eps.f32, gauss = out/gauss/val.eps.f32, mse = out/mse/lidc_val.eps.f32, n2n = out/n2n/lidc_val.eps.f32, tv = out/tv/val.eps.f32
+  200/1605 records
+  400/1605 records
+  600/1605 records
+  800/1605 records
+  1000/1605 records
+  1200/1605 records
+  1400/1605 records
+  1600/1605 records
+  1605/1605 records
+
+1605 records; texture on 1029 calibrated slices, 9960 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    350.41                      (f̄ 0.246 /mm; ∫NPS = residual variance, 40.2 HU rms per slice)
+low dose             72.00   3.727 [ 3.637,  3.814]    1.745 [ 1.686,  1.802]    2.583 [ 2.553,  2.633]      883.63   526.21    25.23
+BM3D                 49.42   0.434 [ 0.417,  0.452]    0.480 [ 0.462,  0.499]    0.172 [ 0.162,  0.182]       43.42     4.86   305.59
+BM3D-PSD             49.34   0.379 [ 0.362,  0.396]    0.473 [ 0.452,  0.496]    0.178 [ 0.173,  0.188]       31.63     3.61   317.53
+Gaussian             50.51   1.591 [ 1.570,  1.612]    1.124 [ 1.094,  1.159]    1.536 [ 1.518,  1.557]      370.43   125.20    94.07
+MSE UNet             37.48   0.639 [ 0.621,  0.657]    0.634 [ 0.627,  0.643]    0.539 [ 0.532,  0.545]      210.02    21.48   150.51
+Noise2Noise          37.13   0.639 [ 0.622,  0.655]    0.630 [ 0.622,  0.639]    0.531 [ 0.526,  0.538]      195.99    17.74   160.83
+TV                   48.21   0.594 [ 0.581,  0.607]    0.617 [ 0.602,  0.633]    0.504 [ 0.490,  0.524]       69.38     5.68   276.78
+(blobs on 1605 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.08)
+→ runs/2026-11-02-lidc-texture/rows.json
+→ runs/2026-11-02-lidc-texture/nps.csv (radial NPS, HU²·mm², mean over slices)
