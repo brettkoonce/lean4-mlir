@@ -1,0 +1,4 @@
+Build completed successfully (6679 jobs).
+launched msemix on GPU 0 → runs/2026-11-03-lidc-range/msemix/train.log
+launched diffmix on GPU 1 → runs/2026-11-03-lidc-range/diffmix/train.log
+launched diffmixsig on GPU 2 → runs/2026-11-03-lidc-range/diffmixsig/train.log

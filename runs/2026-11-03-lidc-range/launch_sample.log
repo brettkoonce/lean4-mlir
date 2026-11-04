@@ -1,0 +1,30 @@
+Build completed successfully (6673 jobs).
+06:13 lidc25-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmix/lidc_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 72.770995 → sample 62.797074 HU over 402 slices
+06:22 lidc10-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmix/lidc10_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 123.994268 → sample 84.125452 HU over 402 slices
+06:30 mayo-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmix/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 232.442931 → sample 171.079378 HU over 250 slices
+06:35 lidc25-diffmixsig k=0: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmixsig/lidc_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 72.770995 → sample 58.414160 HU over 402 slices
+06:44 lidc10-diffmixsig k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmixsig/lidc10_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 123.994268 → sample 80.948714 HU over 402 slices
+06:52 mayo-diffmixsig k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmixsig/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 232.442931 → sample 144.252824 HU over 250 slices
+06:57 mix-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/lidcmix/out/diffmix/lidcmix_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 142.296499 → sample 86.429197 HU over 402 slices
+07:06 mix-diffmixsig k=0: 4 shards on GPUs 0 1 2 3
+data/lidcmix/out/diffmixsig/lidcmix_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 142.296499 → sample 86.511439 HU over 402 slices
+07:14 lidc25-diffmixsig k=1: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmixsig/lidc_val.k1.eps.f32: 50 samples (k = 1, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 82.502402 → sample 74.004866 HU over 50 slices
+07:15 lidc10-diffmixsig k=1: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmixsig/lidc10_val.k1.eps.f32: 50 samples (k = 1, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 142.424964 → sample 101.418253 HU over 50 slices
+07:17 lidc25-diffmixsig k=2: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmixsig/lidc_val.k2.eps.f32: 50 samples (k = 2, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 82.502402 → sample 74.668770 HU over 50 slices
+07:19 lidc10-diffmixsig k=2: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmixsig/lidc10_val.k2.eps.f32: 50 samples (k = 2, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 142.424964 → sample 101.706690 HU over 50 slices
+07:20 lidc25-diffmixsig k=3: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmixsig/lidc_val.k3.eps.f32: 50 samples (k = 3, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 82.502402 → sample 73.663727 HU over 50 slices
+07:22 lidc10-diffmixsig k=3: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmixsig/lidc10_val.k3.eps.f32: 50 samples (k = 3, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 142.424964 → sample 102.163764 HU over 50 slices
+sampling done

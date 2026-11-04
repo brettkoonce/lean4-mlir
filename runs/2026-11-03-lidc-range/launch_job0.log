@@ -1,0 +1,4 @@
+Build completed successfully (6673 jobs).
+00:08 mayo-diff10-clamp k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diff_clamp/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 232.442931 → sample 272.177813 HU over 250 slices; clamp moved 108935489 of 3276800000 pixel-steps
+sampling done

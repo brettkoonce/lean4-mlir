@@ -1,0 +1,10 @@
+Build completed successfully (6673 jobs).
+05:38 lidc25-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmix/lidc_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 72.770995 → sample 124.848119 HU over 402 slices; clamp moved 57042831 of 5269094400 pixel-steps
+05:46 lidc10-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diffmix/lidc10_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 123.994268 → sample 149.503336 HU over 402 slices; clamp moved 56456965 of 5269094400 pixel-steps
+05:54 mayo-diffmix k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmix/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 232.442931 → sample 225.838873 HU over 250 slices; clamp moved 39663019 of 3276800000 pixel-steps
+06:00 lidc25-diffmixsig k=0: 4 shards on GPUs 0 1 2 3
+data/lidc/out/diffmixsig/lidc_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 72.770995 → sample 95.685701 HU over 402 slices; clamp moved 62162606 of 5269094400 pixel-steps
+06:09 lidc10-diffmixsig k=0: 4 shards on GPUs 0 1 2 3

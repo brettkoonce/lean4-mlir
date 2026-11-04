@@ -1,0 +1,30 @@
+data/lidc/val.bin: 1605 slices (1605 of 4282 records scored) — low-dose floor → denoised
+  RMSE body     72.00 →   61.62 HU
+  RMSE whole    61.28 →   52.85 HU
+  PSNR          38.69 →   40.38 dB (4096 HU range, mean over slices)
+  SSIM         0.7907 →  0.7860 (soft-tissue window)
+  — sigma_add_hu in [-inf, 60.0): 845 slices
+  RMSE body     42.04 →   34.84 HU
+  RMSE whole    35.77 →   29.66 HU
+  PSNR          41.59 →   43.13 dB (4096 HU range, mean over slices)
+  SSIM         0.8081 →  0.8180 (soft-tissue window)
+  — sigma_add_hu in [60.0, 90.0): 477 slices
+  RMSE body     66.26 →   51.82 HU
+  RMSE whole    57.47 →   45.29 HU
+  PSNR          37.25 →   39.32 dB (4096 HU range, mean over slices)
+  SSIM         0.7827 →  0.7831 (soft-tissue window)
+  — sigma_add_hu in [90.0, 120.0): 165 slices
+  RMSE body     93.21 →   73.18 HU
+  RMSE whole    80.91 →   64.07 HU
+  PSNR          34.18 →   36.20 dB (4096 HU range, mean over slices)
+  SSIM         0.7426 →  0.7097 (soft-tissue window)
+  — sigma_add_hu in [120.0, 180.0): 97 slices
+  RMSE body    147.66 →  138.62 HU
+  RMSE whole   121.98 →  115.81 HU
+  PSNR          30.72 →   31.67 dB (4096 HU range, mean over slices)
+  SSIM         0.7686 →  0.6802 (soft-tissue window)
+  — sigma_add_hu in [180.0, inf): 21 slices
+  RMSE body    247.20 →  235.30 HU
+  RMSE whole   200.94 →  193.13 HU
+  PSNR          26.86 →   27.03 dB (4096 HU range, mean over slices)
+  SSIM         0.7537 →  0.6540 (soft-tissue window)

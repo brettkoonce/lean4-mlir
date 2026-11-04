@@ -1,0 +1,22 @@
+split identical to data/lidc
+Build completed successfully (16 jobs).
+=== 6 statistics over 3 records (N = 1): PASS ===
+=== 6 statistics over 3 records (N = 1): PASS ===
+data/lidcmix/train.bin.sigma.f32: 9600 records; σ̂ median 77.1 HU, p5 28.2, p95 198.7; 207 with < 1000 body pixels took the median
+  σ̂ / body std(low − full): median 0.562 [p5 0.366, p95 0.880]
+  σ̂ / √(sigma_add² + sigma_full²), the simulation's total noise by its own estimator:
+    all calibrated                         n  9400   median 0.518  [p5 0.342, p95 0.818]   σ̂   77.1  total  142.7 HU
+    dose quartile 0 (0.030-0.051)          n  2350   median 0.488  [p5 0.231, p95 0.804]   σ̂  100.8  total  207.5 HU
+    dose quartile 1 (0.051-0.086)          n  2350   median 0.508  [p5 0.333, p95 0.821]   σ̂   83.0  total  158.7 HU
+    dose quartile 2 (0.086-0.147)          n  2350   median 0.529  [p5 0.359, p95 0.817]   σ̂   68.2  total  122.3 HU
+    dose quartile 3 (0.147-0.250)          n  2350   median 0.553  [p5 0.367, p95 0.835]   σ̂   51.9  total   92.4 HU
+data/lidcmix/val.bin.sigma.f32: present (4282 records), skipped
+data/lidc/val.bin.sigma.f32: present (4282 records), skipped
+data/lidc10/val.bin.sigma.f32: present (4282 records), skipped
+data/mayo/val.bin.sigma.f32: present (4348 records), skipped
+-rw-rw-r-- 1 skoonce skoonce 17128 Nov  3 00:14 data/lidc10/val.bin.sigma.f32
+-rw-rw-r-- 1 skoonce skoonce 38400 Nov  3 02:40 data/lidcmix/train.bin.sigma.f32
+-rw-rw-r-- 1 skoonce skoonce 17128 Nov  3 02:40 data/lidcmix/val.bin.sigma.f32
+-rw-rw-r-- 1 skoonce skoonce 17128 Nov  3 00:13 data/lidc/val.bin.sigma.f32
+-rw-rw-r-- 1 skoonce skoonce 17392 Nov  3 00:15 data/mayo/val.bin.sigma.f32
+runs/2026-11-03-lidc-range/records_mix.txt: 1605 records
