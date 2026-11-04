@@ -1404,3 +1404,29 @@ sampler's settings do not reach it … what is left to try is the model's target
 run". README: the row and a bullet. Disk: the three diverged probes' dumps deleted on both sets after scoring
 (−7.8 GB, 16 GB free); the clipped dumps kept (`data/mayo/out/diffmixsig_b50_clampx0` 1.0 GB,
 `data/lidc10b50/out/diffmixsig_clampx0` 1.6 GB).
+
+### 13.5 The model's target: x₀-prediction (run 2026-11-04; `runs/2026-11-04-lidc-x0pred/`)
+
+The user's ask (11-04 15:40 UTC, quoting the section's close): "a net that predicts the clean slice — can we try
+that please". The one change: `lidc-denoise-train --target=x0` feeds the DDPM step's per-pixel MSE the clean
+residual x₀ = (full − low)/100 instead of the noise ε (the same `Ddpm.stepInputs`, the same net, the same input
+[x_t, low, sin/cos t, σ̂]); the artifacts carry " x0"; `lidc-denoise-sample --target=x0` reads the net's output as
+x̂₀ and drives the DDIM step with ε̃ = (x − √ᾱ x̂₀)/√(1−ᾱ) (composable with `--clamp-x0`; the run samples without
+it, one change at a time). Why it can matter: under ε-prediction an ε̂ error reaches x̂₀ scaled by √(1−ᾱ)/√ᾱ, up
+to 100× at the chain's start; under x₀-prediction the net's error enters x_{t−1} scaled by √ᾱ_{t−1} ≤ 1 and the
+coefficient on x stays ≤ 1, so the chain has no amplifier — a bounded net output gives a bounded chain, and the
+question becomes only whether the net's x̂₀ on the heavy slices is any good.
+
+Two twins, trained side by side (GPUs 0 and 1, 60k steps of 8 × 256², Adam 5e-4 cosine, seed 0 — the §10.1
+recipe): `diffmixsigx0b50` on data/lidcmixb50 told σ̂ (the §13 generator's twin, the one the section's sentence is
+about) and `diffx0b50` on data/lidc10b50 without the channel (the §12 kernel generator's twin — the best generator
+on Mayo so far, 5 % worse, median 100; the control that says whether the target change helps a generator that was
+not diverging). Then DDIM η = 1, 50 steps, k = 0 on Mayo, the b50f 10 % val and (the mix net) its own val; the
+scores beside the ε twins and the clipped sampler; `table_rows.sh` prints the two rows. Smokes: 20 x₀ steps on the
+mix build (loss in x₀-MSE units, checkpoint `diff sig x0` saved) and two Mayo slices sampled from it with
+`--target=x0`. Arm dirs `data/{mayo,lidc10b50,lidcmixb50}/out/{diffx0_b50,diffmixsigx0_b50 | diffx0,diffmixsigx0 |
+diffmixsigx0}`; labels in `lidc_records.py`. Cost ≈ 2¾ h training (165 ms/step) + 40 min sampling + scoring; disk
+≈ 1 + 1 + 1.6 + 1.6 + 1.7 GB of dumps.
+
+**Status.** Launched 11-04 (the driver `launch.sh`: train → sample → score; `launch.log`).
+

@@ -46,6 +46,9 @@ import LeanMlir.ReferenceNets
     generator; the name carries `sig`.
 
     Flags: --arm=mse|n2n|diff --seed=N --lr=F --cosine --ckpt-every=N --sigma
+           --target=eps|x0 (plan §13.5: the diffusion arm predicts x₀ = (target − low)/100, the clean
+           residual, instead of the noise ε; the artifacts carry " x0"; the sampler reads it with the
+           same flag)
            --eval-only --ckpt=dir (score the eval files with a finished run: its checkpoint dir when
            not the dump dir, e.g. the 10 % MSE net on Mayo with --dump=data/mayo/out/mse)
            --patch=256 --batch=8 (the smoke's small shapes; the artifact names carry a non-default patch)
@@ -98,6 +101,8 @@ def main (args : List String) : IO UInt32 := do
   let ckptEvery := ((flag args "ckpt-every").bind String.toNat?).getD 1000
   let evalOnly := args.contains "--eval-only"
   let useSigma := args.contains "--sigma"
+  let target := (flag args "target").getD "eps"
+  unless target == "eps" || target == "x0" do IO.eprintln s!"--target={target}: eps or x0"; return 2
   let patch := ((flag args "patch").bind String.toNat?).getD 256
   let batch := ((flag args "batch").bind String.toNat?).getD 8
   let outDir := (flag args "out").getD "runs/lidc-denoise"
@@ -119,13 +124,14 @@ def main (args : List String) : IO UInt32 := do
   let smoke := outDir.endsWith "smoke"
   let root := ((System.FilePath.mk trainPath).parent.map (·.fileName.getD "")).getD ""
   let tag := (if smoke then (if diff then "diff" else "") else s!"{arm} s{seed}" ++ (if root == "lidc" then "" else s!" {root}"))
-    ++ (if useSigma then " sig" else "") ++ (if patch == 256 then "" else s!" p{patch}")
+    ++ (if useSigma then " sig" else "") ++ (if target == "x0" then " x0" else "")
+    ++ (if patch == 256 then "" else s!" p{patch}")
   let baseC := if diff then 2 + 2 * nFreq else 1   -- the channels before the σ̂ one
   let inC := baseC + (if useSigma then 1 else 0)
   let spec := unetCtDenoise patch tag inC
   let evalSpec := unetCtDenoise S tag inC
   let pfx := spec.buildPrefix
-  IO.eprintln s!"{spec.name}: {spec.totalParams} params; arm {arm}, seed {seed}, N = {nReal}; {steps} steps of {batch} × {patch}², lr {lr0}{if cosine then " cosine" else ""}"
+  IO.eprintln s!"{spec.name}: {spec.totalParams} params; arm {arm}, seed {seed}, N = {nReal}; {steps} steps of {batch} × {patch}², lr {lr0}{if cosine then " cosine" else ""}{if diff then s!", target {target}" else ""}"
 
   let nP := spec.totalParams
   let mut p ← spec.heInitParams (42 + (seed * 100003).toUSize)
@@ -208,14 +214,15 @@ def main (args : List String) : IO UInt32 := do
         let xb ← F32.randomCrop (F32.sliceImages x (bi * batch) batch px) batch.toUSize 1 S.toUSize S.toUSize patch.toUSize patch.toUSize cs
         let eb ← F32.randomCrop (F32.sliceImages e (bi * batch) batch px) batch.toUSize 1 S.toUSize S.toUSize patch.toUSize patch.toUSize cs
         -- The diffusion arm: x₀ = −ε_resid = (target − low)/100, its forward process at a drawn
-        -- t per image, the net's input [x_t, low, sin/cos t], the DDPM noise as the target.
+        -- t per image, the net's input [x_t, low, sin/cos t], the DDPM noise as the target — or,
+        -- under --target=x0, x₀ itself (the same per-pixel MSE; the net then predicts the clean residual).
         let (xin, tgt) ← if diff then do
             let x0 ← F32.scaleShift eb (-1.0) 0.0
             let (xt, rest) ← Ddpm.stepInputs x0 alphaBar batch.toUSize pp.toUSize (seed * 1000003 + step * 104729 + 7).toUSize
             let (eps, tba) := rest
             let xc ← F32.concatChannels xt xb batch.toUSize 1 1 pp.toUSize
             let xcond ← Ddpm.prependSinCosT xc tba batch.toUSize 2 patch.toUSize patch.toUSize nFreq.toUSize Tmax.toUSize
-            pure (xcond, eps)
+            pure (xcond, if target == "x0" then x0 else eps)
           else pure (xb, eb)
         let xin ← if useSigma then do
             let vals ← F32.log10Scale (F32.sliceImages sig (bi * batch) batch 1) 0.01
@@ -232,7 +239,7 @@ def main (args : List String) : IO UInt32 := do
           let l := acc / accN.toFloat
           -- Regression arms: loss is in (HU/100)², so √loss·100 is the RMS error of the predicted
           -- noise in HU. Diffusion: loss is the ε-MSE of a unit-normal target (1.0 = predicting 0).
-          let unit := if diff then "ε-MSE" else s!"rms {l.sqrt * 100.0} HU"
+          let unit := if diff then (if target == "x0" then "x₀-MSE" else "ε-MSE") else s!"rms {l.sqrt * 100.0} HU"
           IO.eprintln s!"  step {step}/{steps}: loss {l} ({unit}), lr {lr}, {(t - t0) / accN} ms/step"
           curve.putStrLn s!"{step},{l},{if diff then 0.0 else l.sqrt * 100.0},{lr},{(t - t0) / accN}"
           curve.flush

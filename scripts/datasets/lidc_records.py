@@ -110,6 +110,9 @@ LABELS = {"gauss": "Gaussian", "tv": "TV", "bm3d": "BM3D", "bm3dpsd": "BM3D-PSD"
           # §12: the b50f-kernel arms seen from the Shepp-Logan roots, and §9's arms seen from the b50f root
           "diff_b50": "diffusion, b50f", "mse_b50": "MSE UNet, b50f",
     "diffmixsig_b50": "diffusion, range + σ̂, b50f", "msemix_b50": "MSE UNet, range, b50f",
+          # §13.5: the x₀-target generators (the net predicts the clean residual, not ε)
+          "diffx0": "diffusion, x₀-target", "diffmixsigx0": "diffusion, range + σ̂, x₀-target",
+          "diffx0_b50": "diffusion, b50f, x₀-target", "diffmixsigx0_b50": "diffusion, range + σ̂, b50f, x₀-target",
           "diff_sl": "diffusion, Shepp-Logan", "mse_sl": "MSE UNet, Shepp-Logan"}
 
 
