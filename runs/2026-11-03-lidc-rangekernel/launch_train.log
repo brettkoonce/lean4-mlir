@@ -1,0 +1,3 @@
+Build completed successfully (6679 jobs).
+launched msemixb50 on GPU 0 → runs/2026-11-03-lidc-rangekernel/msemixb50/train.log
+launched diffmixsigb50 on GPU 1 → runs/2026-11-03-lidc-rangekernel/diffmixsigb50/train.log

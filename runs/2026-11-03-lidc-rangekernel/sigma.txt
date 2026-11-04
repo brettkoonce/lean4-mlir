@@ -1,0 +1,20 @@
+data/lidcmixb50/train.bin.sigma.f32: 9600 records; σ̂ median 100.8 HU, p5 40.0, p95 225.4; 381 with < 1000 body pixels took the median
+  σ̂ / body std(low − full): median 0.812 [p5 0.647, p95 0.923]
+  σ̂ / √(sigma_add² + sigma_full²), the simulation's total noise by its own estimator:
+    all calibrated                         n  9400   median 0.745  [p5 0.480, p95 0.845]   σ̂  100.8  total  139.4 HU
+    dose quartile 0 (0.030-0.051)          n  2350   median 0.724  [p5 0.207, p95 0.831]   σ̂  130.5  total  205.9 HU
+    dose quartile 1 (0.051-0.086)          n  2350   median 0.745  [p5 0.449, p95 0.834]   σ̂  108.2  total  154.9 HU
+    dose quartile 2 (0.086-0.147)          n  2350   median 0.757  [p5 0.602, p95 0.846]   σ̂   87.5  total  120.1 HU
+    dose quartile 3 (0.147-0.250)          n  2350   median 0.748  [p5 0.584, p95 0.879]   σ̂   65.2  total   91.6 HU
+data/lidcmixb50/val.bin.sigma.f32: 4282 records; σ̂ median 84.5 HU, p5 35.6, p95 200.2; 114 with < 1000 body pixels took the median
+  σ̂ / body std(low − full): median 0.788 [p5 0.521, p95 0.871]
+  σ̂ / √(sigma_add² + sigma_full²), the simulation's total noise by its own estimator:
+    all calibrated                         n  4223   median 0.721  [p5 0.352, p95 0.819]   σ̂   84.5  total  124.2 HU
+    dose quartile 0 (0.030-0.051)          n  1056   median 0.704  [p5 0.180, p95 0.817]   σ̂  111.2  total  181.5 HU
+    dose quartile 1 (0.051-0.086)          n  1056   median 0.727  [p5 0.374, p95 0.820]   σ̂   96.4  total  139.4 HU
+    dose quartile 2 (0.086-0.147)          n  1055   median 0.735  [p5 0.498, p95 0.814]   σ̂   75.6  total  106.2 HU
+    dose quartile 3 (0.147-0.250)          n  1056   median 0.716  [p5 0.506, p95 0.832]   σ̂   56.3  total   82.4 HU
+data/lidc10b50/val.bin.sigma.f32: 4282 records; σ̂ median 80.1 HU, p5 38.5, p95 183.8; 76 with < 1000 body pixels took the median
+  σ̂ / body std(low − full): median 0.788 [p5 0.576, p95 0.871]
+  σ̂ / √(sigma_add² + sigma_full²), the simulation's total noise by its own estimator:
+    all calibrated                         n  4223   median 0.733  [p5 0.491, p95 0.819]   σ̂   80.1  total  113.0 HU

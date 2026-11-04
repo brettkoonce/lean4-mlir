@@ -1,0 +1,66 @@
+data/mayo/val.bin: 4348 records (N = 1); scoring 1000 of them (records_mayo.txt); arms: diffmixsig_b50.k0 = out/diffmixsig_b50/mayo_val.k0.eps.f32, msemix_b50 = out/msemix_b50/mayo_val.eps.f32
+  200/1000 records
+  400/1000 records
+  600/1000 records
+  800/1000 records
+  1000/1000 records
+
+1000 records; texture on 244 calibrated slices, 793 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    162.22                      (f̄ 0.438 /mm; ∫NPS = residual variance, 59.2 HU rms per slice)
+low dose            235.04  13.954 [12.601, 15.593]    1.102 [ 1.085,  1.121]    3.672 [ 3.574,  3.701]     2113.21  1902.78    11.07
+diffusion, range + σ̂, b50f k0 121036385322046088500987559936.00  6533932430404568392495053147682072569738907741061120.000 [11777164229260994586948885290531436893566926848.000, 19943957078951856603575538871157881311966844996812800.000]    0.298 [ 0.042,  0.321]    1.011 [ 0.946,  1.098]      100.48    60.23   120.21
+MSE UNet, range, b50f     83.34   0.391 [ 0.275,  0.551]    0.517 [ 0.459,  0.585]    0.305 [ 0.291,  0.326]       92.42    40.01   111.27
+(blobs on 1000 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+— sigma_add_hu in [-inf, 120): 13 records
+
+13 records; texture on 4 calibrated slices, 8 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    125.54                      (f̄ 0.385 /mm; ∫NPS = residual variance, 45.1 HU rms per slice)
+low dose             95.49   7.709 [ 7.054,  8.398]    1.249 [ 1.183,  1.335]    3.144 [ 3.041,  3.287]      421.77   307.15    15.92
+diffusion, range + σ̂, b50f k0     68.95   2.447 [ 1.413,  3.566]    1.093 [ 1.027,  1.134]    1.669 [ 1.166,  2.037]      178.08    93.77    41.23
+MSE UNet, range, b50f     41.57   0.321 [ 0.260,  0.373]    0.376 [ 0.341,  0.412]    0.291 [ 0.224,  0.344]       76.77    10.62    56.23
+(blobs on 13 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+— sigma_add_hu in [120, 180): 215 records
+
+215 records; texture on 79 calibrated slices, 319 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    145.99                      (f̄ 0.425 /mm; ∫NPS = residual variance, 52.9 HU rms per slice)
+low dose            139.10  10.450 [ 9.977, 10.932]    1.150 [ 1.115,  1.186]    3.387 [ 3.305,  3.488]     1083.79   935.73    14.06
+diffusion, range + σ̂, b50f k0 31468670296.32   2.128 [ 1.838,  2.430]    1.023 [ 0.997,  1.047]    1.406 [ 1.278,  1.499]      150.87    81.69    74.38
+MSE UNet, range, b50f     52.65   0.283 [ 0.248,  0.325]    0.486 [ 0.462,  0.512]    0.337 [ 0.295,  0.375]       62.92     8.23    87.05
+(blobs on 215 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+— sigma_add_hu in [180, 250): 423 records
+
+423 records; texture on 136 calibrated slices, 426 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    177.63                      (f̄ 0.446 /mm; ∫NPS = residual variance, 62.2 HU rms per slice)
+low dose            194.89  12.423 [11.980, 12.871]    1.093 [ 1.074,  1.116]    3.717 [ 3.669,  3.773]     2224.27  2008.80    12.94
+diffusion, range + σ̂, b50f k0 6771480327255116377751552.00  17498598853795291136.000 [31.766, 53844381249168523264.000]    0.056 [ 0.055,  0.122]    0.846 [ 0.789,  0.904]      108.15    61.25   128.20
+MSE UNet, range, b50f     69.09   0.222 [ 0.188,  0.266]    0.629 [ 0.533,  0.725]    0.286 [ 0.274,  0.299]       57.99    11.79   127.00
+(blobs on 423 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+— sigma_add_hu in [250, 350): 284 records
+
+284 records; texture on 20 calibrated slices, 29 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    159.13                      (f̄ 0.439 /mm; ∫NPS = residual variance, 66.0 HU rms per slice)
+low dose            274.85  20.688 [16.046, 27.036]    1.088 [ 1.040,  1.161]    4.020 [ 3.945,  4.125]     2797.27  2552.79     7.36
+diffusion, range + σ̂, b50f k0 742798907093777008839098368.00  10818608269529136620490920328019023357353639542784.000 [2242747760639889333637166241342203887616.000, 33821793328722142246555826665153679264091819999232.000]    0.318 [ 0.053,  0.345]    1.114 [ 0.741, 71679237576536.688]       59.67    45.04   143.83
+MSE UNet, range, b50f     95.77   0.517 [ 0.258,  0.886]    0.440 [ 0.356,  0.589]    0.366 [ 0.316,  0.443]      119.12    69.29   116.81
+(blobs on 284 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+— sigma_add_hu in [350, inf): 65 records
+
+65 records; texture on 5 calibrated slices, 11 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    136.51                      (f̄ 0.375 /mm; ∫NPS = residual variance, 51.4 HU rms per slice)
+low dose            415.78  92.957 [42.854, 143.718]    1.217 [ 1.149,  1.280]    8.899 [ 4.617, 13.381]     2145.02  1890.52     4.29
+diffusion, range + σ̂, b50f k0 443125643602485663207138525184.00  423504573489153460969201047218599796133055027382059008.000 [15490533598142472534728403512541610717550215168.000, 1299476322225149660083949191855308701616427500610519040.000]    0.348 [ 0.050,  0.350]   5670162244107550851072.000 [12766209252960.195, 10675351638913999328772096.000]       46.63    42.31   132.45
+MSE UNet, range, b50f    148.52   8.156 [ 3.246, 13.524]    0.521 [ 0.329,  0.643]    1.148 [ 0.389,  2.875]      300.45   206.77    75.89
+(blobs on 65 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+→ runs/2026-11-03-lidc-rangekernel/score/texture_mayo.json
+→ runs/2026-11-03-lidc-rangekernel/score/nps_mayo.csv (radial NPS, HU²·mm², mean over slices)

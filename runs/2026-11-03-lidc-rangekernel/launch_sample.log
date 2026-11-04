@@ -1,0 +1,10 @@
+Build completed successfully (6676 jobs).
+02:59 mayo-diffmixsigb50 k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmixsig_b50/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 232.442931 → sample 42334552349662634248765440.000000 HU over 250 slices
+03:05 lidc10b50-diffmixsigb50 k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diffmixsig/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 123.307268 → sample 1852921868591900655616.000000 HU over 402 slices
+03:13 mixb50-diffmixsigb50 k=0: 4 shards on GPUs 0 1 2 3
+data/lidcmixb50/out/diffmixsig/lidcmixb50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 145.274930 → sample 184993156299033694699520.000000 HU over 402 slices
+03:30 eval-msemixb50-mayo:   data/mayo/val.bin (4348 slices): whole 202.072810 → 72.102282, body 233.066400 → 82.170024
+03:38 eval-msemixb50-lidc10b50:   data/lidc10b50/val.bin (4282 slices): whole 119.015459 → 44.178840, body 140.287741 → 51.584633
+sampling done
