@@ -5,10 +5,13 @@
 #   eta0  η = 0, deterministic DDIM, 50 steps
 #   s20   20 steps at η = 1
 #   cap   the σ̂ the net is told capped at the training median, 101 HU (runs/2026-11-03-lidc-rangekernel/sigma.txt)
+#   clampx0  the usual clipped-x̂₀ prediction (--clamp-x0: x̂₀ kept inside the HU range, ε̂ recomputed from it) —
+#            the fourth probe, added once the first three had all diverged on Mayo; §11.6's withdrawn clamp was on x_t
 # on Mayo (§10.5's records_mayo.txt, 250 slices) and then on the b50f 10 % val (records_val.txt, 402),
 # the GPUs in $GPUS as that many shards; then the scores of each set: fidelity by noise bin, per-slice
 # (one csv with the §12 kernel generator and the §13 arm beside the probes), nodules (the LIDC set), texture.
 #   GPUS="0 1 2 3" SETS="mayo lidc10b50" PROBES="eta0 s20 cap" runs/2026-11-04-lidc-sampler-probes/launch.sh
+#   … then PROBES=clampx0 (the same sets; the scorers re-read all four arms)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 RUN=runs/2026-11-04-lidc-sampler-probes
@@ -27,7 +30,7 @@ for g in $GPUS; do
   [ "$used" -lt 500 ] || { echo "⛔ GPU $g busy ($used MiB)"; exit 1; }
 done
 mkdir -p $RUN/sample $RUN/score
-flags() { case $1 in eta0) echo "--eta=0";; s20) echo "--steps=20";; cap) echo "--sigma-cap=101";; *) echo "⛔ unknown probe $1" >&2; exit 1;; esac; }
+flags() { case $1 in eta0) echo "--eta=0";; s20) echo "--steps=20";; cap) echo "--sigma-cap=101";; clampx0) echo "--clamp-x0";; *) echo "⛔ unknown probe $1" >&2; exit 1;; esac; }
 sample() {  # sample PAIRS RECORDS DUMP LOGTAG PROBE — model lidcmixb50 with --sigma, k = 0
   local pairs=$1 recs=$2 dump=$3 tag=$4 probe=$5 extra
   extra=$(flags $probe)
@@ -41,7 +44,7 @@ sample() {  # sample PAIRS RECORDS DUMP LOGTAG PROBE — model lidcmixb50 with -
     pids+=($!); i=$((i + 1))
   done
   echo "$(date +%H:%M) $tag ($extra): $NSH shards on GPUs $GPUS"
-  for p in "${pids[@]}"; do wait $p || { echo "⛔ a shard of $tag failed; see $RUN/sample/$tag.shard*.log"; exit 1; }; done
+  local pid; for pid in "${pids[@]}"; do wait $pid || { echo "⛔ a shard of $tag failed; see $RUN/sample/$tag.shard*.log"; exit 1; }; done
   tail -1 $RUN/sample/$tag.shard${GPUS%% *}.log
 }
 for root in $SETS; do
@@ -55,6 +58,8 @@ for root in $SETS; do
     sample data/$root/val.bin $recs data/$root/out/${base}_$p $root-$p $p
     arms="$arms,${base}_$p.k0"
   done
+  # the per-slice csv and the texture table carry every probe sampled so far, not only this call's
+  arms=$(for d in data/$root/out/${base}_*/; do b=$(basename $d); ls $d/*val*.k0.eps.f32 >/dev/null 2>&1 && echo -n ",$b.k0"; done)
   arms=${arms#,}
   for p in $PROBES; do
     nice -n 19 $PY scripts/probes/lidc_denoise_score.py data/$root/val.bin data/$root/out/${base}_$p/${root}_val.k0.eps.f32 \

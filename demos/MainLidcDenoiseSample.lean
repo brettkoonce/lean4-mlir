@@ -38,7 +38,9 @@ import LeanMlir.ReferenceNets
            --crop=C (centre-crop the slices to C² — the plumbing smoke on a small GPU slice)
            --sigma (plan §11: the noise-conditioned model; reads `<pairs.bin>.sigma.f32`, the slice's
            σ̂ from the low-dose image, as the trainer did) --sigma-cap=HU (tell the net at most this
-           σ̂: plan §13.4's probe, the training median 101) --clamp (after every step, keep
+           σ̂: plan §13.4's probe, the training median 101) --clamp-x0 (the usual clipped-x₀
+           prediction, plan §13.4: x̂₀ = (x − √(1−ᾱ) ε̂)/√ᾱ kept inside the HU range as low + 100·x̂₀
+           and ε̂ recomputed from it, so no step aims past the range) --clamp (after every step, keep
            low + 100·x inside [−1024, 3071] HU — the valid range; the count of clamped pixels is
            reported, so the row says whether the guard ever bit)
 -/
@@ -93,6 +95,7 @@ def main (args : List String) : IO UInt32 := do
   let smoke := args.contains "--smoke"
   let useSigma := args.contains "--sigma"
   let clamp := args.contains "--clamp"
+  let clampX0 := args.contains "--clamp-x0"
   let sigCap : Float := (((flag args "sigma-cap").bind String.toNat?).getD 0).toFloat
   let dumpDir := (flag args "dump").getD "data/lidc/out/diff"
   let parent := ((System.FilePath.mk path).parent.map (·.fileName.getD "")).getD ""
@@ -160,7 +163,7 @@ def main (args : List String) : IO UInt32 := do
       pos := pos + 1
   if limit > 0 then recs := recs.extract 0 limit
   F32.truncateFile dumpPath (count * px * 4).toUSize
-  IO.eprintln s!"{spec.name}: {spec.totalParams} params; {path}: {count} records (N = {nReal}), {requested.size} requested, {done.size} already in {sidecar}, {recs.size} to draw in shard {shardI}/{shardN}; {nSteps} DDIM steps, η = {eta}, k = {kSeed}, batch {B}{if crop == 0 then "" else s!", centre crop {crop}²"}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}"
+  IO.eprintln s!"{spec.name}: {spec.totalParams} params; {path}: {count} records (N = {nReal}), {requested.size} requested, {done.size} already in {sidecar}, {recs.size} to draw in shard {shardI}/{shardN}; {nSteps} DDIM steps, η = {eta}, k = {kSeed}, batch {B}{if crop == 0 then "" else s!", centre crop {crop}²"}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}{if clampX0 then ", x̂₀ clamped" else ""}"
   if recs.isEmpty then return 0
 
   -- ── DDIM over the 1000-step cosine table ──
@@ -173,6 +176,7 @@ def main (args : List String) : IO UInt32 := do
   let mut nBody := 0
   let mut nDone := 0
   let mut clamped := 0
+  let mut clampedX0 := 0
   let t0 ← IO.monoMsNow
   for bi in [:(recs.size + B - 1) / B] do
     let b0 := bi * B
@@ -208,9 +212,18 @@ def main (args : List String) : IO UInt32 := do
       let xc ← F32.concatChannels x lowB B.toUSize 1 1 px.toUSize
       let cond ← Ddpm.prependSinCosTScalar xc B.toUSize 2 Sx.toUSize Sx.toUSize tCur.toUSize nFreq.toUSize Tmax.toUSize
       let cond ← if useSigma then F32.appendScalarChannel cond sigVals B.toUSize baseC.toUSize px.toUSize else pure cond
-      let eps ← LowererSession.forwardF32 sess spec.evalFnName evalParams spec.evalShapesBA
+      let mut eps ← LowererSession.forwardF32 sess spec.evalFnName evalParams spec.evalShapesBA
         cond (spec.xShape B) B.toUSize px.toUSize
       let abT := abAt tCur
+      if clampX0 then
+        -- x̂₀ = (x − √(1−ᾱ) ε̂)/√ᾱ, clamped so low + 100·x̂₀ stays in [−1024, 3071] HU; then the ε̂
+        -- that would have predicted the clamped x̂₀, (x − √ᾱ x̂₀)/√(1−ᾱ), drives the step.
+        let sT := Float.sqrt abT
+        let cT := Float.sqrt (1.0 - abT)
+        let x0 ← Ddpm.ddimStep x eps (1.0 / sT) (-(cT / sT)) n
+        let (x0c, moved) ← F32.clampResidual x0 lowB n 1000.0 100.0 (-1024.0) 3071.0
+        clampedX0 := clampedX0 + moved
+        eps ← Ddpm.ddimStep x x0c (1.0 / cT) (-(sT / cT)) n
       -- The image samplers' convention: the final step aims at ᾱ = 0.9999, not the table's t = 0.
       let abP := if tPrev == 0 then 0.9999 else abAt tPrev
       let (a, b, sigma) := Ddpm.ddimCoefs abT abP eta
@@ -239,5 +252,5 @@ def main (args : List String) : IO UInt32 := do
       let t ← IO.monoMsNow
       if nDone ≤ 3 || nDone % 20 == 0 || nDone == recs.size then
         IO.eprintln s!"  [{nDone}/{recs.size}] record {r}: body RMSE floor {(fb / c.toFloat).sqrt} → sample {(sb / c.toFloat).sqrt} HU; pooled {(sumFloor / nBody.toFloat).sqrt} → {(sumSample / nBody.toFloat).sqrt}; {(t - t0) / nDone} ms/slice"
-  IO.println s!"{dumpPath}: {nDone} samples (k = {kSeed}, {nSteps} steps, η = {eta}{if useSigma then ", σ̂-conditioned" else ""}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}); body RMSE floor {(sumFloor / nBody.toFloat).sqrt} → sample {(sumSample / nBody.toFloat).sqrt} HU over {nDone} slices{if clamp then s!"; clamp moved {clamped} of {nDone * px * nSteps} pixel-steps" else ""}"
+  IO.println s!"{dumpPath}: {nDone} samples (k = {kSeed}, {nSteps} steps, η = {eta}{if useSigma then ", σ̂-conditioned" else ""}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}); body RMSE floor {(sumFloor / nBody.toFloat).sqrt} → sample {(sumSample / nBody.toFloat).sqrt} HU over {nDone} slices{if clamp then s!"; clamp moved {clamped} of {nDone * px * nSteps} pixel-steps" else ""}{if clampX0 then s!"; x̂₀ clamp moved {clampedX0} of {nDone * px * nSteps} pixel-steps" else ""}"
   return 0

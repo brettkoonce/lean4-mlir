@@ -1,0 +1,9 @@
+data/mayo/val.bin: 1000 slices (sigma_add_hu bins); per arm: % of slices worse than the floor / median slice RMSE (HU)
+                                        diffusion, b50f k0  diffusion, range + σ̂, b50f k0          diffmixsig_b50_eta0 k0           diffmixsig_b50_s20 k0           diffmixsig_b50_cap k0
+         all n 1000 floor    202                      5 % /  100                     49 % /  168           100 % /27459140423957                77 % /4904878424                     56 % /18978
+        <120 n   13 floor     98                      0 % /   55                      0 % /   64              100 % /19082415924                      0 % /   64                      0 % /   64
+     120–180 n  215 floor    139                      0 % /   70                      1 % /   77             100 % /425507634702                     28 % /   88                      2 % /   75
+     180–250 n  423 floor    191                      2 % /   94                     38 % /   96           100 % /16703636109283                 84 % /429125129                     49 % /  125
+     250–350 n  284 floor    266                     10 % /  140                92 % /1999012866          100 % /493649899089731            100 % /3884762545700           98 % /141577941933623
+        ≥350 n   65 floor    384                     25 % /  277       100 % /258354500658970912        100 % /24861581788798028          100 % /726824397397094     100 % /40039585928021245952
+→ runs/2026-11-04-lidc-sampler-probes/score/perslice_mayo.csv

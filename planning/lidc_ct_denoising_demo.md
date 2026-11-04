@@ -1324,7 +1324,48 @@ data". Panel (a) of the figure gains the both-at-once generator's draw of the sa
 patch), five columns with two-line titles; the README's table, figure text and findings follow. `table_rows.sh`
 in this run dir prints the two rows.
 
-**If the user wants the sampler probed (not launched; each is minutes on the existing checkpoint):** the same
-generator at η = 0 (deterministic DDIM) and at 20 steps; the σ̂ channel clamped to the training median; x₀
-clamping was withdrawn in §11.6 for wrecking the mixed generators and would need the same A/B here.
+**The sampler probes** proposed here are §13.4 (run 11-04 on the user's word). Note the §11.6 clamp that was
+withdrawn clipped the diffusion *state* x_t, not x̂₀; the clipped-x̂₀ prediction had not been run.
+
+### 13.4 The sampler probed (run 2026-11-04; `runs/2026-11-04-lidc-sampler-probes/`, launched 05:22 UTC)
+
+The §13 generator's checkpoint (`data/lidcmixb50/out/diffmixsig`), nothing retrained, sampled with one knob
+changed at a time from the scored arm (DDIM η = 1, 50 steps, σ̂ as the sidecar says), on the 1,000 Mayo slices
+and then the b50f 10 % val, k = 0 throughout; arms `diffmixsig_b50_{eta0,s20,cap,clampx0}` beside the scored one,
+scored by the same scripts (`score/`; the per-slice csv carries the §12 kernel generator and the §13 arm beside the
+probes). The σ̂ cap is a new sampler flag, `lidc-denoise-sample --sigma-cap=HU` (min(σ̂, cap) before the
+log10(σ̂/100) channel; 101 HU = the training median of `sigma.txt`). The fourth, `--clamp-x0`, is the usual
+clipped-x₀ prediction — x̂₀ = (x − √(1−ᾱ) ε̂)/√ᾱ kept inside the HU range as low + 100·x̂₀, ε̂ recomputed from the
+clamped x̂₀ so no step aims past the range — added once the first three had all diverged, because it is the one
+sampler knob with a mechanism against a runaway (the coefficient on x in the step is then ≤ 1, so the state is
+bounded by induction). A shell slip in `launch.sh` (the shard-wait loop reused the probe loop's variable) named the
+first per-slice/texture arms after process ids; those two scores were re-run by hand with the right names and the
+launcher fixed before the fourth round.
+
+**Mayo, per slice (1,000 slices, floor median 202 HU; `score/perslice_mayo.csv`):**
+
+| arm | worse than the input | median slice | > 1,000 HU | > 10⁶ HU | by σ̂ bin, % worse / median: [120,180) n 215 | [180,250) n 423 | [250,350) n 284 | ≥ 350 n 65 |
+|---|---|---|---|---|---|---|---|---|
+| kernel generator, §12 (`diff_b50`) | 5.2 % | 100 | 18 | 0 | 0 % / 70 | 2 % / 94 | 10 % / 140 | 25 % / 277 |
+| both at once, as scored (η = 1, 50 steps) | 49.0 % | 168 | 449 | 338 | 1 % / 77 | 38 % / 96 | 92 % / 2·10⁹ | 100 % / 3·10¹⁷ |
+| the same, η = 0 | **100 %** | 3·10¹³ | 1,000 | 1,000 | 100 % | 100 % | 100 % | 100 % |
+| the same, 20 steps | 76.6 % | 5·10⁹ | 742 | 649 | 28 % / 88 | 84 % / 4·10⁸ | 100 % | 100 % |
+| the same, σ̂ ≤ 101 HU | 55.5 % | 1.9·10⁴ | 542 | 438 | 2 % / 75 | 49 % / 125 | 98 % | 100 % |
+
+Every knob makes it worse or leaves it. Deterministic DDIM diverges on *every* slice, the 13 lightest included —
+the fresh noise of η = 1 is what keeps the state near the training distribution for a while; 20 steps (bigger
+steps) compound faster than 50; capping the level the net is told at the training median changes nothing in the
+heavy bins and costs a little in the middle one (38 → 49 % at 180–250 HU), so the σ̂ *channel* is not what fails —
+the correlation with σ̂ in §13.3 was with the slice's noise, not with the number the net was shown. The forty worst
+slices are the same forty under every probe (32–37 of 40 shared pairwise; 28 of 40 shared with the kernel-only
+generator). The training curves rule out a bad fit: `diffmixsigb50` ends at ε-MSE 0.2256 against `diffmixsig`
+0.2212, `diffmix` 0.2216, `diff10b50` 0.2208, `diff10` 0.2242. So the runaway is the net's own ε-prediction on
+those slices, wrong in a way that any iteration compounds: the sampler's settings do not undo it and the data did not
+prevent it.
+
+**The clipped x̂₀, smoke on the two first slices of shard 0 (full round pending):** record 0, floor 231 → 99 HU;
+record 15, floor 238 → **460** HU (the scored sampler 2·10⁷, η = 0 6·10¹⁴). Bounded, and still worse than its
+input: the clip turns the runaway into a plain failure on the same slice. The full round on Mayo and the home set
+says how many of the 490 that holds for. *(home-set rows for the first three probes, and the clampx0 round: below
+when they land.)*
 
