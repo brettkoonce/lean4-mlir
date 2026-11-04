@@ -37,7 +37,8 @@ import LeanMlir.ReferenceNets
            pairs file's own) --smoke (the smoke fit's unnamed checkpoint) --patch=256 (the fit's patch)
            --crop=C (centre-crop the slices to C² — the plumbing smoke on a small GPU slice)
            --sigma (plan §11: the noise-conditioned model; reads `<pairs.bin>.sigma.f32`, the slice's
-           σ̂ from the low-dose image, as the trainer did) --clamp (after every step, keep
+           σ̂ from the low-dose image, as the trainer did) --sigma-cap=HU (tell the net at most this
+           σ̂: plan §13.4's probe, the training median 101) --clamp (after every step, keep
            low + 100·x inside [−1024, 3071] HU — the valid range; the count of clamped pixels is
            reported, so the row says whether the guard ever bit)
 -/
@@ -92,6 +93,7 @@ def main (args : List String) : IO UInt32 := do
   let smoke := args.contains "--smoke"
   let useSigma := args.contains "--sigma"
   let clamp := args.contains "--clamp"
+  let sigCap : Float := (((flag args "sigma-cap").bind String.toNat?).getD 0).toFloat
   let dumpDir := (flag args "dump").getD "data/lidc/out/diff"
   let parent := ((System.FilePath.mk path).parent.map (·.fileName.getD "")).getD ""
   -- The data root the checkpoint was trained on names its artifacts (the trainer's tag); the
@@ -158,7 +160,7 @@ def main (args : List String) : IO UInt32 := do
       pos := pos + 1
   if limit > 0 then recs := recs.extract 0 limit
   F32.truncateFile dumpPath (count * px * 4).toUSize
-  IO.eprintln s!"{spec.name}: {spec.totalParams} params; {path}: {count} records (N = {nReal}), {requested.size} requested, {done.size} already in {sidecar}, {recs.size} to draw in shard {shardI}/{shardN}; {nSteps} DDIM steps, η = {eta}, k = {kSeed}, batch {B}{if crop == 0 then "" else s!", centre crop {crop}²"}"
+  IO.eprintln s!"{spec.name}: {spec.totalParams} params; {path}: {count} records (N = {nReal}), {requested.size} requested, {done.size} already in {sidecar}, {recs.size} to draw in shard {shardI}/{shardN}; {nSteps} DDIM steps, η = {eta}, k = {kSeed}, batch {B}{if crop == 0 then "" else s!", centre crop {crop}²"}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}"
   if recs.isEmpty then return 0
 
   -- ── DDIM over the 1000-step cosine table ──
@@ -191,7 +193,14 @@ def main (args : List String) : IO UInt32 := do
         for i in [0:B] do
           let r := batchRecs[i]?.getD batchRecs[0]!
           vs := vs.push (F32.slice sig r 1)
-        F32.log10Scale (F32.concat vs) 0.01
+        let raw := F32.concat vs
+        -- --sigma-cap: min(σ̂, cap), the residual clamp with a zero base and unit scale.
+        let raw ← if sigCap > 0.0 then do
+            let zeros ← F32.const B.toUSize 0.0
+            let (c, _) ← F32.clampResidual raw zeros B.toUSize 0.0 1.0 (-1.0e30) sigCap
+            pure c
+          else pure raw
+        F32.log10Scale raw 0.01
       else pure ByteArray.empty
     for k in [:nSteps] do
       let tCur := Tmax - 1 - k * stride
@@ -230,5 +239,5 @@ def main (args : List String) : IO UInt32 := do
       let t ← IO.monoMsNow
       if nDone ≤ 3 || nDone % 20 == 0 || nDone == recs.size then
         IO.eprintln s!"  [{nDone}/{recs.size}] record {r}: body RMSE floor {(fb / c.toFloat).sqrt} → sample {(sb / c.toFloat).sqrt} HU; pooled {(sumFloor / nBody.toFloat).sqrt} → {(sumSample / nBody.toFloat).sqrt}; {(t - t0) / nDone} ms/slice"
-  IO.println s!"{dumpPath}: {nDone} samples (k = {kSeed}, {nSteps} steps, η = {eta}{if useSigma then ", σ̂-conditioned" else ""}); body RMSE floor {(sumFloor / nBody.toFloat).sqrt} → sample {(sumSample / nBody.toFloat).sqrt} HU over {nDone} slices{if clamp then s!"; clamp moved {clamped} of {nDone * px * nSteps} pixel-steps" else ""}"
+  IO.println s!"{dumpPath}: {nDone} samples (k = {kSeed}, {nSteps} steps, η = {eta}{if useSigma then ", σ̂-conditioned" else ""}{if sigCap > 0.0 then s!", σ̂ ≤ {sigCap} HU" else ""}); body RMSE floor {(sumFloor / nBody.toFloat).sqrt} → sample {(sumSample / nBody.toFloat).sqrt} HU over {nDone} slices{if clamp then s!"; clamp moved {clamped} of {nDone * px * nSteps} pixel-steps" else ""}"
   return 0
