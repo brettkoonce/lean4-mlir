@@ -1,0 +1,21 @@
+data/lidc10b50/val.bin: 4282 records (N = 1); scoring 200 of them (records_spread.txt); arms: diff.k0 = out/diff/lidc10b50_val.k0.eps.f32, diff.k1 = out/diff/lidc10b50_val.k1.eps.f32, diff.k2 = out/diff/lidc10b50_val.k2.eps.f32, diff.k3 = out/diff/lidc10b50_val.k3.eps.f32, diff_sl.k0 = out/diff_sl/lidc10b50_val.k0.eps.f32, gauss = out/gauss/val.eps.f32, mse = out/mse/lidc10b50_val.eps.f32, mse_sl = out/mse_sl/lidc10b50_val.eps.f32
+  200/200 records
+
+200 records; texture on 121 calibrated slices, 1511 flat soft-tissue ROIs (64², ≥ 1 per slice); full dose's own grain is the reference (ratio 1.0)
+arm              RMSE body        NPS integral ratio           mean-freq ratio           local-std ratio  blobs/sl invented  dropped
+full dose             0.00                     1.000                     1.000                     1.000    110.86                      (f̄ 0.235 /mm; ∫NPS = residual variance, 40.7 HU rms per slice)
+low dose            145.67   8.040 [ 7.425,  8.603]    1.999 [ 1.782,  2.249]    3.994 [ 3.678,  4.147]      688.13   562.37    10.29
+diffusion k0         98.61   1.097 [ 1.045,  1.151]    1.039 [ 0.967,  1.116]    1.249 [ 1.176,  1.344]      115.98    57.38    54.05
+diffusion k1         98.20   1.108 [ 1.059,  1.155]    1.058 [ 0.984,  1.141]    1.248 [ 1.190,  1.308]      116.13    57.34    53.41
+diffusion k2         98.19   1.096 [ 1.049,  1.142]    1.049 [ 0.974,  1.124]    1.218 [ 1.138,  1.323]      117.17    58.23    53.59
+diffusion k3         98.49   1.093 [ 1.045,  1.147]    1.049 [ 0.979,  1.130]    1.221 [ 1.125,  1.335]      117.76    58.84    53.27
+diffusion, Shepp-Logan k0    130.42   1.174 [ 1.100,  1.258]    1.256 [ 1.185,  1.342]    1.182 [ 1.117,  1.281]      129.22    69.54    52.97
+Gaussian             78.90   1.081 [ 1.043,  1.124]    0.794 [ 0.731,  0.867]    1.125 [ 1.079,  1.207]       11.20     3.12   102.11
+MSE UNet             60.85   0.612 [ 0.549,  0.673]    0.512 [ 0.479,  0.554]    0.458 [ 0.435,  0.485]       37.56     6.49    78.84
+MSE UNet, Shepp-Logan     64.11   0.664 [ 0.593,  0.739]    0.777 [ 0.673,  0.886]    0.493 [ 0.448,  0.570]       39.57     7.99    78.32
+(blobs on 200 slices; invented = arm blobs with no full-dose blob within 3 px, dropped = full-dose blobs with no arm blob within 3 px; LoG 1–3 mm, threshold 0.15)
+
+spread across samples (per-pixel std, HU, median over slices of the slice median)
+arm          samples   nodules      lung      soft  RMSE body, mean of samples  samples' own
+diffusion          4     27.83     15.86     21.78                       77.18  98.61 / 98.20 / 98.19 / 98.49
+→ runs/2026-11-03-lidc-kernel/score/spread_lidc10b50.json

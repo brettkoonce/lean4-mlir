@@ -1,0 +1,3 @@
+Build completed successfully (6679 jobs).
+launched diff10b50 on GPU 0 → runs/2026-11-03-lidc-kernel/diff10b50/train.log
+launched mse10b50 on GPU 1 → runs/2026-11-03-lidc-kernel/mse10b50/train.log

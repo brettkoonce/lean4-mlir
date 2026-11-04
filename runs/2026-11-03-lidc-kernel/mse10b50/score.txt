@@ -1,0 +1,31 @@
+data/lidc10b50/val.bin: 4282 slices — low-dose floor → denoised
+  RMSE body    140.29 →   51.24 HU
+  RMSE whole   119.02 →   43.80 HU
+  PSNR          33.38 →   43.06 dB (4096 HU range, mean over slices)
+  SSIM         0.6799 →  0.8084 (soft-tissue window)
+  — sigma_add_hu in [-inf, 60.0): 307 slices
+  RMSE body     45.19 →   16.73 HU
+  RMSE whole    38.18 →   14.06 HU
+  PSNR          40.80 →   49.51 dB (4096 HU range, mean over slices)
+  SSIM         0.7542 →  0.8984 (soft-tissue window)
+  — sigma_add_hu in [60.0, 90.0): 1088 slices
+  RMSE body     68.64 →   21.66 HU
+  RMSE whole    58.55 →   18.44 HU
+  PSNR          37.02 →   47.07 dB (4096 HU range, mean over slices)
+  SSIM         0.7089 →  0.8629 (soft-tissue window)
+  — sigma_add_hu in [90.0, 120.0): 1130 slices
+  RMSE body     93.33 →   28.75 HU
+  RMSE whole    79.07 →   24.60 HU
+  PSNR          34.38 →   44.65 dB (4096 HU range, mean over slices)
+  SSIM         0.7145 →  0.8499 (soft-tissue window)
+  — sigma_add_hu in [120.0, 180.0): 1013 slices
+  RMSE body    132.21 →   42.93 HU
+  RMSE whole   114.82 →   37.81 HU
+  PSNR          31.19 →   40.92 dB (4096 HU range, mean over slices)
+  SSIM         0.6460 →  0.7605 (soft-tissue window)
+  — sigma_add_hu in [180.0, inf): 744 slices
+  RMSE body    260.54 →  102.40 HU
+  RMSE whole   220.14 →   87.15 HU
+  PSNR          26.44 →   35.02 dB (4096 HU range, mean over slices)
+  SSIM         0.6005 →  0.6938 (soft-tissue window)
+  figure: record 483 (1786 nodule px), low / denoised / full, lung then soft-tissue window → runs/2026-11-03-lidc-kernel/mse10b50/figure.png

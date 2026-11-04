@@ -1,0 +1,9 @@
+data/lidc10/val.bin: 1605 slices (sigma_add_hu bins); per arm: % of slices worse than the floor / median slice RMSE (HU)
+                            diffusion, b50f k0      MSE UNet, b50f        diffusion k0            MSE UNet            Gaussian
+         all n 1605 floor     91          0 % /   43          0 % /   30          0 % /   44          0 % /   29          1 % /   48
+         <60 n  110 floor     43          0 % /   24          0 % /   19          0 % /   24          0 % /   16         14 % /   35
+       60–90 n  504 floor     69          0 % /   34          0 % /   23          0 % /   34          0 % /   22          0 % /   41
+      90–120 n  450 floor     93          0 % /   44          0 % /   30          0 % /   44          0 % /   29          0 % /   49
+     120–180 n  351 floor    129          0 % /   59          0 % /   44          0 % /   60          0 % /   43          0 % /   60
+        ≥180 n  190 floor    216          0 % /  109          0 % /   80          1 % /  109          0 % /   76          0 % /  108
+→ runs/2026-11-03-lidc-kernel/score/perslice_lidc10.csv

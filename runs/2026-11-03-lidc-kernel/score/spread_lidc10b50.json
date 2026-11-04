@@ -1,0 +1,281 @@
+{
+ "pairs": "data/lidc10b50/val.bin",
+ "records": 200,
+ "arms": {
+  "low dose": {
+   "arm": "low dose",
+   "label": "low dose",
+   "rmse_body": 145.6665698025584,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    8.040095648811844,
+    7.4246635353592865,
+    8.603276782060819
+   ],
+   "mean_frequency_ratio": [
+    1.999249720534122,
+    1.7817806537320193,
+    2.248589208650797
+   ],
+   "local_std_ratio": [
+    3.99371959382195,
+    3.678152954853834,
+    4.146684940975937
+   ],
+   "blobs_per_slice": 688.13,
+   "invented_per_slice": 562.365,
+   "dropped_per_slice": 10.29,
+   "blob_slices": 200
+  },
+  "diff.k0": {
+   "arm": "diff.k0",
+   "label": "diffusion k0",
+   "rmse_body": 98.60948474785057,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.097279072858347,
+    1.0449418908355301,
+    1.1514726571086666
+   ],
+   "mean_frequency_ratio": [
+    1.0386261723314476,
+    0.966526371307327,
+    1.1156158371680807
+   ],
+   "local_std_ratio": [
+    1.2489891213841737,
+    1.1756310328148716,
+    1.343667931973046
+   ],
+   "blobs_per_slice": 115.985,
+   "invented_per_slice": 57.385,
+   "dropped_per_slice": 54.05,
+   "blob_slices": 200
+  },
+  "diff.k1": {
+   "arm": "diff.k1",
+   "label": "diffusion k1",
+   "rmse_body": 98.20264302399781,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.107877100835783,
+    1.0593694691448468,
+    1.154991961006253
+   ],
+   "mean_frequency_ratio": [
+    1.0577728724815836,
+    0.9841874176801673,
+    1.141240691720605
+   ],
+   "local_std_ratio": [
+    1.2478452006547136,
+    1.1897396235490778,
+    1.3077490745226101
+   ],
+   "blobs_per_slice": 116.13,
+   "invented_per_slice": 57.345,
+   "dropped_per_slice": 53.415,
+   "blob_slices": 200
+  },
+  "diff.k2": {
+   "arm": "diff.k2",
+   "label": "diffusion k2",
+   "rmse_body": 98.1874680325559,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.09598267164007,
+    1.0493821664928367,
+    1.142101005893309
+   ],
+   "mean_frequency_ratio": [
+    1.0488320130913167,
+    0.9742186159153693,
+    1.1240943209162781
+   ],
+   "local_std_ratio": [
+    1.218342408063354,
+    1.1381979220626373,
+    1.3227066546855695
+   ],
+   "blobs_per_slice": 117.165,
+   "invented_per_slice": 58.225,
+   "dropped_per_slice": 53.595,
+   "blob_slices": 200
+  },
+  "diff.k3": {
+   "arm": "diff.k3",
+   "label": "diffusion k3",
+   "rmse_body": 98.49274805691819,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.0934061420786816,
+    1.0447245495693869,
+    1.1472879781828773
+   ],
+   "mean_frequency_ratio": [
+    1.0488042983005674,
+    0.9785759778289511,
+    1.129710366785817
+   ],
+   "local_std_ratio": [
+    1.221398278236925,
+    1.125240066750416,
+    1.335230559694923
+   ],
+   "blobs_per_slice": 117.76,
+   "invented_per_slice": 58.84,
+   "dropped_per_slice": 53.275,
+   "blob_slices": 200
+  },
+  "diff_sl.k0": {
+   "arm": "diff_sl.k0",
+   "label": "diffusion, Shepp-Logan k0",
+   "rmse_body": 130.4225642139278,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.1735069214745868,
+    1.1001229128864807,
+    1.2582116093695055
+   ],
+   "mean_frequency_ratio": [
+    1.2555909438671726,
+    1.1845727189307578,
+    1.3420285278022184
+   ],
+   "local_std_ratio": [
+    1.182316973286694,
+    1.116694467318776,
+    1.280896717644111
+   ],
+   "blobs_per_slice": 129.22,
+   "invented_per_slice": 69.54,
+   "dropped_per_slice": 52.965,
+   "blob_slices": 200
+  },
+  "gauss": {
+   "arm": "gauss",
+   "label": "Gaussian",
+   "rmse_body": 78.90111460328242,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    1.0808133568185556,
+    1.0428493320067735,
+    1.1236218881618478
+   ],
+   "mean_frequency_ratio": [
+    0.7944703253744647,
+    0.7306185562747718,
+    0.866671155328104
+   ],
+   "local_std_ratio": [
+    1.1254903268900656,
+    1.0792559142500355,
+    1.2070667187603163
+   ],
+   "blobs_per_slice": 11.195,
+   "invented_per_slice": 3.12,
+   "dropped_per_slice": 102.11,
+   "blob_slices": 200
+  },
+  "mse": {
+   "arm": "mse",
+   "label": "MSE UNet",
+   "rmse_body": 60.85162309195711,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    0.6121075429575779,
+    0.5486779192811193,
+    0.6733431945519834
+   ],
+   "mean_frequency_ratio": [
+    0.5123898606356942,
+    0.478737514296057,
+    0.5538036422910243
+   ],
+   "local_std_ratio": [
+    0.4580585573351009,
+    0.4351021150323074,
+    0.48528645252918806
+   ],
+   "blobs_per_slice": 37.56,
+   "invented_per_slice": 6.49,
+   "dropped_per_slice": 78.84,
+   "blob_slices": 200
+  },
+  "mse_sl": {
+   "arm": "mse_sl",
+   "label": "MSE UNet, Shepp-Logan",
+   "rmse_body": 64.1071462795978,
+   "slices": 200,
+   "texture_slices": 121,
+   "rois": 1511,
+   "nps_integral_ratio": [
+    0.6641410628277468,
+    0.5931011494324346,
+    0.7391492701569112
+   ],
+   "mean_frequency_ratio": [
+    0.7768870991033047,
+    0.6725449612696155,
+    0.8862335375236383
+   ],
+   "local_std_ratio": [
+    0.4932814544761358,
+    0.4481709973188163,
+    0.5704562628848198
+   ],
+   "blobs_per_slice": 39.57,
+   "invented_per_slice": 7.99,
+   "dropped_per_slice": 78.32,
+   "blob_slices": 200
+  }
+ },
+ "spread": {
+  "diff": {
+   "samples": 4,
+   "std_nodule": 27.826138278094298,
+   "std_lung": 15.855170997253555,
+   "std_soft": 21.778053141397134,
+   "rmse_body_mean_of_samples": 77.18198917276068,
+   "rmse_body_samples": [
+    98.60948474785057,
+    98.20264302399781,
+    98.1874680325559,
+    98.49274805691819
+   ]
+  }
+ },
+ "bins": {},
+ "settings": {
+  "tile": 64,
+  "grid": 32,
+  "blur_px": 8.0,
+  "edge_x_sigma": 2.5,
+  "soft_hu": [
+   -200.0,
+   300.0
+  ],
+  "blob_window_hu": [
+   -1000.0,
+   -300.0
+  ],
+  "blob_threshold": 0.15,
+  "blob_match_px": 3.0
+ }
+}

@@ -1,0 +1,9 @@
+LIDC (simulated, 10%, b50f): data/lidc10b50/val.bin — 1000 records, 543 with a flat 64² ROI, 4948 ROIs, spacing 0.664 mm [0.496, 0.820]
+  added noise (low − full): σ 97.8 HU (median ROI std), NPS peak 0.440 /mm (0.292 cycles/px at the median spacing), mean frequency 0.396 /mm
+  full-dose image (the scanner's own grain; peak above 0.1 /mm): σ 31.4 HU (median ROI std), NPS peak 0.100 /mm (0.066 cycles/px at the median spacing), mean frequency 0.161 /mm
+Mayo (vendor, 10%): data/mayo/val.bin — 4348 records, 1012 with a flat 64² ROI, 3206 ROIs, spacing 0.742 mm [0.586, 0.977]
+  added noise (low − full): σ 194.4 HU (median ROI std), NPS peak 0.425 /mm (0.315 cycles/px at the median spacing), mean frequency 0.398 /mm
+  full-dose image (the scanner's own grain; peak above 0.1 /mm): σ 57.7 HU (median ROI std), NPS peak 0.430 /mm (0.319 cycles/px at the median spacing), mean frequency 0.310 /mm
+added noise: peak frequency Mayo/LIDC 0.97, mean frequency Mayo/LIDC 1.00  — gate (peak within 10%): PASS
+full-dose grain: peak frequency Mayo/LIDC 4.30, mean frequency Mayo/LIDC 1.93
+→ runs/2026-11-03-lidc-kernel/nps_check/{summary.txt,nps.csv,nps.png}

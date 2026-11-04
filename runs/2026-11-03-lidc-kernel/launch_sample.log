@@ -1,0 +1,19 @@
+Build completed successfully (6676 jobs).
+19:02 mayo-diff10b50 k=0: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diff_b50/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 232.442931 → sample 147.152567 HU over 250 slices
+19:07 lidc10b50-diff10b50 k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diff/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 123.307268 → sample 72.743965 HU over 402 slices
+19:16 lidc10-diff10b50 k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10/out/diff_b50/lidc10_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 123.994268 → sample 69.051973 HU over 402 slices
+19:24 lidc10b50-diff10 k=0: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diff_sl/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000); body RMSE floor 123.307268 → sample 94.095301 HU over 402 slices
+19:32 lidc10b50-diff10b50 k=1: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diff/lidc10b50_val.k1.eps.f32: 50 samples (k = 1, 50 steps, η = 1.000000); body RMSE floor 140.529918 → sample 89.926072 HU over 50 slices
+19:34 lidc10b50-diff10b50 k=2: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diff/lidc10b50_val.k2.eps.f32: 50 samples (k = 2, 50 steps, η = 1.000000); body RMSE floor 140.529918 → sample 89.877167 HU over 50 slices
+19:35 lidc10b50-diff10b50 k=3: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diff/lidc10b50_val.k3.eps.f32: 50 samples (k = 3, 50 steps, η = 1.000000); body RMSE floor 140.529918 → sample 90.028171 HU over 50 slices
+19:45 eval-mse10b50-mayo:   data/mayo/val.bin (4348 slices): whole 202.072810 → 72.580309, body 233.066400 → 82.976210
+19:53 eval-mse10b50-lidc10:   data/lidc10/val.bin (4282 slices): whole 119.410230 → 46.380577, body 140.723644 → 54.386392
+20:01 eval-mse10-lidc10b50:   data/lidc10b50/val.bin (4282 slices): whole 119.015459 → 46.073781, body 140.287741 → 53.901356
+sampling done

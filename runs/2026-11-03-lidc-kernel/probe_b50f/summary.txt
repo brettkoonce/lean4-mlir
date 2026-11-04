@@ -1,0 +1,7 @@
+data/lidc10/val.bin: 300 records asked, 161 with a flat 64² ROI and a calibration, 1417 ROIs, spacing 0.664 mm [0.496, 0.820]; filter b50f
+  calibration under b50f: achieved/target σ_add median 0.992 [p5 0.944, p95 1.007]; I0_add vs the file's (its filter) median ×2.00
+  added noise NPS: peak 0.425 /mm, mean frequency 0.397 /mm
+  Mayo (runs/2026-11-02-lidc-mayo/nps.csv): peak 0.425 /mm, mean frequency 0.398 /mm
+  peak Mayo/ours 1.00, mean frequency Mayo/ours 1.00  — gate (peak within 10%): PASS
+  √(Mayo/ours) by frequency (the correction a next kernel would multiply in):
+    0.08:0.95  0.12:0.98  0.16:1.00  0.20:0.98  0.24:0.99  0.28:0.99  0.32:1.01  0.36:1.00  0.40:1.00  0.44:1.01  0.48:1.01  0.52:1.00  0.56:1.01  0.60:1.00  0.64:1.00
