@@ -11,7 +11,7 @@
   .venv-lidc/bin/python scripts/demos/lidc_figure.py <nodules.json> [out.png] [--data=data/lidc]
 
 Every arm's output is read from its dump (`data/lidc/out/<arm>/…eps.f32`, the noise in HU/100
-on the val split's realisation 0). The nodules are chosen, not hand-picked. The < 3 mm one is the
+on the val split's realisation 0; `scripts/datasets/lidc_records.py` finds and reads them). The nodules are chosen, not hand-picked. The < 3 mm one is the
 typical one of `lidc_nodules.py`'s < 3 mm row (its `--json` output, <nodules.json>): the nodule
 whose contrast kept is closest, summed over the arms drawn, to that row's medians, shown on its
 highest-contrast slice; the largest is the connected region of >= 3 readers' agreement with the
@@ -21,6 +21,7 @@ reader-marked texture-1/2 nodule of 5-12 mm (`nodules.json`, matched to a val sl
 z and centroid) with the most readers' agreement on its slice.
 """
 import json
+import os
 import sys
 
 import numpy as np
@@ -32,11 +33,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
-S, N = 512, 2
-HW = S * S
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "datasets"))
+import lidc_records as R  # noqa: E402
+
+S, HW = R.S, R.HW
 LUNG = (-1350, 150)
-ARMS = [("TV", "tv/val.eps.f32"), ("BM3D", "bm3d/val.eps.f32"),
-        ("MSE UNet", "mse/lidc_val.eps.f32"), ("Noise2Noise", "n2n/lidc_val.eps.f32")]
+ARM_DIRS = ["tv", "bm3d", "mse", "n2n"]  # the arms drawn, as `<data>/out/<arm>/` dir names; labels from lidc_records
 COLORS = {"full dose": "black", "quarter dose": "0.6", "TV": "tab:orange", "BM3D": "tab:purple",
           "MSE UNet": "tab:blue", "Noise2Noise": "tab:green"}
 
@@ -48,14 +50,14 @@ def main():
     table, out = pos[0], (pos[1] if len(pos) > 1 else "lidc_denoise.png")
     data = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--data=")), "data/lidc")
     vbin = f"{data}/val.bin"
-    count = int(np.fromfile(vbin, dtype="<u4", count=1)[0])
-    mm = np.memmap(vbin, dtype=np.uint8, mode="r", offset=4, shape=(count, (3 + 2 * N) * HW))
+    count, nreal, mm = R.open_records(vbin)
     meta = json.load(open(f"{data}/val.json"))
-    eps = {name: np.memmap(f"{data}/out/{p}", dtype="<f4", mode="r", shape=(count, S, S)) for name, p in ARMS}
+    dumps = R.find_dumps(data)
+    ARMS = [(R.label(a), dumps[a]) for a in ARM_DIRS if a in dumps]
+    eps = {name: R.open_dump(p, count) for name, p in ARMS}
 
     def decode(k):
-        imgs = np.asarray(mm[k, : 2 * (1 + N) * HW]).view("<u2").reshape(1 + N, S, S).astype(np.float64) - 1024.0
-        return imgs[0], imgs[1], np.asarray(mm[k, 2 * (1 + N) * HW:]).reshape(S, S)
+        return R.decode(mm[k], nreal)
 
     def arms(k):
         full, low, mask = decode(k)

@@ -17,6 +17,7 @@ measure_psd), written beside
 """
 import argparse
 import os
+import sys
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -26,8 +27,10 @@ import numpy as np  # noqa: E402
 if not hasattr(np, "trapz"):  # bm4d 4.2.5's colored-noise path still calls np.trapz (removed in numpy 2.4)
     np.trapz = np.trapezoid
 
-S, N = 512, 2
-HW = S * S
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "datasets"))
+import lidc_records as R  # noqa: E402
+
+S, HW = R.S, R.HW  # the realisation count N is read off each file (2 on the 25% build, 1 on the 10%)
 GRIDS = {
     "gauss": [0.3, 0.4, 0.5, 0.6, 0.75, 1.0, 1.5],
     "tv": [0.01, 0.02, 0.03, 0.05, 0.08, 0.12],
@@ -38,14 +41,14 @@ _psd = {}
 
 
 def records(path):
-    count = int(np.fromfile(path, dtype="<u4", count=1)[0])
-    return count, np.memmap(path, dtype=np.uint8, mode="r", offset=4, shape=(count, (3 + 2 * N) * HW))
+    count, _, mm = R.open_records(path)
+    return count, mm
 
 
 def decode(path, k):
-    _, mm = records(path)
-    imgs = np.asarray(mm[k, : 2 * (1 + N) * HW]).view("<u2").reshape(1 + N, S, S).astype(np.float64) - 1024.0
-    return imgs[0], imgs[1]  # full, low₀
+    count, n, mm = R.open_records(path)
+    full, low, _ = R.decode(mm[k], n)
+    return full, low  # full, low₀
 
 
 def denoise(method, knob, low):

@@ -3,16 +3,20 @@ import LeanMlir.F32Array
 /-!
 # Does `F32.loadCtPair` hand the trainer the pairs `preprocess_lidc.py` wrote?
 
-`test-lidc-loader <file.bin> [record …]` loads an LIDC pair file through the C loader in each
-pairing (supervised at both realisations, Noise2Noise) plus the masks, and prints, for each
-requested record (default: first, middle, last), integer statistics of what came back:
+`test-lidc-loader <file.bin> [record …]` loads a CT pair file through the C loader in each
+pairing — supervised at every realisation, and Noise2Noise when the file has two — plus the
+masks, and prints, for each requested record (default: first, middle, last), integer statistics
+of what came back:
 
+    count <n>  N <realisations>
     rec <k> pair <p> r <r>  in <Σ input·4096>  tgt <Σ target·4096>  ssd <Σ (input − target)²·4096²>
     rec <k> mask <Σ mask> nz <pixels with a reader>
 
 Every pixel is a multiple of 1/4096 below 1, so each statistic is an integer and exact in f64:
 `scripts/probes/lidc_loader_check.py` decodes the same records with numpy and requires equality,
-not a tolerance. It also checks the declared record sizes (`count · S²` floats each side).
+not a tolerance. It also checks the declared record sizes (`count · S²` floats each side). The
+realisation count comes from the file size (`F32.ctRealisations`), as it does in the trainer,
+and a read at the wrong count must be refused.
 -/
 
 open F32
@@ -35,19 +39,21 @@ private def stats (inp tgt : ByteArray) (k : Nat) : Nat × Nat × Nat := Id.run 
 def main (args : List String) : IO UInt32 := do
   let some path := args.head? | IO.eprintln "usage: test-lidc-loader <file.bin> [record …]"; return 2
   let mut ok := true
-  let arms : List (USize × USize) := [(0, 0), (0, 1), (1, 0)]
+  let nReal ← F32.ctRealisations path S
+  let arms : List (USize × USize) :=
+    ((List.range nReal).map fun r => ((0 : USize), r.toUSize)) ++ (if nReal ≥ 2 then [(1, 0)] else [])
   let mut recs : List Nat := args.tail.filterMap String.toNat?
   for (p, r) in arms do
-    let (inp, tgt, n) ← F32.loadCtPair path S.toUSize 2 p r
+    let (inp, tgt, n) ← F32.loadCtPair path S.toUSize nReal.toUSize p r
     if inp.size != n * S * S * 4 || tgt.size != n * S * S * 4 then
       IO.println s!"FAIL sizes pair {p} r {r}: n={n} input {inp.size} B target {tgt.size} B"
       ok := false
     if recs.isEmpty then recs := [0, n / 2, n - 1]
-    IO.println s!"count {n}"
+    IO.println s!"count {n} N {nReal}"
     for k in recs do
       let (a, b, d) := stats inp tgt k
       IO.println s!"rec {k} pair {p} r {r} in {a} tgt {b} ssd {d}"
-  let m ← F32.loadCtMask path S.toUSize 2
+  let m ← F32.loadCtMask path S.toUSize nReal.toUSize
   for k in recs do
     let mut sum := 0
     let mut nz := 0
@@ -58,8 +64,8 @@ def main (args : List String) : IO UInt32 := do
     IO.println s!"rec {k} mask {sum} nz {nz}"
   -- A wrong realisation count must be refused, not misparsed.
   try
-    let _ ← F32.loadCtPair path S.toUSize 3
-    IO.println "FAIL a 3-realisation read of a 2-realisation file was accepted"
+    let _ ← F32.loadCtPair path S.toUSize (nReal + 1).toUSize
+    IO.println s!"FAIL a {nReal + 1}-realisation read of a {nReal}-realisation file was accepted"
     ok := false
-  catch e => IO.println s!"refused N=3: {e}"
+  catch e => IO.println s!"refused N={nReal + 1}: {e}"
   return if ok then 0 else 1

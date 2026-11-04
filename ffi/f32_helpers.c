@@ -661,6 +661,123 @@ LEAN_EXPORT lean_obj_res lean_f32_load_ct_mask(b_lean_obj_arg path_obj, size_t S
     return lean_io_result_mk_ok(ba);
 }
 
+// ---- Channel concat, for the LIDC generator's conditioning ----
+// [B, Ca, hw] ⊕ [B, Cb, hw] → [B, Ca + Cb, hw], image by image: the conditional diffusion arm's
+// net sees [x_t, low] before lean_ddpm_prepend_sincos_t adds the time channels. Two memcpys per
+// image; the inputs may be longer than B·C·hw (a batch sliced from a resident buffer), never shorter.
+LEAN_EXPORT lean_obj_res lean_f32_concat_channels(b_lean_obj_arg a_ba, b_lean_obj_arg b_ba,
+                                                  size_t B, size_t Ca, size_t Cb, size_t hw) {
+    const size_t na = Ca * hw, nb = Cb * hw;
+    if (lean_sarray_size(a_ba) < B * na * 4 || lean_sarray_size(b_ba) < B * nb * 4)
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.concatChannels: an input is shorter than B * C * hw floats")));
+    const size_t nbytes = B * (na + nb) * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* a = (const float*)lean_sarray_cptr(a_ba);
+    const float* b = (const float*)lean_sarray_cptr(b_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    for (size_t i = 0; i < B; i++) {
+        memcpy(o + i * (na + nb), a + i * na, na * sizeof(float));
+        memcpy(o + i * (na + nb) + na, b + i * nb, nb * sizeof(float));
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- A constant channel per image, for the noise-conditioned generator (plan §11) ----
+// [B, C, hw] ++ one channel filled with vals[i] per image → [B, C + 1, hw]. The LIDC generator's
+// σ̂ channel: the slice's own noise estimate, the same number at train and test.
+LEAN_EXPORT lean_obj_res lean_f32_append_scalar_channel(b_lean_obj_arg x_ba, b_lean_obj_arg vals_ba,
+                                                        size_t B, size_t C, size_t hw) {
+    const size_t nin = C * hw, nout = (C + 1) * hw;
+    if (lean_sarray_size(x_ba) < B * nin * 4 || lean_sarray_size(vals_ba) < B * 4)
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.appendScalarChannel: input shorter than B * C * hw floats or B values")));
+    const size_t nbytes = B * nout * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* x = (const float*)lean_sarray_cptr(x_ba);
+    const float* v = (const float*)lean_sarray_cptr(vals_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    for (size_t i = 0; i < B; i++) {
+        memcpy(o + i * nout, x + i * nin, nin * sizeof(float));
+        float* ch = o + i * nout + nin;
+        for (size_t p = 0; p < hw; p++) ch[p] = v[i];
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// out[i] = log10(scale * in[i]), with a floor at 1e-6 so a zero never makes -inf: the σ̂ channel is
+// log10(σ̂ / 100 HU).
+LEAN_EXPORT lean_obj_res lean_f32_log10_scale(b_lean_obj_arg ba, double scale) {
+    size_t n = lean_sarray_size(ba) / 4;
+    lean_object* out = lean_alloc_sarray(1, n * 4, n * 4);
+    const float* in = (const float*)lean_sarray_cptr(ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    for (size_t i = 0; i < n; i++) {
+        double v = scale * (double)in[i];
+        o[i] = (float)log10(v > 1e-6 ? v : 1e-6);
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// The sampler's clamp (plan §11.2): x is a residual in units of resScale HU on top of low (in units
+// of lowScale HU), so low·lowScale + x·resScale must stay in [lo, hi] HU — the valid HU range,
+// nothing tuned. Returns (the clamped copy, the number of pixels that moved).
+LEAN_EXPORT lean_obj_res lean_f32_clamp_residual(b_lean_obj_arg x_ba, b_lean_obj_arg low_ba, size_t n,
+                                                 double lowScale, double resScale, double lo, double hi) {
+    if (lean_sarray_size(x_ba) < n * 4 || lean_sarray_size(low_ba) < n * 4)
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.clampResidual: an input is shorter than n floats")));
+    lean_object* out = lean_alloc_sarray(1, n * 4, n * 4);
+    const float* x = (const float*)lean_sarray_cptr(x_ba);
+    const float* l = (const float*)lean_sarray_cptr(low_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    size_t moved = 0;
+    for (size_t i = 0; i < n; i++) {
+        double base = lowScale * (double)l[i];
+        double xmin = (lo - base) / resScale, xmax = (hi - base) / resScale;
+        double v = (double)x[i];
+        if (v < xmin) { v = xmin; moved++; } else if (v > xmax) { v = xmax; moved++; }
+        o[i] = (float)v;
+    }
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, out);
+    lean_ctor_set(pair, 1, lean_usize_to_nat(moved));
+    return lean_io_result_mk_ok(pair);
+}
+
+// ---- Sparse dump files, for lidc-denoise-sample ----
+// Lean's IO.FS.Handle has no seek. A sampler that covers a SUBSET of a pair file's records still
+// writes the trainer's dump layout (record k at byte k * S² * 4) so every scorer reads it unchanged:
+// lean_f32_truncate_file sizes the file once (the unwritten records are a hole and cost no disk),
+// lean_f32_pwrite_file writes one record at its offset. Shards on different GPUs write disjoint
+// records of one file; ftruncate to a size the file already has changes nothing.
+LEAN_EXPORT lean_obj_res lean_f32_truncate_file(b_lean_obj_arg path_obj, size_t bytes) {
+    int fd = open(lean_string_cstr(path_obj), O_WRONLY | O_CREAT, 0644);
+    if (fd < 0 || ftruncate(fd, (off_t)bytes) != 0) {
+        int e = errno; if (fd >= 0) close(fd);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(strerror(e))));
+    }
+    close(fd);
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+LEAN_EXPORT lean_obj_res lean_f32_pwrite_file(b_lean_obj_arg path_obj, size_t offset, b_lean_obj_arg ba) {
+    int fd = open(lean_string_cstr(path_obj), O_WRONLY | O_CREAT, 0644);
+    if (fd < 0) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(strerror(errno))));
+    const uint8_t* p = lean_sarray_cptr(ba);
+    size_t n = lean_sarray_size(ba), done = 0;
+    while (done < n) {
+        ssize_t w = pwrite(fd, p + done, n - done, (off_t)(offset + done));
+        if (w <= 0) {
+            int e = errno; close(fd);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(w == 0 ? "pwrite wrote nothing" : strerror(e))));
+        }
+        done += (size_t)w;
+    }
+    close(fd);
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
 // ---- VOC 2007 YOLOv1 binary loader ----
 // Binary format (written by preprocess_voc.py — Phase 3b layout, 157,728
 // bytes/record):

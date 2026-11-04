@@ -1920,9 +1920,16 @@ lean_exe «test-dataset-record-sizes» where
   root := `tests.TestDatasetRecordSizes
   moreLinkArgs := lowererLink
 
--- LIDC CT denoiser, MSE arm: patch training + whole-slice scoring (planning/lidc_ct_denoising_demo.md).
+-- LIDC CT denoiser: the MSE / Noise2Noise / conditional-diffusion arms, patch training, and
+-- whole-slice scoring of the regression arms (planning/lidc_ct_denoising_demo.md §6, §10).
 lean_exe «lidc-denoise-train» where
   root := `demos.MainLidcDenoiseTrain
+  moreLinkArgs := lowererLink
+
+-- The diffusion arm's sampler: DDIM (η = 1, 50 steps) at 512², one dump per sample seed in the
+-- trainer's layout, sharded across GPUs (planning/lidc_ct_denoising_demo.md §10.1).
+lean_exe «lidc-denoise-sample» where
+  root := `demos.MainLidcDenoiseSample
   moreLinkArgs := lowererLink
 
 -- LIDC pair loader: integer statistics of loaded records, compared exactly against a numpy

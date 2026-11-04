@@ -107,6 +107,13 @@ def main : IO UInt32 := do
     { name := "lidc ct pair 512 (val)", path := "data/lidc/val.bin"
       pixels := 512 * 512, labelBytes := 512 * 512 * 4
       load := F32.loadCtPair "data/lidc/val.bin" 512 2 },
+    -- The 10 %-dose LIDC build and the Mayo held-out set carry ONE realisation (N = 1).
+    { name := "lidc10 ct pair 512, N = 1 (val)", path := "data/lidc10/val.bin"
+      pixels := 512 * 512, labelBytes := 512 * 512 * 4
+      load := F32.loadCtPair "data/lidc10/val.bin" 512 1 },
+    { name := "mayo ct pair 512, N = 1 (val)", path := "data/mayo/val.bin"
+      pixels := 512 * 512, labelBytes := 512 * 512 * 4
+      load := F32.loadCtPair "data/mayo/val.bin" 512 1 },
     -- Detection: f32 target tensors.
     { name := "visdrone yolov1 224 (val)", path := "data/visdrone/val.bin"
       pixels := 3 * 224 * 224, labelBytes := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20

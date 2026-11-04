@@ -89,13 +89,18 @@ def unetBrats : NetSpec where
     trainer renders it at `S = 256` patches, the scorer at `S = 512` slices, and both read one
     checkpoint, so the name does not carry `S` (the train-step and eval artifacts take different
     suffixes under the one `buildPrefix`). `arm` (empty for the smoke fit) names a run apart, so
-    concurrent arms never share a train-step artifact or a checkpoint. -/
-def unetCtDenoise (S : Nat := 256) (arm : String := "") : NetSpec where
+    concurrent arms never share a train-step artifact or a checkpoint.
+
+    `inC` is the stem's channel count: 1 for the regression arms; the conditional diffusion arm
+    (`lidc-denoise-train --arm=diff`, `lidc-denoise-sample`) feeds `[x_t, low]` plus the 8 sin/cos
+    channels of `Ddpm.prependSinCosT` at `nFreq = 4`, so `inC = 10` — the one layer that differs
+    from the regression net, and the only thing the arm changes about it. -/
+def unetCtDenoise (S : Nat := 256) (arm : String := "") (inC : Nat := 1) : NetSpec where
   name := "UNet CT denoiser (LIDC, 1-channel HU to noise)" ++ (if arm.isEmpty then "" else s!" {arm}")
   imageH := S
   imageW := S
   layers := [
-    .unetDown 1   32,
+    .unetDown inC 32,
     .unetDown 32  64,
     .unetDown 64  128,
     .unetDown 128 256,

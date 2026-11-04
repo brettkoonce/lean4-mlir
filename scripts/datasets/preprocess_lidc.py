@@ -17,8 +17,16 @@ Options:
   --train-slices 40     slices per training patient: every nodule-bearing slice first (evenly
                         thinned if there are more than this), then evenly spaced slices to fill
   --realisations 2      independent low-dose realisations per slice; Noise2Noise trains on two
+  --resume              keep <out>/tmp_preprocess and skip every patient whose per-patient result is
+                        there (a .json beside its .bin, written after the .bin is complete), so a
+                        killed build continues; without it the temp dir is wiped first
   --angles 720          parallel-beam views over 180° for the projector
   --dose 0.25           the simulated low-dose fraction (quarter dose) of EACH slice's own dose
+  --dose-range LO HI    instead of one dose, draw each slice's dose log-uniform in [LO, HI] (the
+                        range build of planning/lidc_ct_denoising_demo.md §11: a generator fitted
+                        at one dose is a posterior sampler only near that dose's noise level, and
+                        the held-out set spans 1.7-5× the scan's own noise); recorded per row as
+                        `dose`. Exclusive with --dose.
   --i0 0                full-dose photons per detector element, unattenuated; 0 (the default)
                         calibrates it per slice so the added noise is what the dose fraction
                         implies for that slice's own noise (below); --i0-ref is the reference
@@ -26,7 +34,17 @@ Options:
   --sigma-e 0           electronic noise: std, in counts, of a zero-mean Gaussian on the detector;
                         off by default, since I0 is a calibrated effective quantity here
   --filter shepp-logan  the FBP apodisation (scikit-image's names: ramp, shepp-logan, cosine,
-                        hamming, hann); the clinical kernels are apodised ramps
+                        hamming, hann); the clinical kernels are apodised ramps. `mix` draws one
+                        of the five per slice (recorded per row as `filter`), so the training
+                        noise spans a range of textures as well as levels; the per-slice
+                        calibration runs under the slice's own filter, so the level stays exact.
+                        `b50f` (§7 b, 2026-11-03): Shepp-Logan times a gain in cycles/mm fitted to
+                        Mayo's B50f-reconstructed inserted noise — the square root of the ratio of
+                        Mayo's radial NPS to this build's Shepp-Logan one (runs/2026-11-02-lidc-mayo/
+                        nps.csv; B50F_GAIN below), flat below 0.08 /mm, 1.6× at 0.56 /mm, rolling
+                        off past Mayo's 0.67 /mm Nyquist where nothing was measured — so the inserted
+                        noise's spectrum is the held-out scanner's by construction (its level is
+                        still the per-slice calibration's, run under this filter)
   --seed 0
   --workers 30          patients processed in parallel, one core each (numpy is single-threaded here)
   --patients N          only the first N landed patients, sorted by ID: smoke tests
@@ -121,8 +139,11 @@ import numpy as np
 import pydicom
 from skimage.draw import disk as draw_disk
 from skimage.draw import polygon as draw_polygon
+from numpy.fft import fft, fftfreq, ifft
 from scipy.ndimage import maximum_filter, minimum_filter, uniform_filter
 from skimage.transform import iradon, radon
+# the two private helpers that iradon itself uses (0.26.0), so a custom window reproduces its path
+from skimage.transform.radon_transform import _get_fourier_filter, _sinogram_circle_to_square
 
 MU_WATER = 0.019  # mm^-1, about 70 keV
 HU_MIN, HU_MAX = -1024, 3071
@@ -299,6 +320,34 @@ def read_volume(pdir, size):
 
 # ---- the low-dose simulation ----------------------------------------------------------------
 
+FILTERS = ["ramp", "shepp-logan", "cosine", "hamming", "hann"]  # scikit-image's, sharpest first
+
+# §7 (b): the empirical B50f-like kernel, a gain over the Shepp-Logan window in cycles/mm. The knots
+# are √(Mayo's inserted-noise NPS / the 25 % build's Shepp-Logan NPS), both radially averaged and
+# normalised to unit integral (scripts/probes/lidc_noise_nps_check.py → runs/2026-11-02-lidc-mayo/
+# nps.csv), 3-bin smoothed, divided by their 0.08–0.16 /mm plateau so the gain is 1 at low
+# frequency (the level is the calibration's business, not the kernel's). Below 0.08 /mm the
+# measurement is the 64-px ROI's resolution and the detrend, so the gain is held flat; past
+# 0.64 /mm nothing is measured (Mayo's 0.742 mm grid has its Nyquist at 0.674) and the gain is
+# taken down as a sharp kernel's MTF goes, to 0.7× and 0.3× its 0.64 value at 0.80 and 1.00 /mm,
+# so the finest LIDC grids (0.50 mm, Nyquist 1.0 /mm) are not handed grain no scanner makes.
+B50F_GAIN = ((0.00, 1.00), (0.08, 1.00), (0.12, 1.00), (0.16, 1.04), (0.20, 1.07), (0.24, 1.14),
+             (0.28, 1.22), (0.32, 1.29), (0.36, 1.36), (0.40, 1.45), (0.44, 1.51), (0.48, 1.55),
+             (0.52, 1.59), (0.56, 1.60), (0.60, 1.57), (0.64, 1.50), (0.80, 1.05), (1.00, 0.45))
+
+
+def b50f_window(f_cps, spacing):
+    """The `b50f` apodisation at f in cycles/sample on a grid of `spacing` mm: scikit-image's
+    Shepp-Logan window sin(πf)/(πf) times B50F_GAIN read at f/spacing cycles/mm."""
+    w = np.pi * f_cps
+    sl = np.where(w > 0, np.sin(w) / np.where(w > 0, w, 1.0), 1.0)
+    kf, kg = np.array(B50F_GAIN).T
+    return sl * np.interp(f_cps / spacing, kf, kg)
+
+
+CUSTOM_FILTERS = {"b50f": b50f_window}  # name → window(f_cps, spacing); not in `mix`'s draw
+
+
 class Projector:
     def __init__(self, size, angles, filter_name):
         self.theta = np.linspace(0.0, 180.0, angles, endpoint=False)
@@ -313,16 +362,35 @@ class Projector:
         mu = np.where(self.inside, np.maximum(mu, 0.0), 0.0)
         return (radon(mu, theta=self.theta, circle=True) * spacing).astype(np.float32)
 
-    def noise_hu(self, p, spacing, i0_add, sigma_e, rng):
-        """One realisation of the added noise, in HU, from the sinogram p."""
+    def noise_hu(self, p, spacing, i0_add, sigma_e, rng, filter_name=None):
+        """One realisation of the added noise, in HU, from the sinogram p (`filter_name` per call for
+        the mixed build; the constructor's otherwise)."""
         p = p.astype(np.float64)
         counts = rng.poisson(i0_add * np.exp(-p)).astype(np.float64)
         if sigma_e > 0:
             counts += rng.normal(0.0, sigma_e, p.shape)
         n = -np.log(np.maximum(counts, 1.0) / i0_add) - p
-        d_mu = iradon(n / spacing, theta=self.theta, circle=True, filter_name=self.filter_name,
-                      output_size=self.inside.shape[0])
+        fname = filter_name or self.filter_name
+        if fname in CUSTOM_FILTERS:
+            d_mu = self.fbp_window(n / spacing, lambda f: CUSTOM_FILTERS[fname](f, spacing))
+        else:
+            d_mu = iradon(n / spacing, theta=self.theta, circle=True, filter_name=fname,
+                          output_size=self.inside.shape[0])
         return (d_mu / MU_WATER * 1000.0).astype(np.float32)
+
+    def fbp_window(self, sino, window):
+        """iradon(circle=True) under an arbitrary window on the ramp: the same circle-to-square pad,
+        power-of-two pad and ramp as scikit-image's, the window at |f| in cycles/sample, then its
+        back-projection with the filter off (identical to its ramp / shepp-logan to 1e-14)."""
+        size = self.inside.shape[0]
+        sq = _sinogram_circle_to_square(sino)
+        d = sq.shape[0]
+        n = max(64, int(2 ** np.ceil(np.log2(2 * d))))
+        h = _get_fourier_filter(n, "ramp")[:, 0] * window(np.abs(fftfreq(n)))
+        filt = np.real(ifft(fft(np.pad(sq, ((0, n - d), (0, 0))), axis=0) * h[:, None], axis=0))[:d]
+        rec = iradon(filt, theta=self.theta, circle=False, filter_name=None, output_size=size)
+        rec[~self.inside] = 0.0
+        return rec
 
 
 # ---- calibrating I0 to the slice's own noise ---------------------------------------------------
@@ -386,18 +454,31 @@ def process_patient(job):
         for row in nodules:
             row["patient"] = pid
         sel = select_slices(mask, split, a["train_slices"], a["val_stride"])
-        proj = Projector(a["size"], a["angles"], a["filter"])
+        mix = a["filter"] == "mix"
+        proj = Projector(a["size"], a["angles"], "shepp-logan" if mix else a["filter"])
         pnum = int(pid.rsplit("-", 1)[-1])
         spacing = meta["spacing"]
-        gain = (1.0 / a["dose"] - 1.0) ** 0.5          # √3 at quarter dose
-        i0_ref_add = a["i0_ref"] * a["dose"] / (1.0 - a["dose"])
+        # The slice's dose and filter: one dose for the build (--dose), or each slice's own drawn
+        # log-uniform in --dose-range, and under --filter mix one of the five apodisations, from a
+        # stream of its own so the realisations' draws do not move.
+        dose, filt, gain, i0_ref_add = {}, {}, {}, {}
+        for zi in sel:
+            rng_d = np.random.default_rng([a["seed"], pnum, 2_000_000 + zi])
+            if a["dose_range"]:
+                lo, hi = a["dose_range"]
+                dose[zi] = float(np.exp(rng_d.uniform(np.log(lo), np.log(hi))))
+            else:
+                dose[zi] = float(a["dose"])
+            filt[zi] = FILTERS[int(rng_d.integers(len(FILTERS)))] if mix else a["filter"]
+            gain[zi] = (1.0 / dose[zi] - 1.0) ** 0.5          # √3 at quarter dose
+            i0_ref_add[zi] = a["i0_ref"] * dose[zi] / (1.0 - dose[zi])
         # pass 1: the sinogram of every selected slice, and I0 where the slice's own noise is measurable
         sinos, flats, own, i0 = {}, {}, {}, {}
         for zi in sel:
             hu = vol[zi]
             sinos[zi] = proj.sinogram(hu, spacing)
             if a["i0"] > 0:
-                i0[zi] = a["i0"] * a["dose"] / (1.0 - a["dose"])
+                i0[zi] = a["i0"] * dose[zi] / (1.0 - dose[zi])
                 continue
             flat = flat_soft_tissue(hu.astype(np.float64), proj.inside)
             if flat.sum() < CAL_MIN_PIXELS:
@@ -405,19 +486,21 @@ def process_patient(job):
             flats[zi] = flat
             own[zi] = noise_level(hu, flat)
             rng = np.random.default_rng([a["seed"], pnum, 1_000_000 + zi])
-            s_ref = noise_level(proj.noise_hu(sinos[zi], spacing, i0_ref_add, a["sigma_e"], rng), flat)
-            i0[zi] = float(np.clip(i0_ref_add * (s_ref / (gain * own[zi])) ** 2, 1e2, 1e12))
-        fallback = float(np.median(list(i0.values()))) if i0 else i0_ref_add
+            s_ref = noise_level(proj.noise_hu(sinos[zi], spacing, i0_ref_add[zi], a["sigma_e"], rng, filt[zi]), flat)
+            i0[zi] = float(np.clip(i0_ref_add[zi] * (s_ref / (gain[zi] * own[zi])) ** 2, 1e2, 1e12))
+        # An uncalibrated slice (apices, some bases) takes the volume's median calibration, as the
+        # ratio of its I0 to the dose's reference I0, so it scales with the slice's own dose.
+        fallback_ratio = float(np.median([i0[z] / i0_ref_add[z] for z in i0])) if i0 else 1.0
         # pass 2: the pairs
         rows = []
         with open(os.path.join(tmp_dir, pid + ".bin"), "wb") as f:
             for zi in sel:
                 hu = vol[zi]
-                i0_add = i0.get(zi, fallback)
+                i0_add = i0.get(zi, fallback_ratio * i0_ref_add[zi])
                 f.write(encode(hu).tobytes())
                 for k in range(a["realisations"]):
                     rng = np.random.default_rng([a["seed"], pnum, zi, k])
-                    d_k = proj.noise_hu(sinos[zi], spacing, i0_add, a["sigma_e"], rng)
+                    d_k = proj.noise_hu(sinos[zi], spacing, i0_add, a["sigma_e"], rng, filt[zi])
                     f.write(encode(hu + d_k).tobytes())
                     if k == 0:
                         d_hu = d_k
@@ -427,7 +510,8 @@ def process_patient(job):
                              "nodule_px": int(np.count_nonzero(mask[zi])),
                              "noise_hu_std": float(d_hu[proj.inside].std()),
                              "i0_add": i0_add, "calibrated": zi in own, "sigma_full_hu": s_full,
-                             "sigma_add_target_hu": s_full * gain,
+                             "sigma_add_target_hu": s_full * gain[zi],
+                             "dose": dose[zi], "filter": filt[zi],
                              "sigma_add_hu": noise_level(d_hu, flats[zi]) if zi in own else float("nan"),
                              **{k: meta[k] for k in META_KEYS}})
         del sinos
@@ -435,12 +519,18 @@ def process_patient(job):
         calib = {"i0_add_median": float(np.median([r["i0_add"] for r in rows])) if rows else None,
                  "sigma_full_hu_median": float(np.median(list(own.values()))) if own else None,
                  "calibrated_slices": len(own), "achieved_over_target_median": float(np.median(ratios)) if ratios else None}
-        return {"patient": pid, "split": split, "slices": len(sel), "volume_slices": int(len(zs)),
-                "nodule_slices": int(sum(1 for i in range(len(zs)) if mask[i].any())),
-                "dropped_duplicates": meta["dropped_duplicates"], "readers": len(sessions),
-                **calib,
-                "xml": os.path.relpath(recs[0][0], a["xml_dir"]) if recs else None,
-                "nodules": nodules, "rows": rows, "seconds": time.time() - t0}
+        result = {"patient": pid, "split": split, "slices": len(sel), "volume_slices": int(len(zs)),
+                  "nodule_slices": int(sum(1 for i in range(len(zs)) if mask[i].any())),
+                  "dropped_duplicates": meta["dropped_duplicates"], "readers": len(sessions),
+                  **calib,
+                  "xml": os.path.relpath(recs[0][0], a["xml_dir"]) if recs else None,
+                  "nodules": nodules, "rows": rows, "seconds": time.time() - t0}
+        # The resume marker: written after the .bin is complete, renamed into place, so its
+        # presence means the patient is done (a killed worker leaves a .bin and no .json).
+        with open(os.path.join(tmp_dir, pid + ".json.tmp"), "w") as f:
+            json.dump(result, f)
+        os.replace(os.path.join(tmp_dir, pid + ".json.tmp"), os.path.join(tmp_dir, pid + ".json"))
+        return result
     except Exception as e:  # one bad volume must not take the pool down
         return {"patient": pid, "split": split, "skip": f"error: {e!r}", "trace": traceback.format_exc()}
 
@@ -458,6 +548,7 @@ def main():
     ap.add_argument("--realisations", type=int, default=2)
     ap.add_argument("--angles", type=int, default=720)
     ap.add_argument("--dose", type=float, default=0.25)
+    ap.add_argument("--dose-range", type=float, nargs=2, metavar=("LO", "HI"), default=None)
     ap.add_argument("--i0", type=float, default=0.0)
     ap.add_argument("--i0-ref", type=float, default=1e5)
     ap.add_argument("--sigma-e", type=float, default=0.0)
@@ -466,7 +557,14 @@ def main():
     ap.add_argument("--workers", type=int, default=30)
     ap.add_argument("--patients", type=int, default=0)
     ap.add_argument("--size", type=int, default=512)
+    ap.add_argument("--resume", action="store_true")
     args = ap.parse_args()
+    if args.dose_range and ("--dose" in sys.argv or any(x.startswith("--dose=") for x in sys.argv)):
+        sys.exit("--dose and --dose-range are exclusive")
+    if args.dose_range and not (0 < args.dose_range[0] < args.dose_range[1] < 1):
+        sys.exit("--dose-range wants 0 < LO < HI < 1")
+    if args.filter != "mix" and args.filter not in FILTERS and args.filter not in CUSTOM_FILTERS:
+        sys.exit(f"--filter: one of {FILTERS + list(CUSTOM_FILTERS)} or mix")
     t0 = time.time()
 
     landed = sorted(p for p in os.listdir(args.dicom_dir)
@@ -484,22 +582,33 @@ def main():
     global XML
     by_series, by_study, n_xml = parse_xml_dir(args.xml_dir)
     XML = (by_series, by_study)
-    i0_note = (f"I0_add fixed at {args.i0 * args.dose / (1 - args.dose):.3g}" if args.i0 > 0
+    i0_note = (f"I0_add fixed at {args.i0:.3g} × dose/(1 − dose)" if args.i0 > 0
                else f"I0 calibrated per slice against {args.i0_ref:.3g}")
+    dose_note = (f"dose log-uniform in [{args.dose_range[0]}, {args.dose_range[1]}] per slice" if args.dose_range
+                 else f"dose {args.dose}")
     print(f"{len(landed)} patients ({len(split['train'])} train / {n_val} val), {n_xml} XML files "
-          f"({len(by_series)} series, {len(by_study)} studies); dose {args.dose}, {i0_note}, "
+          f"({len(by_series)} series, {len(by_study)} studies); {dose_note}, {i0_note}, "
           f"{args.angles} views, {args.filter}, {args.realisations} realisations", flush=True)
 
     os.makedirs(args.out_dir, exist_ok=True)
     tmp_dir = os.path.join(args.out_dir, "tmp_preprocess")
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    os.makedirs(tmp_dir)
+    if not args.resume:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    os.makedirs(tmp_dir, exist_ok=True)
     a = dict(vars(args))
-    jobs = [(pid, os.path.join(args.dicom_dir, pid), "val" if pid in val_set else "train", a, tmp_dir)
-            for pid in landed]
     results = {}
+    if args.resume:
+        for pid in landed:
+            marker = os.path.join(tmp_dir, pid + ".json")
+            if os.path.exists(marker) and os.path.exists(os.path.join(tmp_dir, pid + ".bin")):
+                with open(marker) as f:
+                    results[pid] = json.load(f)
+        if results:
+            print(f"resume: {len(results)} patients already in {tmp_dir}", flush=True)
+    jobs = [(pid, os.path.join(args.dicom_dir, pid), "val" if pid in val_set else "train", a, tmp_dir)
+            for pid in landed if pid not in results]
     ctx = multiprocessing.get_context("fork")  # the workers inherit XML
-    with ctx.Pool(min(args.workers, len(jobs))) as pool:
+    with ctx.Pool(max(1, min(args.workers, len(jobs)))) as pool:
         for i, r in enumerate(pool.imap_unordered(process_patient, jobs), 1):
             results[r["patient"]] = r
             el = time.time() - t0
@@ -555,11 +664,29 @@ def main():
     def spread(xs):
         xs = sorted(xs)
         return {"min": xs[0], "median": xs[len(xs) // 2], "max": xs[-1]} if xs else None
+
+    def by_group(key_of, rows_):  # the calibration spreads per dose quartile / per filter
+        groups = {}
+        for row in rows_:
+            groups.setdefault(key_of(row), []).append(row)
+        return {str(g): {"slices": len(rs),
+                         "achieved_over_target": spread(r["sigma_add_hu"] / r["sigma_add_target_hu"] for r in rs),
+                         "sigma_add_hu": spread(r["sigma_add_hu"] for r in rs),
+                         "dose": spread(r["dose"] for r in rs)}
+                for g, rs in sorted(groups.items())}
+    quartiles = None
+    if args.dose_range and cal_rows:
+        edges = np.quantile([r["dose"] for r in allrows], [0.25, 0.5, 0.75]).tolist()
+        quartiles = {"edges": edges, **by_group(lambda r: int(np.searchsorted(edges, r["dose"])), cal_rows)}
+    per_filter = by_group(lambda r: r["filter"], cal_rows) if args.filter == "mix" and cal_rows else None
     manifest = {"args": a, "mu_water_per_mm": MU_WATER, "record_bytes": rec_bytes, "counts": counts,
                 "slices": {"total": len(allrows), "calibrated": len(cal_rows)},
                 "i0_add": spread(row["i0_add"] for row in allrows),
                 "sigma_full_hu": spread(row["sigma_full_hu"] for row in cal_rows),
                 "achieved_over_target": spread(row["sigma_add_hu"] / row["sigma_add_target_hu"] for row in cal_rows),
+                "dose_range": args.dose_range, "dose": spread(row["dose"] for row in allrows),
+                "filters": sorted({row["filter"] for row in allrows}),
+                "by_dose_quartile": quartiles, "by_filter": per_filter,
                 "uncalibrated_patients": [r["patient"] for r in ok if args.i0 <= 0 and r["calibrated_slices"] == 0],
                 "calibration": {r["patient"]: {k: r[k] for k in ("i0_add_median", "sigma_full_hu_median",
                                                                  "calibrated_slices", "achieved_over_target_median")}
@@ -572,7 +699,8 @@ def main():
     with open(os.path.join(args.out_dir, "manifest_lidc.json"), "w") as f:
         json.dump(manifest, f, indent=1)
     print(json.dumps({k: manifest[k] for k in ("counts", "slices", "nodules", "readers_per_patient", "i0_add",
-                                               "sigma_full_hu", "achieved_over_target", "uncalibrated_patients",
+                                               "sigma_full_hu", "achieved_over_target", "dose", "filters",
+                                               "by_dose_quartile", "by_filter", "uncalibrated_patients",
                                                "skips", "unmatched_xml")}), flush=True)
     print(f"done in {(time.time() - t0) / 60:.1f} min", flush=True)
 

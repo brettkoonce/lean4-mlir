@@ -2,7 +2,14 @@
 """The CT denoising demo's nodule table — planning/lidc_ct_denoising_demo.md §1: does a denoiser
 keep the nodules? Contrast kept, by nodule size and by texture, for every arm with a dump.
 
-  .venv-lidc/bin/python scripts/demos/lidc_nodules.py [--data=data/lidc] [--json=out.json]
+  .venv-lidc/bin/python scripts/demos/lidc_nodules.py [--data=data/lidc] [--pairs=<file.bin>] [--json=out.json] \
+      [--records=<file>] [--arms=mse,n2n,diff.k0]
+
+Arms are every dump under `<data>/out/<arm>/` (`lidc_records.find_dumps`; a generator's sample
+seeds `diff.k0 …` are columns of their own, "diffusion k0 …", and when several exist a last
+line gives the median over nodules of the kept contrast averaged across the seeds). Records:
+all of `--pairs` (default `<data>/val.bin`), cut to `--records=<file>` and to every dump's
+`.records` sidecar, so every column is measured on the same nodules.
 
 A nodule on a slice is a connected region where >= 2 of the 4 readers drew (the val masks). Its
 background is the ring 2-6 px outside it, kept to lung (full-dose HU < -500) and away from every
@@ -28,11 +35,12 @@ import sys
 import numpy as np
 from scipy import ndimage
 
-S, N = 512, 2
-HW = S * S
-ARMS = [("quarter dose", None), ("Gaussian", "gauss/val.eps.f32"), ("TV", "tv/val.eps.f32"),
-        ("BM3D", "bm3d/val.eps.f32"), ("BM3D-PSD", "bm3dpsd/val.eps.f32"),
-        ("MSE UNet", "mse/lidc_val.eps.f32"), ("Noise2Noise", "n2n/lidc_val.eps.f32")]
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "datasets"))
+import lidc_records as R  # noqa: E402
+
+S, HW = R.S, R.HW
+ARM_ORDER = ["gauss", "tv", "bm3d", "bm3dpsd", "mse", "n2n", "diff", "diffmix", "diffmixsig", "msemix",
+             "diff_clamp", "diff25", "mse25", "n2n25"]  # table order; unknown arms follow
 SIZES = [("3–6 mm", 3, 6), ("6–10 mm", 6, 10), (">10 mm", 10, 1e9)]
 TEXTURES = ["subsolid", "solid"]
 
@@ -41,15 +49,25 @@ def texture_class(t):
     return "solid" if t >= 4 else "subsolid"
 
 
+def arg(name, default=None):
+    return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(f"--{name}=")), default)
+
+
 def main():
-    data = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--data=")), "data/lidc")
-    out_json = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--json=")), None)
-    vbin = f"{data}/val.bin"
-    count = int(np.fromfile(vbin, dtype="<u4", count=1)[0])
-    mm = np.memmap(vbin, dtype=np.uint8, mode="r", offset=4, shape=(count, (3 + 2 * N) * HW))
-    meta = json.load(open(f"{data}/val.json"))
-    arms = [(n, p) for n, p in ARMS if p is None or os.path.exists(f"{data}/out/{p}")]
-    eps = {n: np.memmap(f"{data}/out/{p}", dtype="<f4", mode="r", shape=(count, S, S)) for n, p in arms if p}
+    data = arg("data", "data/lidc")
+    out_json = arg("json")
+    vbin = arg("pairs", f"{data}/val.bin")
+    count, nreal, mm = R.open_records(vbin)
+    meta = json.load(open(vbin[: -len(".bin")] + ".json"))
+    dumps = R.find_dumps(data, os.path.basename(vbin)[: -len(".bin")])
+    if arg("arms"):  # the arms to table; the record set is the intersection of THEIR sidecars only
+        want = arg("arms").split(",")
+        dumps = {a: p for a, p in dumps.items() if a in want}
+    order = {a: i for i, a in enumerate(ARM_ORDER)}
+    keys = sorted(dumps, key=lambda a: (order.get(R.arm_base(a), len(order)), a))
+    arms = [("quarter dose", None)] + [(R.label(a), dumps[a]) for a in keys]
+    eps = {n: R.open_dump(p, count) for n, p in arms if p}
+    recs = set(R.common_records(count, dumps.values(), R.read_record_list(arg("records")) if arg("records") else None))
 
     # reader entries → nodules, per patient
     patients = {r["patient"] for r in meta}
@@ -79,11 +97,9 @@ def main():
     sums = {}  # nodule id → arm → [ΣC, Σ CNR, slices]
     skipped = {"thin ring": 0, "unmatched": 0}
     for k, r in enumerate(meta):
-        if not r["nodule_px"]:
+        if not r["nodule_px"] or k not in recs:
             continue
-        imgs = np.asarray(mm[k, : 2 * (1 + N) * HW]).view("<u2").reshape(1 + N, S, S).astype(np.float64) - 1024.0
-        full, low = imgs[0], imgs[1]
-        mask = np.asarray(mm[k, 2 * (1 + N) * HW:]).reshape(S, S)
+        full, low, mask = R.decode(mm[k], nreal)
         img = {"full dose": full, "quarter dose": low}
         for n, _ in arms:
             if n in eps:
@@ -130,8 +146,9 @@ def main():
                      "kept": {n: acc[n][0] / cf for n in names},
                      "cnr": {n: acc[n][1] / acc[n][2] for n in ["full dose"] + names},
                      "record": acc["_best"][1], "cy": acc["_best"][2], "cx": acc["_best"][3]})
-    print(f"{len(rows)} nodules ({sum(r['slices'] for r in rows)} slice regions) on {count} val slices; "
-          f"left out: " + ", ".join(f"{v} {k}" for k, v in skipped.items()))
+    print(f"{len(rows)} nodules ({sum(r['slices'] for r in rows)} slice regions) on "
+          + (f"{count} val slices" if len(recs) == count else f"{len(recs)} of {count} val slices")
+          + "; left out: " + ", ".join(f"{v} {k}" for k, v in skipped.items()))
 
     def cell(sel, n, key):
         v = [r[key][n] for r in sel]
@@ -154,6 +171,15 @@ def main():
     for gname, sel in groups:
         print(f"{gname:{w}}  {len(sel):4d} {np.median([r['C_full'] for r in sel]):7.0f}  "
               + " ".join(f"{kept(sel, n):>20}" for n in names))
+    bases = {R.arm_base(a) for a in keys if ".k" in a}
+    for b in sorted(bases):
+        cols = [R.label(a) for a in keys if R.arm_base(a) == b and ".k" in a]
+        if len(cols) < 2:
+            continue
+        v = np.array([np.mean([r["kept"][c] for c in cols]) for r in rows]) * 100
+        bs = np.median(v[rng.integers(0, len(v), (2000, len(v)))], axis=1)
+        print(f"{R.label(b) + ', kept averaged over ' + str(len(cols)) + ' samples, all nodules':{w}}  "
+              f"{np.median(v):5.1f} [{np.percentile(bs, 2.5):5.1f}, {np.percentile(bs, 97.5):5.1f}]")
     print("\nCNR (median over nodules; full dose first)")
     print(f"{'':{w}}  {'n':>4} {'full':>7}  " + " ".join(f"{n:>12}" for n in names))
     for gname, sel in groups:

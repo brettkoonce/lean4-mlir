@@ -386,6 +386,24 @@ opaque loadCtPair (path : @& String) (imgSize : USize := 512) (realisations : US
 opaque loadCtMask (path : @& String) (imgSize : USize := 512) (realisations : USize := 2) :
     IO ByteArray
 
+/-- The realisation count `N` of a CT pair file, read off its size: a record is `(3 + 2N) · S²`
+    bytes (`preprocess_lidc.py`'s layout: the scanned slice, `N` low-dose realisations, the reader
+    mask). The 25 % LIDC build has `N = 2`, the 10 % build and the Mayo held-out set `N = 1`; the
+    trainer, the sampler and the loader test all take `N` from here, so none hard-codes it. -/
+def ctRealisations (path : String) (imgSize : Nat := 512) : IO Nat := do
+  let h ← IO.FS.Handle.mk path .read
+  let hdr ← h.read 4
+  if hdr.size != 4 then throw <| IO.userError s!"{path}: shorter than its count header"
+  let count := readU32LE hdr 0
+  let size := (← System.FilePath.metadata path).byteSize.toNat
+  let hw := imgSize * imgSize
+  if count == 0 || (size - 4) % (count * hw) != 0 then
+    throw <| IO.userError s!"{path}: {size} bytes is not {count} records of k · {imgSize}²"
+  let per := (size - 4) / (count * hw)
+  if per < 5 || (per - 3) % 2 != 0 then
+    throw <| IO.userError s!"{path}: {per} · S² bytes per record is not 3 + 2N"
+  return (per - 3) / 2
+
 /-- YOLOv1 detection-bin loader (target+mask format, 224 input / 7×7 grid). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes
     per image: 30×7×7 float32 target (5880), then 7×7 float32 mask (196),
@@ -660,6 +678,40 @@ opaque emaSq (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) 
     snapshots `p − swaMean`. -/
 @[extern "lean_f32_subtract"]
 opaque subtract (a : @& ByteArray) (b : @& ByteArray) : IO ByteArray
+
+/-- `[B, Ca, hw] ⊕ [B, Cb, hw] → [B, Ca + Cb, hw]`, image by image (`ffi/f32_helpers.c`). The
+    LIDC generator conditions on the low-dose slice this way: `[x_t, low]`, then
+    `Ddpm.prependSinCosT` adds the time channels. -/
+@[extern "lean_f32_concat_channels"]
+opaque concatChannels (a : @& ByteArray) (b : @& ByteArray) (B Ca Cb hw : USize) : IO ByteArray
+
+/-- Size `path` to `bytes` (created if absent; the new tail is a hole). With `pwriteFile`, a
+    sampler that covers a subset of a pair file's records writes the trainer's dump layout —
+    record `k` at byte `k · S² · 4` — so every scorer reads it unchanged. -/
+@[extern "lean_f32_truncate_file"]
+opaque truncateFile (path : @& String) (bytes : USize) : IO Unit
+
+/-- Write `ba` into `path` at byte `offset` (`pwrite`; Lean's `Handle` has no seek). Shards
+    writing disjoint records of one file do not interfere. -/
+@[extern "lean_f32_pwrite_file"]
+opaque pwriteFile (path : @& String) (offset : USize) (ba : @& ByteArray) : IO Unit
+
+/-- `[B, C, hw] ++ [B, 1, hw]` where the new channel of image `i` is the constant `vals[i]`
+    (`ffi/f32_helpers.c`): the LIDC generator's noise-level channel, log10(σ̂ / 100 HU) of the
+    slice the patch came from. -/
+@[extern "lean_f32_append_scalar_channel"]
+opaque appendScalarChannel (x : @& ByteArray) (vals : @& ByteArray) (B C hw : USize) : IO ByteArray
+
+/-- `out[i] = log10(scale · in[i])`, floored at 1e-6 inside the log. -/
+@[extern "lean_f32_log10_scale"]
+opaque log10Scale (ba : @& ByteArray) (scale : Float) : IO ByteArray
+
+/-- Clamp a residual `x` (units of `resScale` HU) so that `lowScale · low + resScale · x` stays in
+    `[lo, hi]` HU — the valid HU range, the sampler's guard. Returns the clamped copy and how many
+    pixels moved. -/
+@[extern "lean_f32_clamp_residual"]
+opaque clampResidual (x : @& ByteArray) (low : @& ByteArray) (n : USize)
+    (lowScale resScale lo hi : Float) : IO (ByteArray × Nat)
 
 /-- Load a flat int32 LE token-stream file (e.g. `data/shakespeare/train.bin`).
     Returns (raw token bytes, token count). -/

@@ -91,7 +91,7 @@ in the outer loop.
 | `MuZero.lean`    | MuZero                    | Go / Atari / tiny | AlphaZero + learned dynamics; three networks (rep + dyn + pred) |
 | `DeepCFR.lean`   | Deep CFR / SD-CFR         | Leduc net, paper trunk | Advantage + strategy nets in place of CFR's tables; the loop is trained on Leduc hold'em in `demos/MainDeepCfrLeduc.lean`, scored by exact exploitability |
 
-## Beyond vision
+## Representations
 
 Architectures where the task domain is not a 2D image: language,
 audio, 3D scene reconstruction, multimodal embedding, scientific.
