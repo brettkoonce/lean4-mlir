@@ -4,7 +4,7 @@ Trainers and inference exes that ride on the chapter nets. The trainers under `a
 (`apps/mnist`, `apps/cifar`, `apps/imagenette`) are the chapters themselves (linear, MLP, CNN,
 CIFAR-BN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT); these extend the same codegen path into the domains Chapter 10 of the book walks — recognition first
 (detection, industrial inspection, people, agriculture, segmentation), then beyond it
-(language, diffusion, physics, signal processing, a quantum ground state, a protein's
+(language, diffusion, image synthesis, physics, signal processing, a quantum ground state, a protein's
 shape), and last the games
 (Pong, Leduc poker, tic-tac-toe, the book's closing section) — in the chapter's order, each under
 the chapter's figure. Nothing here changes the codegen: every
@@ -658,6 +658,144 @@ arms and the per-class masses are in `runs/2026-08-28-mnist-ddpm-verified-score/
 
 ---
 
+## Image generation — low-dose CT synthesis on LIDC, held out on Mayo
+
+The image-synthesis demo. The BraTS UNet at one channel in and one out (7.85M params) takes a
+chest CT slice at a tenth of the dose back to the routine-dose one, trained three ways on
+LIDC-IDRI pairs: squared error to the scanned slice (MSE); squared error to a *second* low-dose
+realisation of the same slice, never a clean one (Noise2Noise); and as a conditional generator —
+the MNIST DDPM's step on the residual `(full − low)/100 HU` with the low-dose slice as a
+conditioning channel, sampled by DDIM at η = 1 in 50 steps. The low dose is simulated in the
+projection domain (Poisson counts at a photon budget calibrated to each slice's own noise,
+filtered back-projection; `--filter b50f` reconstructs through a window fitted to Mayo's noise
+spectrum) and the scanned slice is the target. Mayo's LDCT-and-Projection-data — the vendor's own
+10 % insertion, other patients, other scanners, a sharp B50f kernel — is the held-out test that no
+net or knob ever saw. Scored as the field scores (body RMSE) and then two ways it does not: the
+output's grain against the scanned slice's own (radial NPS over flat soft tissue; blobs of 1–3 mm
+the output carries that the scan does not) and the contrast kept on the 395 reader-outlined
+validation nodules; on Mayo also per slice, the median and the share of slices left worse than
+the input.
+
+`MainLidcDenoiseTrain.lean`, `MainLidcDenoiseSample.lean`. See
+`planning/lidc_ct_denoising_demo.md` (§9–§13 are the runs); the run scripts and record lists in
+`runs/2026-11-02-lidc-diffusion/`, `runs/2026-11-03-lidc-range/` (the dose range),
+`runs/2026-11-03-lidc-kernel/` (Mayo's kernel) and `runs/2026-11-03-lidc-rangekernel/` (both at once)
+are the exact sequences, gates included.
+
+```bash
+scripts/datasets/download_lidc.sh                        # 300 patients stratified by maker, ~38 GB DICOM + the XML
+.venv-lidc/bin/python scripts/datasets/preprocess_lidc.py data/lidc/dicom data/lidc/xml data/lidc10 \
+    --dose 0.10 --realisations 1 --workers 16            # the 10 % pairs, ≈ 18 GB, ≈ 1 h on 16 cores
+.venv-lidc/bin/python scripts/datasets/preprocess_lidc.py data/lidc/dicom data/lidc/xml data/lidc10b50 \
+    --dose 0.10 --realisations 1 --filter b50f --workers 16   # the same slices under Mayo's kernel (the kernel rows)
+.venv-lidc/bin/python scripts/datasets/preprocess_lidc.py data/lidc/dicom data/lidc/xml data/lidcmixb50 \
+    --dose-range 0.03 0.25 --realisations 1 --filter b50f --workers 16  # doses 3–25 % under it (the both-at-once rows)
+.venv-lidc/bin/python scripts/datasets/preprocess_mayo.py data/mayo        # the held-out set, 50 patients, 4,348 pairs
+# every GPU exe below runs under LEAN_MLIR_LOWERER=pjrt PJRT_PLUGIN=<xla_cuda_plugin.so>, as the run scripts do
+lake exe lidc-denoise-train data/lidc10/train.bin data/lidc10/val.bin 30000 --arm=mse --seed=0 --cosine \
+    --out=runs/mse10 --dump=data/lidc10/out/mse          # 1¼ h on one card; --arm=n2n needs a two-realisation build
+lake exe lidc-denoise-train data/lidc10/train.bin data/lidc10/val.bin 60000 --arm=diff --seed=0 --cosine \
+    --out=runs/diff10 --dump=data/lidc10/out/diff        # the generator, 2½–3 h
+lake exe lidc-denoise-sample data/mayo/val.bin --model=lidc10 --seed=0 --k=0 --records=records_mayo.txt \
+    --dump=data/mayo/out/diff                            # DDIM η = 1, 50 steps, ≈ 1 s a slice; --shard=i/n per GPU
+lake exe lidc-denoise-train data/lidc10/train.bin data/mayo/val.bin --arm=mse --seed=0 --eval-only \
+    --ckpt=data/lidc10/out/mse --dump=data/mayo/out/mse --out=runs/mse10_mayo    # the MSE net's forward pass on Mayo
+.venv-lidc/bin/python scripts/probes/lidc_denoise_score.py data/mayo/val.bin data/mayo/out/mse/mayo_val.eps.f32 \
+    --records=records_mayo.txt --by=sigma_add_hu:120,180,250,350                 # RMSE / PSNR / SSIM, per noise bin
+.venv-lidc/bin/python scripts/probes/lidc_per_slice.py data/mayo/val.bin --arms=diff.k0,mse --records=records_mayo.txt \
+    --by=sigma_add_hu:120,180,250,350 --csv=perslice_mayo.csv                     # median slice, share worse than the floor
+.venv-lidc/bin/python scripts/demos/lidc_nodules.py --data=data/lidc10 --records=records_val.txt --arms=mse,diff.k0 \
+    --json=nodules_lidc10.json                                                   # contrast kept, 395 nodules
+.venv-lidc/bin/python scripts/demos/lidc_texture.py --data=data/lidc10 --records=records_val.txt --arms=mse,diff.k0 \
+    --json=texture_lidc10.json --nps-csv=nps_lidc10.csv                          # NPS ratios, blobs, spread
+.venv-lidc/bin/python scripts/demos/lidc_synthesis_figure.py demos/figures/lidc_ct_synthesis.png \
+    --nodules=nodules_lidc10.json --mayo-csv=perslice_mayo.csv --nps10=nps_lidc10.csv --nps-mayo=nps_mayo.csv \
+    --nps10b50=nps_lidc10b50.csv --mayo-arms=diff,diff_b50,diffmixsig_b50        # the figure; lidc_synthesis_table.py the rows
+```
+
+![Low-dose CT synthesis: a Mayo slice under three generators, three LIDC nodules across the arms, the noise spectra](figures/lidc_ct_synthesis.png)
+
+**(a)** the Mayo slice at the set's median inserted noise: the vendor's 10 % dose (190 HU from the
+routine-dose scan), one draw of the generator as trained (131 HU), one draw of the same generator
+trained on pairs simulated under Mayo's kernel (108 HU), one draw of the generator trained across the
+doses under that kernel and told the level (2,286 HU: the patch of lung it saturates is what running
+away looks like), the scan. **(b)** three validation nodules
+chosen by rule — under 3 mm, ground-glass, the split's largest — in the scanned slice with the
+readers' outline, the tenth dose, BM3D, the MSE UNet, two samples of the generator. **(c)** the radial
+noise power spectrum of each arm's output and of the scanned slices' own grain, log scale.
+
+1,605 LIDC validation slices (every nodule slice and 400 others) and 1,000 Mayo slices (20 a patient);
+grain = the output's noise-power variance over flat soft tissue as a fraction of the scanned slice's own,
+freq its mean frequency, invented = blobs of 1–3 mm per slice that no scanned slice has (the scan carries
+80 of its own):
+
+| arm | LIDC: RMSE HU | grain × scan | freq × scan | nodules kept, all / < 3 mm | invented / slice | Mayo: RMSE HU | median HU | worse than the input |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| low dose, the input | 122.8 | 9.17 | 1.91 | 99.9 / 100.0 | 415 | 235.0 | 202 | — |
+| Gaussian | 66.0 | 1.39 | 0.79 | 81.9 / 75.6 | 3.9 | **93.3** | 86 | 0 % |
+| total variation | 66.5 | 0.94 | 0.86 | 77.2 / 69.3 | 12 | 126.0 | 93 | 0 % |
+| BM3D | 68.7 | 0.50 | 0.78 | 70.6 / 48.8 | 8.0 | 141.2 | 90 | 0 % |
+| **MSE UNet** | **46.1** | 0.56 | 0.52 | **97.5 / 93.9** | 6.6 | 112.1 | 82 | 0 % |
+| the same, trained at doses 3–25 % | 48.1 | 0.55 | 0.52 | 95.8 / 91.7 | 5.3 | **82.2** | **68** | 0 % |
+| the same, trained on Mayo's kernel † | 45.2 | 0.58 | 0.51 | 97.7 / 95.3 | 5.6 | 84.4 | 69 | 0 % |
+| the same, both at once † | 45.4 | 0.59 | 0.53 | 97.5 / 95.8 | 5.5 | 83.3 | **68** | 0 % |
+| **diffusion**, one sample | 73.4 | **1.10** | **0.97** | 97.0 / 92.8 | 42 | 457.8 | 132 | 27 % |
+| the same, at doses 3–25 %, told the level | 79.6 | 2.91 | 1.44 | 98.0 / 95.0 | 97 | 322.5 | 120 | 4 % |
+| the same, trained on Mayo's kernel † | 70.4 | 1.10 | 1.06 | 97.5 / 93.9 | 35 | 2,026 | 100 | 5 % |
+| the same, both at once † | 10²¹ | — | — | 97.9 / 95.5 | — | 10²⁹ | 168 | 49 % |
+| the scanned slice itself | 0 | 1.00 | 1.00 | 100 / 100 | — | 0 | 0 | — |
+
+† the LIDC block of the kernel and both-at-once rows is scored on the same slices simulated under Mayo's
+kernel (their own build); the Mayo block is the same thousand slices for every row. The generator's
+both-at-once row diverges on 6 % of those slices and on half of Mayo's: its pooled cells are that
+divergence (median slice 52 HU at home, 168 on Mayo) and the texture cells it would dominate are blank.
+
+⭐ **Regression beats every filter by twenty HU and keeps the nodules** — 97.5 % of the contrast over
+all 395 and 94 % on the sub-3 mm marks, where the filters keep 49–76 % — and it is soft: 56 % of the
+scanned slice's grain variance at 52 % of its frequency. Noise2Noise, which never sees a clean slice,
+lands on the same net (37.1 vs 37.5 HU at a quarter dose, the same grain), so the softness is
+regression to the mean, not the target.
+
+⭐ **The generator puts the grain back and pays √2 for it.** One sample carries 110 % of the scanned
+slice's grain variance at 97 % of its frequency and the scan's own count of small blobs, keeps the
+nodules as the MSE net does, and sits at 73.4 HU against √2 × 46.1 = 65.3; 42 of its blobs a slice
+are in no scanned slice (the MSE net's 7), and four samples of one slice disagree by 32 HU inside a
+nodule — a distribution's spread, not an error bar.
+
+⭐ **On the scanner it never saw, regression crosses over and the sampler runs away.** The MSE net
+takes 235 HU of inserted noise to 112 with no slice left worse; the generator is twice as far from
+the scan as its input, pooled, and one slice in four comes out worse than it went in (97 % of the
+65 slices above 350 HU).
+
+⭐ **Two gaps, and they come apart.** Training across doses 3–25 % takes the MSE net to 82 HU on Mayo,
+the best arm, for 2 HU at home; training under Mayo's *kernel* alone, at the one dose, takes it to
+84 — the Shepp-Logan net had passed Mayo's sharp noise through as anatomy (1.8× the scan's grain
+variance in its output) and the kernel-trained net removes it. The generator's median follows the
+kernel (132 → 100 HU, 27 % → 5 % of slices worse, the best generator here) but its tail follows the
+dose: the fifty heaviest Mayo slices carry two to four times the noise of anything in a tenth-dose
+LIDC build, and on those it runs away harder than before (ten past 5,000 HU — the four-digit cell).
+On LIDC itself the kernel costs the regression nets 2 HU in either direction; the generator trained
+on the sharper kernel transfers down to the softer one and the one trained on the softer, shown the
+sharper, is worse than its input on 29 % of the heaviest slices — the Mayo failure reproduced on its
+own scanner and slices with the kernel the only change.
+
+⭐ **Both fixes at once settle it.** The MSE net trained across the doses on Mayo's kernel lands at
+83 HU, median 68 — the range row's and the kernel row's numbers again: the 28 HU are bought once, by
+either, because either shows the net noise it would otherwise pass through (the grain it leaves on
+Mayo is 0.4–0.6× the scan's under any of the three, 1.8× for the net that saw neither). The generator
+given both is the worst row in the table: worse than its input on 49 % of Mayo's slices (nine in ten
+of those above 200 HU by its own estimator), diverging rather than drifting — a saturated patch of
+lung on the figure's slice, 10²⁹ HU pooled over the set — and doing the same on one slice in eight
+of its own validation set; the kernel-only generator holds at one in twenty at the same measured
+noise. The runaway is the sampler's, not the data's; what is left to try is the sampler.
+
+⚠ Not a clinical denoiser or a reader study: nodule contrast kept is one instrument on reader-outlined
+findings, not a detection rate; the low dose is simulated on the training side (parallel beam, two
+kernels where every scanner has its own); the number for a scanner the net has not seen is the
+right-hand block.
+
+---
+
 ## Physics — a flow-matching Boltzmann generator on the Müller-Brown surface
 
 The second half of the diffusion demo, and the one whose ground truth is a
@@ -773,7 +911,7 @@ that loud, and without a veto the filter has no row — while the network traine
 still reaches half detection at 7.5. Training on the real detector is what teaches the glitch
 tail. Runs and the figure script's inputs are under `runs/2026-09-11-gw-*/`.
 
-## Beyond vision — neural quantum states on the transverse-field Ising chain
+## Representations — neural quantum states on the transverse-field Ising chain
 
 The science demo. The network *is* the wavefunction: ψ_θ(σ) maps a spin
 configuration to a log-amplitude, the loss is the energy ⟨ψ|H|ψ⟩/⟨ψ|ψ⟩ of the
@@ -1350,6 +1488,8 @@ demos/
 ├── MainRsBands.lean                       # chapter-4 CNN on EuroSAT's 13 Sentinel-2 bands under five stems, scored on Amazon / Cerrado chips (remote sensing)
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
+├── MainLidcDenoiseTrain.lean / Sample     # low-dose CT synthesis on LIDC: MSE / Noise2Noise / conditional-DDPM arms;
+│                                          #   Sample = the DDIM sampler at 512², sharded over GPUs (image generation)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
 ├── MainGwDetect.lean                      # chapter-4 CNN vs the matched filter on LIGO O3a strain (signal processing)
 ├── MainNqsIsing.lean                      # neural quantum states: MLP/ViT/GPT wavefunctions on the Ising chain
