@@ -1,0 +1,263 @@
+% The demo section (planning/lidc_ct_denoising_demo.md §10.6 / §12), 2026-11-03.
+% Goes into blueprint/src/content.tex as 12.3 "Image generation", after the DDPM section whose
+% step it reuses; the catalogue entries (VAE, DCGAN, Pix2Pix, CycleGAN) follow it there. Numbers:
+% §9 (the 10 % and 25 % builds, Mayo), §11.6 (the dose range), §12.4 (the kernel rows), §13.3 (both
+% at once), §13.4 (the sampler probed; the clipped-x̂₀ row), §13.5 (the x₀-target rows); every table
+% cell is printed by runs/2026-11-03-lidc-kernel/table_rows.sh, runs/2026-11-03-lidc-rangekernel/table_rows.sh,
+% runs/2026-11-04-lidc-sampler-probes/table_rows.sh and runs/2026-11-04-lidc-x0pred/table_rows.sh from the score files.
+
+\section{Image generation --- demo: low-dose CT synthesis on LIDC, held out on Mayo}
+\label{sec:bestiary_ct_synthesis}
+
+Networks that make images rather than read them. A tenth of the X-ray dose
+gives a chest CT a tenth of the photons, and the reconstruction turns the
+shortfall into grain and streaks; the task the vendors sell is to hand the
+radiologist back the routine-dose image. The demo trains the Part~1 UNet to
+do that three ways, scores each the way the field does, and then asks the
+two questions that score does not answer: does the output still
+\emph{look like a CT scan}, and what does the same network do on a scanner
+it has never seen.
+
+\textbf{The data.} LIDC-IDRI (Armato et al.\ 2011; Appendix~\ref{app:data})
+is the training set and the instrument: 300 patients' chest scans, each
+slice paired with a simulated low-dose version --- Poisson counts in the
+projection domain at a photon budget calibrated to the slice's own noise,
+filtered back-projection, the scanned slice itself as the target --- and
+four radiologists' outlines of every nodule, 395 on the validation
+patients, 242 of them under 3\,mm. The dose is a tenth of routine here, which
+is what the held-out set has; a quarter-dose build with two realisations a
+slice is run beside it, and a second tenth-dose build of the same slices,
+its back-projection window fitted to Mayo's noise spectrum peak for peak,
+is the kernel rows' training set; the dose range rebuilt under that
+window trains the rows that take both at once. Mayo's LDCT-and-Projection-data (Moen et al.\ 2021)
+is the test: 50 chest patients' routine-dose scans and the vendor's own
+projection-domain insertion at 10\,\% --- other patients, another
+institution's Siemens scanners, a sharp B50f kernel where most of LIDC is
+soft-kernel GE. No Mayo image trains a net or picks a knob. The network is
+the BraTS UNet of \S\ref{sec:bestiary_segmentation} at one channel in and
+one out (\texttt{lidc-denoise-train}, 7.85M parameters), trained three ways
+on $256^2$ crops: to the scanned slice under squared error (the MSE arm);
+to a \emph{second} low-dose realisation of the same slice, never a clean one
+(Noise2Noise, Lehtinen et al.\ 2018); and as the generator --- the same
+layers under the DDPM step of \S\ref{sec:bestiary_diffusion}, predicting the
+noise added to the residual $(\mathrm{full} - \mathrm{low})/100$\,HU --- or, in
+the rows that say so, the residual itself --- with the
+low-dose slice concatenated as a conditioning channel, sampled by DDIM at
+$\eta = 1$ in 50 steps (\texttt{lidc-denoise-sample}). The MSE net is an hour
+and a quarter on one card, the generator two and a half to three; a sample
+is a second a slice. Beside them the pre-learning bracket: a Gaussian, total variation and
+BM3D, each knob tuned on the training patients. Table~\ref{tab:ct_synthesis}
+is the result, scored on the same 1,605 validation slices (every nodule
+slice and 400 others) and on 1,000 Mayo slices, twenty a patient.
+
+\begin{table}[H]
+\centering
+\caption{Low-dose chest CT at a tenth of the dose. Left, LIDC validation: body RMSE against the scanned slice; the output's grain as a fraction of the scanned slice's own --- its noise-power variance and its mean frequency, over flat soft tissue; nodule contrast kept, median over all 395 reader-outlined nodules and over the 242 under 3\,mm; blobs of 1--3\,mm the output carries that the scanned slice does not, per slice (the scanned slice carries 80 of its own). Right, Mayo chest, never trained on: body RMSE pooled over the 1,000 slices, the median slice, and the share of slices the arm leaves \emph{worse} than the low-dose input. The kernel rows and the both-at-once rows are scored on the left on the same slices with the noise simulated under Mayo's kernel, their own build, so their left block is against a different input; the Mayo block is the same thousand slices for every row. The generator's both-at-once row diverges on 6\,\% of those slices and on half of Mayo's, and its pooled cells are that divergence: its median slice is 52\,HU at home and 168 on Mayo, and the texture cells the divergence would dominate are left blank. The row beneath it is the same net sampled with its
+prediction clipped to the HU range at every step: bounded, and worse than
+its input on the same slices. The rows \emph{predicting the clean slice} are
+the kernel net and the both-at-once net trained to output the residual
+itself rather than the noise, sampled as the others.}
+\label{tab:ct_synthesis}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{l r c c c r | r r r}
+\hline
+ & \multicolumn{5}{c|}{LIDC validation, 1,605 slices} & \multicolumn{3}{c}{Mayo, held out, 1,000 slices} \\
+ & RMSE & grain & freq. & nodules kept & invented & RMSE & median & worse than \\
+ & HU & $\times$ scan & $\times$ scan & all / $<$3\,mm, \% & / slice & HU & HU & the input \\
+\hline
+low dose, the input            & 122.8 & 9.17 & 1.91 & 99.9 / 100.0 & 415 & 235.0 & 202 & --- \\
+Gaussian                       &  66.0 & 1.39 & 0.79 & 81.9 / 75.6 & 3.9 &  \textbf{93.3} &  86 & 0\,\% \\
+total variation                &  66.5 & 0.94 & 0.86 & 77.2 / 69.3 &  12 & 126.0 &  93 & 0\,\% \\
+BM3D                           &  68.7 & 0.50 & 0.78 & 70.6 / 48.8 & 8.0 & 141.2 &  90 & 0\,\% \\
+\textbf{MSE UNet}              &  \textbf{46.1} & 0.56 & 0.52 & \textbf{97.5} / \textbf{93.9} & 6.6 & 112.1 &  82 & 0\,\% \\
+\quad the same, trained at doses 3--25\,\% & 48.1 & 0.55 & 0.52 & 95.8 / 91.7 & 5.3 & \textbf{82.2} & \textbf{68} & 0\,\% \\
+\quad the same, trained on Mayo's kernel & 45.2 & 0.58 & 0.51 & 97.7 / 95.3 & 5.6 & 84.4 & 69 & 0\,\% \\
+\quad the same, both at once & 45.4 & 0.59 & 0.53 & 97.5 / 95.8 & 5.5 & 83.3 & \textbf{68} & 0\,\% \\
+\textbf{diffusion}, one sample &  73.4 & \textbf{1.10} & \textbf{0.97} & 97.0 / 92.8 & 42 & 457.8 & 132 & 27\,\% \\
+\quad the same, at doses 3--25\,\%, told the level & 79.6 & 2.91 & 1.44 & 98.0 / 95.0 & 97 & 322.5 & 120 & 4\,\% \\
+\quad the same, trained on Mayo's kernel & 70.4 & 1.10 & 1.06 & 97.5 / 93.9 & 35 & 2{,}026 & 100 & 5\,\% \\
+\quad\quad the same, predicting the clean slice & 57.4 & 0.93 & 0.91 & 96.4 / 94.0 & 23 & 118.1 & 89 & 0\,\% \\
+\quad the same, both at once & $10^{21}$ & --- & --- & 97.9 / 95.5 & --- & $10^{29}$ & 168 & 49\,\% \\
+\quad\quad the same, $\hat x_0$ clipped to the HU range & 206.2 & 2.27 & 1.50 & 97.9 / 95.5 & 57 & 485.6 & 100 & 41\,\% \\
+\quad\quad the same, predicting the clean slice & 57.4 & 0.95 & 0.94 & 96.7 / 94.7 & 21 & 118.3 & \textbf{85} & 0\,\% \\
+the scanned slice itself       &   0   & 1.00 & 1.00 & 100 / 100 & --- & 0 & 0 & --- \\
+\hline
+\end{tabular}
+\end{table}
+
+\medskip\noindent \textbf{The left block is the first result.} The two learned
+denoisers beat every filter by twenty HU and keep the nodules: $97.5\%$ of
+the contrast over all 395 and $94\%$ on the sub-3\,mm marks, where the
+filters keep $49$--$76\%$ --- what a classical filter smooths away first is
+exactly the finding a reader is looking for. But the MSE net is soft. Its
+output carries $56\%$ of the scanned slice's grain variance at $52\%$ of its
+frequency, because squared error to a noisy target trains the posterior
+\emph{mean}, and the mean of many plausible scans is smoother than any one
+of them. Noise2Noise, which never sees a clean slice, lands on the same
+net: $37.1$ against $37.5$\,HU at a quarter dose, the same grain to the
+second decimal, so nothing in the softness came from the target --- it is
+what regression to the mean is. The generator puts the grain back. One
+sample carries $110\%$ of the scanned slice's grain variance at $97\%$ of
+its frequency and the scanned slice's own count of small blobs (82 a slice
+against 80), and it keeps the nodules as the regression net does. It pays
+for this exactly as a draw from the posterior must: its RMSE is
+$\sqrt{2}$ times the mean's ($73.4$ against $\sqrt{2} \times 46.1 = 65.3$
+here; $54.1$ against $53.0$ at a quarter dose, where the sampler is better
+calibrated), and of the blobs it draws, 42 a slice are in no scanned slice
+--- six times the MSE net's seven. Four samples of the same slice disagree
+by 32\,HU inside a nodule, 17 in plain lung and 23 in soft tissue, a
+distribution's spread rather than a measurement's error bar. The texture is
+real and so is the price: a sampler trades the regression net's twenty HU
+for a grain a reader would recognise and findings the reader cannot trust
+one draw of. Figure~\ref{fig:ct_synthesis} is what that looks like.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/lidc_ct_synthesis.png}
+\caption{(a) A Mayo chest slice at the set's median inserted noise, lung
+window, cropped to the body: the vendor's 10\,\% dose, one draw of the
+generator as trained, one draw of the same generator trained on pairs
+simulated under Mayo's kernel, one draw of the generator trained across
+the doses under that kernel and told the level --- the patch of lung it
+saturates is what running away looks like --- one draw of that net trained
+to predict the clean slice instead of the noise, and the routine-dose scan
+none of them saw; over each, its RMSE from that scan. (b) Three LIDC validation nodules ---
+under 3\,mm, ground-glass, the split's largest, each chosen by rule --- in
+the scanned slice with the readers' outline, the simulated tenth dose,
+BM3D, the MSE UNet and two samples of the generator. (c) The radial noise
+power spectrum of the scanned slices' own grain and of each arm's output,
+log scale: the LIDC validation set at a tenth of the dose, the low dose
+simulated under Mayo's kernel dashed beside the textbook one, and Mayo,
+where the scanner's own grain stays flat to twice the frequency, the MSE
+net trained on Mayo's kernel falls below it, the generator trained on it
+still sits a decade above, and the same generator trained to predict the
+clean slice sits on it.}
+\label{fig:ct_synthesis}
+\end{figure}
+
+\noindent \textbf{The right block is the second.} On the scanner the nets
+never saw, every regression arm crosses over: the MSE net takes 235\,HU of
+inserted noise to 112, with no slice left worse than its input, and a
+Gaussian tuned on LIDC does better still at 93. What it leaves is Mayo's
+noise passed through as anatomy: its output carries $1.8\times$ the
+scan's grain variance at $1.1\times$ the scan's frequency, because
+Mayo's noise is sharper than anything it was fitted to --- the inserted
+noise peaks at $0.425$\,mm$^{-1}$ against our $0.330$, the B50f kernel
+against LIDC's soft GE --- and grain at a frequency the net has never seen
+as grain, it keeps. Either of two training sets shows it that noise. The
+one spanning every dose from 3 to 25\,\% lands at 82\,HU, the best arm on
+Mayo, for two HU at home; the one whose pairs were reconstructed through a
+window fitted to Mayo's spectrum, peak for peak, lands at 84; both at once
+land at 83 with the range row's median of 68, so the twenty-eight HU are
+bought once, by either, and the grain left in the Mayo output is
+$0.4$--$0.6\times$ the scan's under any of the three. In no cell of the
+table is a regression net worse than its input: what a mean misses it
+leaves in place, and it adds nothing.
+
+\medskip\noindent \textbf{The generator} fails differently. Pooled over
+the thousand it is twice as far from the scan as the input, and one slice
+in four comes out worse than it went in --- half of
+the slices with 250--350\,HU of inserted noise and all but two of the 65
+above 350: on those slices the sampler does not denoise, it runs away.
+The grain a draw puts back is its training set's, in character and in
+amount, and the two move separately. Move the character --- the kernel row
+--- and the generator follows: its share of Mayo's slices worse than the
+input falls from one in four to one in twenty and its median heavy slice
+from 132 to 100\,HU; on LIDC itself the generator trained on the softer
+kernel, shown the sharper, is worse than its input on 29\,\% of the heaviest
+slices, while the one trained on the sharper transfers down. Move the
+amount past what it saw and no training set here reaches it. The fifty
+heaviest Mayo slices carry two to four times the noise of anything in a
+tenth-dose LIDC build, and on those the kernel generator runs further than
+before --- ten slices past 5,000\,HU are the four-digit cell; the range row
+lowers the typical heavy slice two- to three-fold and leaves a quarter of
+the heaviest worse than the input; and the net trained across the doses on
+Mayo's kernel and told the level, the one trained for exactly those slices,
+is the worst row in the table, worse than its input on 49\,\% of Mayo's
+and on one slice in eight of its own validation set, at doses it trained
+at. On those slices it does not drift, it diverges: on the slice of
+Figure~\ref{fig:ct_synthesis} a patch of lung saturates and the rest is
+clean, and pooled over the set the divergence is $10^{29}$\,HU. LIDC has
+such slices of its own, three low-current GE patients on whose slices
+every generator is worse than the floor one time in three and the
+regression net never is.
+
+\medskip\noindent \textbf{What runs away} is the noise estimate. The step
+of \S\ref{sec:bestiary_diffusion} turns the net's $\hat\epsilon$ into an
+estimate of the clean residual,
+$\hat x_0 = (x_t - \sqrt{1-\bar\alpha_t}\,\hat\epsilon)/\sqrt{\bar\alpha_t}$,
+and moves toward it, so an error in $\hat\epsilon$ reaches $\hat x_0$
+multiplied by $\sqrt{1-\bar\alpha_t}/\sqrt{\bar\alpha_t}$, the state's
+noise-to-signal ratio, a hundred at the chain's start; the state itself is
+carried forward with a coefficient
+$\sqrt{\bar\alpha_{t-1}}/\sqrt{\bar\alpha_t}$ above one, and
+$\hat\epsilon$ is what cancels the growth. Inside the training distribution
+the error is small and the next step corrects it; on a slice noisier than
+anything it was fitted to it is not, the state handed on is further from
+anything the net has seen, and the next error is larger. The
+sampler's settings do not reach this, because the error is the net's: on
+the same checkpoint a deterministic chain ($\eta = 0$) diverges on every
+slice, the lightest included --- the stochastic one's fresh noise had
+kept it near its training distribution --- twenty steps in place of fifty
+diverge sooner, capping the level the net
+is told at its training median changes nothing on the heavy slices, and
+clipping $\hat x_0$ to the HU range at every step, the usual guard and the
+row beneath, bounds the output and leaves 41\,\% of Mayo's slices worse
+than their input, the same slices.
+
+\medskip\noindent \textbf{The same net can predict the slice} instead.
+With the loss on the residual itself rather than on the noise, everything
+else the recipe above and the same fifty steps --- the step recovers
+$\hat\epsilon$ from $\hat x_0$ where it needs it --- the net's error enters
+the next state scaled by at most $\sqrt{\bar\alpha_{t-1}}$, the state is
+carried forward with a coefficient at most one, and there is nothing to
+compound under. The two rows \emph{predicting the clean slice} are the
+kernel generator and the both-at-once generator retrained that way.
+Neither leaves a slice of Mayo's thousand worse than its input; their
+median slice is 85 and 89\,HU where the best $\epsilon$ generator's was
+100, their worst is 575 where the $\epsilon$ generators ran to $10^{30}$,
+and on the 651 slices up to 250\,HU of noise their grain is
+$0.75$--$1.1\times$ the scan's at $0.75$--$1.0\times$ its frequency, where
+the $\epsilon$ generator's sat a decade above ---
+Figure~\ref{fig:ct_synthesis} has the draw of the same slice beside the
+saturated patch, and the spectrum on the scan's. Pooled they sit at 118
+against the regression net's 83, $1.2\times$ on the light slices and
+$1.5\times$ on the heaviest, where they leave half the noise in place.
+At home one sample carries $93$--$95\%$ of the
+scanned slice's grain variance at $91$--$94\%$ of its frequency, invents
+21--23 blobs a slice against the $\epsilon$ generator's 35 and the MSE
+net's six, and keeps $96.4$--$96.7\%$ of nodule contrast, a point under the
+others; its RMSE is $57$\,HU against the MSE net's $45$, $1.27\times$ where
+the $\epsilon$ generator paid $1.56\times$ and a posterior draw is allowed
+$\sqrt{2}$. The two rows are alike in every cell: the kernel sets the
+grain, and the dose range and the level channel add nothing.
+
+\medskip\noindent A net trained to the mean generalises across dose once
+it has seen the range. A net trained to draw puts back its training set's
+grain in character and in
+amount, and how far a draw goes wrong on a slice outside that set is set
+by what the net predicts: the noise, which the step scales by the state's
+noise-to-signal ratio, or the slice, which it scales down. For the
+vendor's task the number is the regression net's, 83\,HU to 118; for the
+synthesis it is the generator predicting the slice, with the invented
+column read beside the grain.
+
+\medskip\noindent What this is not: a clinical denoiser, or a reader study.
+Nodule contrast kept is one instrument on reader-outlined findings, not a
+detection rate; the low dose is simulated on the training side, on a
+parallel-beam geometry under two kernels, a textbook window and one
+fitted to Mayo's spectrum, where every scanner has its own;
+and the number for a scanner the net has not seen is the one on the
+right.
+
+\medskip\noindent The catalogue that closes this section is the rest of
+image generation: networks whose output is a novel image rather than a
+corrected one. Two families besides the diffusion of
+\S~\ref{sec:bestiary_diffusion}, variational autoencoders and GANs; their
+backbones overlap heavily with segmentation (the UNet again), and the demo's
+generator does Pix2Pix's job, image to image on a UNet, with the adversary
+replaced by the noise schedule.
+
+% In blueprint/src/content.tex the section continues with the catalogue entries that were the
+% chapter's "Image generation" section before 2026-11-03: VAE, DCGAN, Pix2Pix, CycleGAN.
