@@ -1,0 +1,374 @@
+{
+ "pairs": "data/lidcmixb50/val.bin",
+ "records": 1605,
+ "arms": {
+  "low dose": {
+   "arm": "low dose",
+   "label": "low dose",
+   "rmse_body": 142.71041262059364,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    11.956297339790254,
+    11.291719932311286,
+    12.681619481935412
+   ],
+   "mean_frequency_ratio": [
+    1.9761085903598075,
+    1.893572466058544,
+    2.0542838766556906
+   ],
+   "local_std_ratio": [
+    4.6025510514642205,
+    4.467646857276473,
+    4.769396047730515
+   ],
+   "blobs_per_slice": 673.9545171339564,
+   "invented_per_slice": 585.4753894080997,
+   "dropped_per_slice": 6.761370716510903,
+   "blob_slices": 1605
+  },
+  "diffmixsigx0.k0": {
+   "arm": "diffmixsigx0.k0",
+   "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+   "rmse_body": 60.72778136524176,
+   "slices": 1605,
+   "texture_slices": 1029,
+   "rois": 9960,
+   "nps_integral_ratio": [
+    1.066520633684665,
+    1.0377239267106535,
+    1.0952266636493933
+   ],
+   "mean_frequency_ratio": [
+    1.0330627246971567,
+    1.0003324026249403,
+    1.0663609605603677
+   ],
+   "local_std_ratio": [
+    1.1222978324125539,
+    1.0905563563676508,
+    1.1603857078030313
+   ],
+   "blobs_per_slice": 60.90093457943925,
+   "invented_per_slice": 24.33271028037383,
+   "dropped_per_slice": 43.11588785046729,
+   "blob_slices": 1605
+  }
+ },
+ "spread": {},
+ "bins": {
+  "dose in [-inf, 0.05)": {
+   "records": 386,
+   "arms": {
+    "low dose": {
+     "arm": "low dose",
+     "label": "low dose",
+     "rmse_body": 201.2371431748263,
+     "slices": 386,
+     "texture_slices": 240,
+     "rois": 2190,
+     "nps_integral_ratio": [
+      22.661387651704214,
+      20.905600349179185,
+      24.480356445509575
+     ],
+     "mean_frequency_ratio": [
+      2.1499053571590028,
+      1.9759791536601639,
+      2.340476804267398
+     ],
+     "local_std_ratio": [
+      6.838806974044517,
+      6.552307962712578,
+      7.009141679371901
+     ],
+     "blobs_per_slice": 1291.896373056995,
+     "invented_per_slice": 1185.6839378238342,
+     "dropped_per_slice": 5.580310880829016,
+     "blob_slices": 386
+    },
+    "diffmixsigx0.k0": {
+     "arm": "diffmixsigx0.k0",
+     "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+     "rmse_body": 75.41908129859495,
+     "slices": 386,
+     "texture_slices": 240,
+     "rois": 2190,
+     "nps_integral_ratio": [
+      1.5308029364761135,
+      1.4870884388819698,
+      1.57727827353816
+     ],
+     "mean_frequency_ratio": [
+      1.3143038741640631,
+      1.2510854092550625,
+      1.3841047103206257
+     ],
+     "local_std_ratio": [
+      1.5403598277277686,
+      1.48897358848919,
+      1.61556106400356
+     ],
+     "blobs_per_slice": 74.24352331606218,
+     "invented_per_slice": 38.73575129533679,
+     "dropped_per_slice": 49.8160621761658,
+     "blob_slices": 386
+    }
+   }
+  },
+  "dose in [0.05, 0.1)": {
+   "records": 517,
+   "arms": {
+    "low dose": {
+     "arm": "low dose",
+     "label": "low dose",
+     "rmse_body": 142.45676393971692,
+     "slices": 517,
+     "texture_slices": 338,
+     "rois": 3272,
+     "nps_integral_ratio": [
+      12.85956584156401,
+      12.191522216974235,
+      13.585060480159056
+     ],
+     "mean_frequency_ratio": [
+      1.9798565765901481,
+      1.8502998956852275,
+      2.112438568731807
+     ],
+     "local_std_ratio": [
+      4.90840257093905,
+      4.803783804745489,
+      5.109325870929224
+     ],
+     "blobs_per_slice": 703.2959381044487,
+     "invented_per_slice": 613.5725338491296,
+     "dropped_per_slice": 6.365570599613153,
+     "blob_slices": 517
+    },
+    "diffmixsigx0.k0": {
+     "arm": "diffmixsigx0.k0",
+     "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+     "rmse_body": 59.7593044229731,
+     "slices": 517,
+     "texture_slices": 338,
+     "rois": 3272,
+     "nps_integral_ratio": [
+      1.1181605153723921,
+      1.0894970618429596,
+      1.1495570028234428
+     ],
+     "mean_frequency_ratio": [
+      1.0489099112177238,
+      1.002929260401653,
+      1.0986173477353354
+     ],
+     "local_std_ratio": [
+      1.2043368412345452,
+      1.1597337309959697,
+      1.2399500624316693
+     ],
+     "blobs_per_slice": 60.94003868471954,
+     "invented_per_slice": 25.357833655705996,
+     "dropped_per_slice": 43.91682785299807,
+     "blob_slices": 517
+    }
+   }
+  },
+  "dose in [0.1, 0.15)": {
+   "records": 327,
+   "arms": {
+    "low dose": {
+     "arm": "low dose",
+     "label": "low dose",
+     "rmse_body": 110.00583827459091,
+     "slices": 327,
+     "texture_slices": 209,
+     "rois": 2118,
+     "nps_integral_ratio": [
+      7.099430322383263,
+      6.644414915170368,
+      7.521928184985012
+     ],
+     "mean_frequency_ratio": [
+      1.9066069418351184,
+      1.7444049790727898,
+      2.106575112623228
+     ],
+     "local_std_ratio": [
+      3.7125561696380838,
+      3.6064772099492965,
+      3.8867364820854027
+     ],
+     "blobs_per_slice": 400.79510703363917,
+     "invented_per_slice": 318.92660550458714,
+     "dropped_per_slice": 7.4067278287461775,
+     "blob_slices": 327
+    },
+    "diffmixsigx0.k0": {
+     "arm": "diffmixsigx0.k0",
+     "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+     "rmse_body": 55.06751003616034,
+     "slices": 327,
+     "texture_slices": 209,
+     "rois": 2118,
+     "nps_integral_ratio": [
+      0.8813147021551818,
+      0.8397289921840131,
+      0.9225108004279791
+     ],
+     "mean_frequency_ratio": [
+      0.8676366188720385,
+      0.8152321084748956,
+      0.922979277037292
+     ],
+     "local_std_ratio": [
+      0.994988314915088,
+      0.9084626467918253,
+      1.0427729938110621
+     ],
+     "blobs_per_slice": 54.718654434250766,
+     "invented_per_slice": 18.051987767584098,
+     "dropped_per_slice": 41.00305810397553,
+     "blob_slices": 327
+    }
+   }
+  },
+  "dose in [0.15, 0.2)": {
+   "records": 213,
+   "arms": {
+    "low dose": {
+     "arm": "low dose",
+     "label": "low dose",
+     "rmse_body": 87.67431504362058,
+     "slices": 213,
+     "texture_slices": 139,
+     "rois": 1358,
+     "nps_integral_ratio": [
+      5.515290585901109,
+      5.1329391106619395,
+      5.8626984438812775
+     ],
+     "mean_frequency_ratio": [
+      1.8042087863440384,
+      1.6331258670522593,
+      2.0058944623627526
+     ],
+     "local_std_ratio": [
+      3.2465465419298045,
+      3.1238256214207465,
+      3.3941205916638406
+     ],
+     "blobs_per_slice": 266.1643192488263,
+     "invented_per_slice": 190.66197183098592,
+     "dropped_per_slice": 7.892018779342723,
+     "blob_slices": 213
+    },
+    "diffmixsigx0.k0": {
+     "arm": "diffmixsigx0.k0",
+     "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+     "rmse_body": 49.04381915349831,
+     "slices": 213,
+     "texture_slices": 139,
+     "rois": 1358,
+     "nps_integral_ratio": [
+      0.7666096302901431,
+      0.7171326126747511,
+      0.8130258409976417
+     ],
+     "mean_frequency_ratio": [
+      0.7661131161617477,
+      0.7180336541363727,
+      0.8187739312920302
+     ],
+     "local_std_ratio": [
+      0.8768595407336274,
+      0.8118384579156529,
+      0.9169212150137209
+     ],
+     "blobs_per_slice": 53.140845070422536,
+     "invented_per_slice": 14.671361502347418,
+     "dropped_per_slice": 37.81220657276995,
+     "blob_slices": 213
+    }
+   }
+  },
+  "dose in [0.2, inf)": {
+   "records": 162,
+   "arms": {
+    "low dose": {
+     "arm": "low dose",
+     "label": "low dose",
+     "rmse_body": 77.9998412079175,
+     "slices": 162,
+     "texture_slices": 103,
+     "rois": 1022,
+     "nps_integral_ratio": [
+      4.12052380789787,
+      3.8428611821484786,
+      4.397652879341177
+     ],
+     "mean_frequency_ratio": [
+      1.7453788965280463,
+      1.5840467316096516,
+      1.9404858673375753
+     ],
+     "local_std_ratio": [
+      2.718914721162284,
+      2.631487977478754,
+      2.9137046775064315
+     ],
+     "blobs_per_slice": 195.4814814814815,
+     "invented_per_slice": 122.82098765432099,
+     "dropped_per_slice": 8.049382716049383,
+     "blob_slices": 162
+    },
+    "diffmixsigx0.k0": {
+     "arm": "diffmixsigx0.k0",
+     "label": "diffusion, range + \u03c3\u0302, x\u2080-target k0",
+     "rmse_body": 48.10426156658549,
+     "slices": 162,
+     "texture_slices": 103,
+     "rois": 1022,
+     "nps_integral_ratio": [
+      0.6636045089323375,
+      0.6072453934285694,
+      0.7248135694458813
+     ],
+     "mean_frequency_ratio": [
+      0.6932506905292302,
+      0.6465048075277914,
+      0.7468423985552731
+     ],
+     "local_std_ratio": [
+      0.7619202724680425,
+      0.7241013989232443,
+      0.8086630444913345
+     ],
+     "blobs_per_slice": 51.666666666666664,
+     "invented_per_slice": 12.123456790123457,
+     "dropped_per_slice": 35.833333333333336,
+     "blob_slices": 162
+    }
+   }
+  }
+ },
+ "settings": {
+  "tile": 64,
+  "grid": 32,
+  "blur_px": 8.0,
+  "edge_x_sigma": 2.5,
+  "soft_hu": [
+   -200.0,
+   300.0
+  ],
+  "blob_window_hu": [
+   -1000.0,
+   -300.0
+  ],
+  "blob_threshold": 0.15,
+  "blob_match_px": 3.0
+ }
+}

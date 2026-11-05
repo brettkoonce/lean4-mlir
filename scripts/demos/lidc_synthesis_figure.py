@@ -16,6 +16,7 @@ fig:ct_synthesis): the object first, then the findings, then the texture.
       low-dose curve of the build simulated under Mayo's kernel on the LIDC panel
   .venv-lidc/bin/python scripts/demos/lidc_synthesis_figure.py out.png --nodules=<nodules_lidc10.json> \
       --mayo-csv=<perslice.csv> --nps10=<nps_lidc10.csv> --nps-mayo=<nps_mayo.csv> [--nps10b50=<nps_lidc10b50.csv>] \
+      [--nps-mayo2=<nps_mayo.csv of the x₀-target run, its generator's curve added to the Mayo panel>] \
       [--mayo-arms=diff,diff_b50] [--data10=data/lidc10] [--mayo=data/mayo] \
       [--k1-dump=<a second-sample dump for records k1 lacks>]
 The second sample is `diff.k1` where that dump covers the record (the spread set), else --k1-dump,
@@ -41,6 +42,8 @@ GEN_TITLES = {"diff": "the generator\nas trained", "diff_b50": "the same, traine
               "diff25": "the generator trained\nat a quarter dose",
               "diffmixsig": "the generator trained\nacross doses, told the level",
               "diffmixsig_b50": "the same, across doses\non Mayo's kernel",
+              "diffx0_b50": "the kernel one, trained\nto predict the clean slice",
+              "diffmixsigx0_b50": "the same, trained to\npredict the clean slice",
               "mse": "the MSE UNet\n", "mse_b50": "the MSE UNet trained\non Mayo's kernel",
               "msemix": "the MSE UNet\ntrained across doses"}  # two lines each; the RMSE line goes under
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9, "axes.titlesize": 9.5})
@@ -212,18 +215,22 @@ def main():
               "diffusion k0": ("tab:red", 1.4, "-"), "BM3D": ("tab:purple", 1.0, ":"), "Gaussian": ("tab:green", 1.0, ":"),
               "MSE UNet, range": ("tab:blue", 1.4, "--"), "diffusion, range + σ̂ k0": ("tab:red", 1.4, "--"),
               "MSE UNet, b50f": ("tab:blue", 1.4, "--"), "diffusion, b50f k0": ("tab:red", 1.4, "--"),
-              "low dose, b50f": ("0.6", 1.2, "--")}
+              "low dose, b50f": ("0.6", 1.2, "--"),
+              "diffusion, b50f, x₀-target k0": ("tab:red", 1.6, "-")}
     labels = {"full dose": "the scanned slices' own grain", "low dose": "low dose", "MSE UNet": "MSE UNet",
               "diffusion k0": "diffusion, one sample", "BM3D": "BM3D", "Gaussian": "Gaussian",
               "MSE UNet, range": "MSE UNet, trained across doses", "diffusion, range + σ̂ k0": "diffusion, across doses + level",
               "MSE UNet, b50f": "MSE UNet, trained on Mayo's kernel", "diffusion, b50f k0": "diffusion, trained on Mayo's kernel",
-              "low dose, b50f": "low dose, simulated under Mayo's kernel"}
+              "low dose, b50f": "low dose, simulated under Mayo's kernel",
+              "diffusion, b50f, x₀-target k0": "the same, trained to predict the clean slice"}
     for j, (path, title, want) in enumerate(((opt["nps10"], "(c) LIDC validation, 10 % dose",
                                               ["full dose", "low dose", "BM3D", "MSE UNet", "diffusion k0"]),
                                              (opt["nps-mayo"], "Mayo, held out",
                                               ["full dose", "low dose", "Gaussian", "MSE UNet", "MSE UNet, b50f",
-                                               "diffusion, b50f k0"]))):
+                                               "diffusion, b50f k0", "diffusion, b50f, x₀-target k0"]))):
         nps = read_nps(path)
+        if j == 1 and opt.get("nps-mayo2"):  # the x₀-target run's Mayo curves, the same frequency grid
+            nps = {**read_nps(opt["nps-mayo2"]), **nps}
         f = nps["f_per_mm"]
         ax = fig.add_subplot(gc[0, j])
         for name in want:

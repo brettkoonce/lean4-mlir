@@ -1,0 +1,23 @@
+Build completed successfully (6679 jobs).
+20:09 launched diffmixsigx0b50 on GPU 0 → runs/2026-11-04-lidc-x0pred/diffmixsigx0b50/train.log
+20:09 launched diffx0b50 on GPU 1 → runs/2026-11-04-lidc-x0pred/diffx0b50/train.log
+22:59 diffmixsigx0b50: diffusion arm trained to step 60000; draw and score samples with lidc-denoise-sample --seed=0
+22:59 diffx0b50: diffusion arm trained to step 60000; draw and score samples with lidc-denoise-sample --seed=0
+22:59 mayo-diffmixsigx0b50: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmixsigx0_b50/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000, x₀-target, σ̂-conditioned); body RMSE floor 232.442931 → sample 112.701647 HU over 250 slices
+23:04 mayo-diffx0b50: 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffx0_b50/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000, x₀-target); body RMSE floor 232.442931 → sample 113.022706 HU over 250 slices
+23:10 lidc10b50-diffmixsigx0b50: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diffmixsigx0/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, x₀-target, σ̂-conditioned); body RMSE floor 123.307268 → sample 58.062824 HU over 402 slices
+23:18 lidc10b50-diffx0b50: 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diffx0/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, x₀-target); body RMSE floor 123.307268 → sample 58.072225 HU over 402 slices
+23:27 mixb50-diffmixsigx0b50: 4 shards on GPUs 0 1 2 3
+data/lidcmixb50/out/diffmixsigx0/lidcmixb50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, x₀-target, σ̂-conditioned); body RMSE floor 145.274930 → sample 61.755069 HU over 402 slices
+23:39 mayo scored
+23:44 lidc10b50 scored
+23:47 lidcmixb50 scored
+% \quad\quad the same, predicting the clean slice: 395 nodules, 242 under 3 mm
+% \quad\quad the same, predicting the clean slice: 1000 Mayo slices
+\quad\quad the same, predicting the clean slice & 57.4 & 0.93 & 0.91 & 96.4 / 94.0 & 23 & 118.1 & 89 & 0\,\% \\
+\quad\quad the same, predicting the clean slice & 57.4 & 0.95 & 0.94 & 96.7 / 94.7 & 21 & 118.3 & 85 & 0\,\% \\
+x0pred done

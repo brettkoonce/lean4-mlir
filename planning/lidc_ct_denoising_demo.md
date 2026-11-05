@@ -1428,5 +1428,45 @@ mix build (loss in x₀-MSE units, checkpoint `diff sig x0` saved) and two Mayo 
 diffmixsigx0}`; labels in `lidc_records.py`. Cost ≈ 2¾ h training (165 ms/step) + 40 min sampling + scoring; disk
 ≈ 1 + 1 + 1.6 + 1.6 + 1.7 GB of dumps.
 
-**Status.** Launched 11-04 (the driver `launch.sh`: train → sample → score; `launch.log`).
+**Status.** Launched 11-04 20:09 UTC; both trained to 60k at 22:59 (166 / 163 ms per step; x₀-MSE 0.175 / 0.168 over
+the last 5k); sampled 22:59–23:35; scored 23:47 (`launch.log`); `table_rows.sh` prints the two rows.
+
+**Results — it is the fix, and it stays a generator.** Mayo (1,000 slices, floor 235 / median 202): `diffx0b50`
+pooled **118.1**, median **89**, **0 %** of slices worse than the input, max 575; `diffmixsigx0b50` **118.3 / 85 /
+0 %**, max 472 (the ε twins: 2,026 / 100 / 5.2 % and 10²⁹ / 168 / 49 %; the clipped sampler 485.6 / 100 / 41 %).
+By σ̂ bin (x₀ both, pooled → vs the regression net `msemixb50`): 51 / 64 / 91 / 139 / 230 against 42 / 53 / 69 /
+96 / 149 — 1.2× on the light bins, 1.5× on the heaviest, where it leaves half the noise (the ε kernel generator by
+bin: 57 / 72 / 115 / 870 / 7,205); medians by bin 52 / 62 / 81 / 126 / 214, 0 % worse in every bin. Mayo texture
+(NPS integral / mean-frequency ratio to the scan's own): 120–180 HU 0.75–0.77 / 0.74–0.84, 180–250 0.94–1.11 /
+0.92–1.00, invented blobs 87–128 a slice; on the 250–350 and ≥ 350 bins 2.9–5.5× and 45–47× — the residual noise
+of under-denoised slices, not a runaway (pooled over the thousand 1.80–2.14 at 0.92–0.98). Home (b50f 10 % val,
+1,605 slices, floor 122): both x₀ nets pooled **57.4** (the ε kernel generator 70.4, the MSE net 45.2 → 1.27× against
+1.56×, under the √2 a posterior draw costs), **0 %** worse, medians 35.6 / 37.6 (ε 40.3), max 325–337; texture
+**0.93 / 0.91** (kernel x₀) and **0.95 / 0.94** (mix x₀), by bin 0.91–1.04 / 0.95–1.08 under 120 HU, 0.83–0.86 /
+0.87 at 120–180, 0.72–0.78 / 0.85 at ≥ 180 (the ε kernel generator 1.10 / 1.06 pooled); invented blobs 23 / 21 a
+slice (ε 35, MSE 5.6); local-std ratio 1.01–1.07. Nodules 96.4 [95.6, 97.4] / 94.0 and 96.7 [96.0, 97.7] / 94.7
+(ε 97.5 / 93.9 and 97.9 / 95.5; MSE 97.7 / 95.3) — a point of contrast given up; CNR 4.8-ish as the others. The mix
+net on its own range val: pooled 60.7 (floor 143), by dose 75.4 / 59.8 / 55.1 / 49.0 / 48.1 at < 5 / 5–10 / 10–15 /
+15–20 / ≥ 20 % (floors 201 / 142 / 110 / 88 / 78), texture 1.07 / 1.03. The two x₀ nets are the same net to within
+the decimals on every pooled cell — the kernel is the character, the range and σ̂ buy nothing more once the target
+is right.
+
+**Verdict.** The target was the whole of it. The ε-net's error on heavy slices reaches x̂₀ through
+√(1−ᾱ)/√ᾱ, up to 100× at the chain's start, and fifty steps of that is the runaway; the x₀-net's error enters
+x_{t−1} through √ᾱ_{t−1} ≤ 1 and the same net, the same data, the same sampler never leave a slice worse than its
+input on a scanner it has not seen, while keeping 93–95 % of the scan's grain at home and giving up one point of
+nodule contrast and 12 HU against the ε generator — not the regression net's 45, but a generator at 1.27× it.
+The regression net remains the vendor's-task answer on Mayo (83 vs 118); the generator is now one a reader could be
+shown on either scanner. v-prediction not run (x₀ did the job); a σ̂-free x₀ net at range not run (the kernel-only
+x₀ net already matches).
+
+**What the section does with it (11-04).** Two rows `\quad\quad the same, predicting the clean slice` — under the
+kernel row `57.4 & 0.93 & 0.91 & 96.4 / 94.0 & 23 & 118.1 & 89 & 0\,\%` and under the clipped row `57.4 & 0.95 & 0.94
+& 96.7 / 94.7 & 21 & 118.3 & \textbf{85} & 0\,\%`; the data paragraph ("or, in the rows that say so, the residual
+itself"), the caption, a new paragraph "The model's target is what was left, and it is the fix", the reading
+paragraph's close rewritten (the amplifier; "a generator a reader could be shown on either scanner"). The figure:
+panel (a) six columns (the x₀ net's draw of record 2242 at 84 HU beside the ε net's 2,286), panel (c) Mayo gains
+the kernel x₀ generator's spectrum on the scan's own (`--nps-mayo2`); `GEN_TITLES` and the NPS styles carry the new
+arms. README: the rows, the ⭐ bullet, the runs list, the command block. Disk: x₀ dumps kept (Mayo 2 × 1.0 GB — the
+figure reads one — home 2 × 1.6, mix 1.7).
 

@@ -1,0 +1,25 @@
+395 nodules (946 slice regions) on 1605 of 4282 val slices; left out: 2 thin ring, 9 unmatched
+
+contrast kept (median over nodules, % of the full dose's, [95% bootstrap interval])
+                      n  C full          quarter dose diffusion, range + σ̂, x₀-target k0 diffusion, x₀-target k0
+< 3 mm, unrated     242     334   99.5 [ 98.3, 100.5]  94.7 [ 93.2,  96.1]  94.0 [ 92.2,  95.7]
+subsolid, 3–6 mm      9     303   98.5 [ 93.1, 103.0]  98.9 [ 91.6, 100.7]  94.9 [ 89.0, 102.7]
+subsolid, 6–10 mm    10     308  100.8 [ 94.4, 102.1]  98.3 [ 93.5, 102.3]  98.3 [ 94.2, 100.1]
+subsolid, >10 mm      3     126  100.2 [ 93.9, 105.8] 100.1 [ 87.2, 102.9]  99.5 [ 88.0, 104.4]
+solid, 3–6 mm        52     404   99.1 [ 98.0,  99.9]  97.1 [ 95.2,  98.7]  96.3 [ 94.5,  98.3]
+solid, 6–10 mm       52     411   99.3 [ 98.9,  99.7]  97.6 [ 96.7,  98.4]  97.4 [ 96.5,  98.5]
+solid, >10 mm        27     581   99.8 [ 99.3, 100.1]  99.1 [ 98.7,  99.5]  98.5 [ 98.2,  98.9]
+all                 395     370   99.5 [ 99.0,  99.8]  96.7 [ 96.0,  97.7]  96.4 [ 95.6,  97.4]
+
+CNR (median over nodules; full dose first)
+                      n    full  quarter dose diffusion, range + σ̂, x₀-target k0 diffusion, x₀-target k0
+< 3 mm, unrated     242     5.4           3.2          5.2          5.2
+subsolid, 3–6 mm      9     6.0           2.3          4.9          5.2
+subsolid, 6–10 mm    10     6.2           3.9          6.4          6.6
+subsolid, >10 mm      3     1.9           0.8          2.0          1.7
+solid, 3–6 mm        52     6.9           4.2          7.2          7.3
+solid, 6–10 mm       52     5.9           4.0          5.8          5.9
+solid, >10 mm        27     7.6           5.2          7.4          7.5
+all                 395     6.0           3.5          5.7          5.9
+
+→ runs/2026-11-04-lidc-x0pred/score/nodules_lidc10b50.json

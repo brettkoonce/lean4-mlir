@@ -1,0 +1,30 @@
+data/mayo/val.bin: 1000 slices (1000 of 4348 records scored) — low-dose floor → denoised
+  RMSE body    235.04 →  118.12 HU
+  RMSE whole   203.29 →  102.57 HU
+  PSNR          27.22 →   33.77 dB (4096 HU range, mean over slices)
+  SSIM         0.6544 →  0.7041 (soft-tissue window)
+  — sigma_add_hu in [-inf, 120.0): 13 slices
+  RMSE body     95.49 →   49.12 HU
+  RMSE whole    77.47 →   40.50 HU
+  PSNR          35.60 →   41.25 dB (4096 HU range, mean over slices)
+  SSIM         0.8558 →  0.8886 (soft-tissue window)
+  — sigma_add_hu in [120.0, 180.0): 215 slices
+  RMSE body    139.10 →   63.65 HU
+  RMSE whole   120.02 →   55.84 HU
+  PSNR          30.77 →   37.40 dB (4096 HU range, mean over slices)
+  SSIM         0.7544 →  0.7985 (soft-tissue window)
+  — sigma_add_hu in [180.0, 250.0): 423 slices
+  RMSE body    194.89 →   89.15 HU
+  RMSE whole   169.71 →   78.66 HU
+  PSNR          27.80 →   34.60 dB (4096 HU range, mean over slices)
+  SSIM         0.6933 →  0.7410 (soft-tissue window)
+  — sigma_add_hu in [250.0, 350.0): 284 slices
+  RMSE body    274.85 →  135.04 HU
+  RMSE whole   243.39 →  120.32 HU
+  PSNR          24.70 →   31.16 dB (4096 HU range, mean over slices)
+  SSIM         0.5708 →  0.6246 (soft-tissue window)
+  — sigma_add_hu in [350.0, inf): 65 slices
+  RMSE body    415.78 →  241.76 HU
+  RMSE whole   375.08 →  218.41 HU
+  PSNR          21.02 →   26.26 dB (4096 HU range, mean over slices)
+  SSIM         0.3950 →  0.4617 (soft-tissue window)
