@@ -234,3 +234,12 @@ tests/TestResnet34AdamTie.lean	b856deb	spec
 tests/TestResnet34BatchCheck.lean	11.68 GiB	spec
 tests/TestResnet34BatchCheck.lean	15.11 GiB	spec
 tests/TestRmsTie.lean	31.6×	example
+LeanMlir/F32Array.lean	25 %	spec
+LeanMlir/F32Array.lean	10 %	spec
+demos/MainLidcDenoiseTrain.lean	25 %	spec
+demos/MainLidcDenoiseTrain.lean	10 %	spec
+tests/TestDatasetRecordSizes.lean	10 %	spec
+demos/MainLidcDenoiseTrain.lean	25 %	spec
+demos/MainLidcDenoiseTrain.lean	25 %	spec
+demos/MainLidcDenoiseTrain.lean	10 %	spec
+demos/MainLidcDenoiseTrain.lean	10 %	spec

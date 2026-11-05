@@ -57,7 +57,7 @@ import LeanMlir.ReferenceNets
 open ReferenceNets (unetCtDenoise)
 
 def S : Nat := 512
-def evalBatch : Nat := 1  -- XLA logs a ~25 GB rematerialization warning compiling the 512² eval at 4 and at 1; both run
+def evalBatch : Nat := 1  -- XLA logs a rematerialization warning compiling the 512² eval at 4 and at 1; both run
 def nFreq : Nat := 4
 def Tmax : Nat := 1000
 
@@ -118,7 +118,7 @@ def main (args : List String) : IO UInt32 := do
   IO.FS.createDirAll dumpDir
   IO.FS.createDirAll ".lake/build"
   -- The arm, the seed and the data root (lidc10 — the 25 % build's `lidc` is left off so the
-  -- 2026-10-10 artifacts keep their names) name the run apart, so the 25 % and 10 % generators
+  -- artifacts of 2026-10-10 keep their names) name the run apart, so the 25 % and 10 % generators
   -- never share a train-step artifact, a params file or a checkpoint; a non-default patch too,
   -- so a smoke at 64² never reuses the 256² train step (its shapes are baked in).
   let smoke := outDir.endsWith "smoke"
