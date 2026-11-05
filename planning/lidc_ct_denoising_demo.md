@@ -1363,9 +1363,44 @@ generator). The training curves rule out a bad fit: `diffmixsigb50` ends at ε-M
 those slices, wrong in a way that any iteration compounds: the sampler's settings do not undo it and the data did not
 prevent it.
 
-**The clipped x̂₀, smoke on the two first slices of shard 0 (full round pending):** record 0, floor 231 → 99 HU;
-record 15, floor 238 → **460** HU (the scored sampler 2·10⁷, η = 0 6·10¹⁴). Bounded, and still worse than its
-input: the clip turns the runaway into a plain failure on the same slice. The full round on Mayo and the home set
-says how many of the 490 that holds for. *(home-set rows for the first three probes, and the clampx0 round: below
-when they land.)*
+**The clipped x̂₀ (`--clamp-x0`), both sets (06:05–06:27 UTC; `launch_x0.log`).** Mayo: pooled 485.6 HU (floor
+235), median slice **99.5** (the kernel generator's 100), **41.3 %** of slices worse than the input (as scored
+49.0), 63 slices above 1,000 HU and none above 1,500 (the clamp moved 3 % of pixel-steps); by σ̂ bin 0 % / 76 at
+120–180, 26 % / 92 at 180–250, 84 % / 560 at 250–350, 100 % / 1,097 at ≥ 350 (as scored 1 / 38 / 92 / 100 %).
+Texture on Mayo where it holds: NPS integral 2.24× the scan's at 1.02× its frequency on the 120–180 bin, 0.97× at
+0.96× on 180–250 (invented blobs 96 and 87 a slice); above that the failed slices own the cells (34×, 361×). Home
+(b50f 10 % val, 1,605 slices): pooled 206.3 (floor 122; as scored 10²¹), median 52.7 (52.4), **6.0 %** worse (6.2),
+18 slices above 1,000 HU and none above 1,550; every failure is in the ≥ 180 HU bin (53 % of its 180 slices, as
+scored 54 %; the kernel-only generator 1 %) and the four lighter bins are 0 % as before; texture 2.27× / 1.50
+pooled and 2.5–2.6× at 1.9–2.1× the frequency on the three bins under 120 HU — this generator is over-grainy at
+home on the slices it handles (the §12 kernel generator 1.10 / 1.06); nodules 97.9 [96.8, 98.7] / 95.5 under 3 mm,
+the scored arm's to the decimal. The clip bounds the runaway and leaves the same slices worse: of the clipped arm's
+forty worst Mayo slices 18 are among the scored arm's forty and 15 among the kernel-only generator's (the scored
+arm's forty worst are ranked by how far they ran, the clipped arm's by how badly they denoise, so the overlap is
+looser than among the diverging probes; by bin the failures are the same bins).
 
+| home, b50f 10 % val, 1,605 slices | worse than the input | median | > 1,000 HU | ≥ 180 HU bin (180 slices): % worse / median |
+|---|---|---|---|---|
+| kernel generator, §12 (`diff`) | 0.1 % | 40 | 0 | 1 % / 108 |
+| both at once, as scored | 6.2 % | 52 | 91 | 54 % / 1,025 |
+| the same, x̂₀ clipped | 6.0 % | 53 | 18 | 53 % / 254 |
+| the same, σ̂ ≤ 101 HU | 6.6 % | 52 | 96 | — |
+| the same, 20 steps | 10.7 % | 54 | 155 | — |
+| the same, η = 0 | 100 % | 4·10¹¹ | 1,605 | — |
+
+**Verdict.** The runaway is the net's; the sampler compounds it and nothing in the sampler undoes it. Deterministic
+DDIM diverges everywhere, shorter chains sooner, the level channel is not the fault, and the usual guard — the
+clipped prediction — turns the divergence into a bounded failure on the same slices (41 % of Mayo, 6 % at home, all
+in the heaviest bins). The ε-net's error on slices noisier than its range is large, and under ε-prediction an error
+in ε̂ is an error in x̂₀ scaled by √(1−ᾱ)/√ᾱ, up to 100× early in the chain (ᾱ floors at 1e-4); what is left to
+try is the model's target — x₀- or v-prediction — a retraining, not run. The kernel-only generator (§12) stays the
+best generator on Mayo (5 % worse, median 100); the regression net is the deliverable for a scanner never seen.
+
+**What the section does with it (11-04).** A row under the diverged one, `\quad\quad the same, $\hat x_0$ clipped
+to the HU range & 206.2 & 2.27 & 1.50 & 97.9 / 95.5 & 57 & 485.6 & 100 & 41\,\%` (`table_rows.sh` in this run dir
+prints it); the caption names it; the "Both fixes at once" paragraph closes on the four probes instead of "the
+runaway is the sampler's"; the reading paragraph's "what is left to try is the sampler, not the data" becomes "the
+sampler's settings do not reach it … what is left to try is the model's target … a retraining this demo has not
+run". README: the row and a bullet. Disk: the three diverged probes' dumps deleted on both sets after scoring
+(−7.8 GB, 16 GB free); the clipped dumps kept (`data/mayo/out/diffmixsig_b50_clampx0` 1.0 GB,
+`data/lidc10b50/out/diffmixsig_clampx0` 1.6 GB).

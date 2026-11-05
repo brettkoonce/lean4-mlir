@@ -1,0 +1,8 @@
+Build completed successfully (6673 jobs).
+06:05 mayo-clampx0 (--clamp-x0): 4 shards on GPUs 0 1 2 3
+data/mayo/out/diffmixsig_b50_clampx0/mayo_val.k0.eps.f32: 250 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 232.442931 → sample 481.839431 HU over 250 slices; x̂₀ clamp moved 102836471 of 3276800000 pixel-steps
+06:14 mayo scored
+06:14 lidc10b50-clampx0 (--clamp-x0): 4 shards on GPUs 0 1 2 3
+data/lidc10b50/out/diffmixsig_clampx0/lidc10b50_val.k0.eps.f32: 402 samples (k = 0, 50 steps, η = 1.000000, σ̂-conditioned); body RMSE floor 123.307268 → sample 209.939406 HU over 402 slices; x̂₀ clamp moved 173039939 of 5269094400 pixel-steps
+06:27 lidc10b50 scored
+probes done

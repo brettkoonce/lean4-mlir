@@ -677,10 +677,10 @@ validation nodules; on Mayo also per slice, the median and the share of slices l
 the input.
 
 `MainLidcDenoiseTrain.lean`, `MainLidcDenoiseSample.lean`. See
-`planning/lidc_ct_denoising_demo.md` (§9–§13 are the runs); the run scripts and record lists in
+`planning/lidc_ct_denoising_demo.md` (§9–§13.4 are the runs); the run scripts and record lists in
 `runs/2026-11-02-lidc-diffusion/`, `runs/2026-11-03-lidc-range/` (the dose range),
-`runs/2026-11-03-lidc-kernel/` (Mayo's kernel) and `runs/2026-11-03-lidc-rangekernel/` (both at once)
-are the exact sequences, gates included.
+`runs/2026-11-03-lidc-kernel/` (Mayo's kernel), `runs/2026-11-03-lidc-rangekernel/` (both at once) and
+`runs/2026-11-04-lidc-sampler-probes/` (the sampler probed) are the exact sequences, gates included.
 
 ```bash
 scripts/datasets/download_lidc.sh                        # 300 patients stratified by maker, ~38 GB DICOM + the XML
@@ -698,6 +698,7 @@ lake exe lidc-denoise-train data/lidc10/train.bin data/lidc10/val.bin 60000 --ar
     --out=runs/diff10 --dump=data/lidc10/out/diff        # the generator, 2½–3 h
 lake exe lidc-denoise-sample data/mayo/val.bin --model=lidc10 --seed=0 --k=0 --records=records_mayo.txt \
     --dump=data/mayo/out/diff                            # DDIM η = 1, 50 steps, ≈ 1 s a slice; --shard=i/n per GPU
+#   … --eta=0 / --steps=20 / --sigma-cap=101 / --clamp-x0: the sampler probes of runs/2026-11-04-lidc-sampler-probes/launch.sh
 lake exe lidc-denoise-train data/lidc10/train.bin data/mayo/val.bin --arm=mse --seed=0 --eval-only \
     --ckpt=data/lidc10/out/mse --dump=data/mayo/out/mse --out=runs/mse10_mayo    # the MSE net's forward pass on Mayo
 .venv-lidc/bin/python scripts/probes/lidc_denoise_score.py data/mayo/val.bin data/mayo/out/mse/mayo_val.eps.f32 \
@@ -743,9 +744,10 @@ freq its mean frequency, invented = blobs of 1–3 mm per slice that no scanned 
 | the same, at doses 3–25 %, told the level | 79.6 | 2.91 | 1.44 | 98.0 / 95.0 | 97 | 322.5 | 120 | 4 % |
 | the same, trained on Mayo's kernel † | 70.4 | 1.10 | 1.06 | 97.5 / 93.9 | 35 | 2,026 | 100 | 5 % |
 | the same, both at once † | 10²¹ | — | — | 97.9 / 95.5 | — | 10²⁹ | 168 | 49 % |
+| the same, x̂₀ clipped to the HU range † | 206.2 | 2.27 | 1.50 | 97.9 / 95.5 | 57 | 485.6 | 100 | 41 % |
 | the scanned slice itself | 0 | 1.00 | 1.00 | 100 / 100 | — | 0 | 0 | — |
 
-† the LIDC block of the kernel and both-at-once rows is scored on the same slices simulated under Mayo's
+† the LIDC block of the kernel, both-at-once and clipped rows is scored on the same slices simulated under Mayo's
 kernel (their own build); the Mayo block is the same thousand slices for every row. The generator's
 both-at-once row diverges on 6 % of those slices and on half of Mayo's: its pooled cells are that
 divergence (median slice 52 HU at home, 168 on Mayo) and the texture cells it would dominate are blank.
@@ -787,7 +789,19 @@ given both is the worst row in the table: worse than its input on 49 % of Mayo's
 of those above 200 HU by its own estimator), diverging rather than drifting — a saturated patch of
 lung on the figure's slice, 10²⁹ HU pooled over the set — and doing the same on one slice in eight
 of its own validation set; the kernel-only generator holds at one in twenty at the same measured
-noise. The runaway is the sampler's, not the data's; what is left to try is the sampler.
+noise. The runaway is the net's; the sampler only compounds it.
+
+🔬 **The sampler probed, nothing retrained.** Four things done to the same checkpoint's sampler, each one
+knob from the scored arm: deterministic DDIM (η = 0) diverges on every slice, the lightest included — the
+stochastic chain's fresh noise was what had kept it near its training distribution; 20 steps diverge
+sooner (77 % of Mayo's slices worse); the level the net is told capped at its training median changes
+nothing on the heavy slices (56 %), so the level channel is not the fault; and the usual guard, the
+prediction clipped to the HU range at every step, bounds the output (nothing above 1,500 HU) and leaves
+the same slices worse — 41 % of Mayo's, 84 % of those with 250–350 HU of noise and every one above; 6 %
+at home, all in the heaviest bin. The failure is the net's own prediction on slices noisier than its
+range, which any iteration compounds; what is left to try is the model's target (x₀- or v-prediction),
+a retraining not run. The kernel-only generator stays the best generator on Mayo; the regression net is
+the deliverable for a scanner never seen.
 
 ⚠ Not a clinical denoiser or a reader study: nodule contrast kept is one instrument on reader-outlined
 findings, not a detection rate; the low dose is simulated on the training side (parallel beam, two
