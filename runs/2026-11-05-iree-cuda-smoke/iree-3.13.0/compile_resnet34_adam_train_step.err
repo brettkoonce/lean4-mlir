@@ -1,0 +1,58 @@
+LLVM ERROR: Cannot select: 0x119a9660: v2i16,v2i16 = umul_lohi 0x103b2c40, 0x1040e8e0
+  0x103b2c40: v2i16 = BUILD_VECTOR 0x119a0050, 0x119a0050
+    0x119a0050: i16 = truncate 0x103c8340
+      0x103c8340: i32 = srl 0x1123eb90, Constant:i32<18>
+        0x1123eb90: i32 = shl nuw nsw 0x119a02f0, Constant:i32<7>
+          0x119a02f0: i32 = AssertZext 0xffa1a70, ValueType:ch:i15
+            0xffa1a70: i32 = llvm.nvvm.read.ptx.sreg.ctaid.x TargetConstant:i64<10057>
+    0x119a0050: i16 = truncate 0x103c8340
+      0x103c8340: i32 = srl 0x1123eb90, Constant:i32<18>
+        0x1123eb90: i32 = shl nuw nsw 0x119a02f0, Constant:i32<7>
+          0x119a02f0: i32 = AssertZext 0xffa1a70, ValueType:ch:i15
+            0xffa1a70: i32 = llvm.nvvm.read.ptx.sreg.ctaid.x TargetConstant:i64<10057>
+  0x1040e8e0: v2i16 = bitcast Constant:i32<1431721302>
+In function: resnet34_adam_train_step_dispatch_227_elementwise_broadcast_2359296_f32
+Please report issues to https://github.com/iree-org/iree/issues and include the crash backtrace.
+Stack dump:
+0.	Program arguments: /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv-iree/lib/python3.12/site-packages/iree/compiler/tools/../_mlir_libs/iree-compile verified_mlir/resnet34_adam_train_step.mlir --iree-hal-target-backends=cuda --iree-cuda-target=sm_86 -o .lake/build/resnet34_adam_train_step_cuda.vmfb
+1.	Running pass 'Function Pass Manager' on module 'm_linked'.
+2.	Running pass 'NVPTX DAG->DAG Pattern Instruction Selection' on function '@resnet34_adam_train_step_dispatch_227_elementwise_broadcast_2359296_f32'
+Stack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):
+0  libIREECompiler.so 0x0000746df195a0ab
+1  libIREECompiler.so 0x0000746df19571fe
+2  libIREECompiler.so 0x0000746df195ac10
+3  libc.so.6          0x0000746deb845330
+4  libc.so.6          0x0000746deb89ec0c pthread_kill + 284
+5  libc.so.6          0x0000746deb84527e gsignal + 30
+6  libc.so.6          0x0000746deb8288ff abort + 223
+7  libIREECompiler.so 0x0000746df18d2c07
+8  libIREECompiler.so 0x0000746df8439968
+9  libIREECompiler.so 0x0000746df8439035
+10 libIREECompiler.so 0x0000746df6e6d3e4
+11 libIREECompiler.so 0x0000746df843077c
+12 libIREECompiler.so 0x0000746df842ff17
+13 libIREECompiler.so 0x0000746df842f378
+14 libIREECompiler.so 0x0000746df842d432
+15 libIREECompiler.so 0x0000746df6e6b375
+16 libIREECompiler.so 0x0000746df842b941
+17 libIREECompiler.so 0x0000746df873c8a1
+18 libIREECompiler.so 0x0000746dfa3257f2
+19 libIREECompiler.so 0x0000746dfa32bc13
+20 libIREECompiler.so 0x0000746dfa32655a
+21 libIREECompiler.so 0x0000746df326fdb3
+22 libIREECompiler.so 0x0000746df3cd032c
+23 libIREECompiler.so 0x0000746df1f09731
+24 libIREECompiler.so 0x0000746df1f0a029
+25 libIREECompiler.so 0x0000746df1f0e4ad
+26 libIREECompiler.so 0x0000746df3cd0e56
+27 libIREECompiler.so 0x0000746df1f09731
+28 libIREECompiler.so 0x0000746df1f0a029
+29 libIREECompiler.so 0x0000746df1f0b857
+30 libIREECompiler.so 0x0000746df1f099bd
+31 libIREECompiler.so 0x0000746df1f0c7cc
+32 libIREECompiler.so 0x0000746df1794348 ireeCompilerInvocationPipeline + 3672
+33 libIREECompiler.so 0x0000746df1e8fd53
+34 libIREECompiler.so 0x0000746df1e8f606
+35 libc.so.6          0x0000746deb82a1ca
+36 libc.so.6          0x0000746deb82a28b __libc_start_main + 139
+37 iree-compile       0x00000000002016ae

@@ -1,0 +1,33 @@
+════════ cifar8w (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8w_sgd_train_step.mlir
+  iree-compile verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide sgd (constant lr 0.100000), He init
+  step 0/10: loss=2.315255
+  step 1/10: loss=2.310214
+  step 2/10: loss=2.299476
+Epoch 1/40: loss=2.304144 lr=0.100000
+  epoch 1: test_acc = 1244/10000 = 12.440000%  top5 = 5807/10000 = 58.070000%  [95% CI 11.81–13.10]
+done (trained CIFAR-CNN8-wide sgd + constant lr via packed threading).
+════════ cifar8w (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8w_mom_train_step.mlir
+  (cached vmfb) .lake/build/cifar8w_fwd_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide mom (constant lr 0.020000), He init
+  step 0/10: loss=2.315255
+  step 1/10: loss=2.306057
+  step 2/10: loss=2.304144
+Epoch 1/40: loss=2.303200 lr=0.020000
+  epoch 1: test_acc = 1260/10000 = 12.600000%  top5 = 5906/10000 = 59.060000%  [95% CI 11.96–13.26]
+done (trained CIFAR-CNN8-wide mom + constant lr via packed threading).
+════════ cifar8w (wide head) — AdamW (lr 1e-3) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8w_adam_train_step.mlir
+  (cached vmfb) .lake/build/cifar8w_fwd_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide adam (constant lr 0.001000), He init
+  step 0/10: loss=2.315255
+  step 1/10: loss=2.345160
+  step 2/10: loss=2.304713
+Epoch 1/40: loss=2.309673 lr=0.001000
+  epoch 1: test_acc = 1272/10000 = 12.720000%  top5 = 5688/10000 = 56.880000%  [95% CI 12.08–13.39]
+done (trained CIFAR-CNN8-wide adam + constant lr via packed threading).

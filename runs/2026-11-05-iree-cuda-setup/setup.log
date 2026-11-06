@@ -1,0 +1,71 @@
+════ iree_cpu_setup 2026-11-05 20:02:16 — target cuda — stages: check venv runtime shim smoke — IREE 3.13.0 — venv .venv-iree
+
+━━━ check: the box
+  ✓ C compiler: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  ✓ python: /usr/bin/python3.12 (Python 3.12.3)
+  ✓ disk: 33 GB free
+  ✓ cpu: AMD Ryzen Threadripper PRO 5955WX 16-Cores, 32 threads
+  ✓ gpu 0: NVIDIA GeForce RTX 4060 Ti, 575.57.08; libcuda.so.1 found
+
+━━━ venv: .venv-iree with iree-base-compiler + iree-base-runtime 3.13.0, cmake, ninja
+  ✓ .venv-iree already has iree-compile 3.13.0
+  ✓ IREE compiler version 3.13.0rc20261016 @ 89ece87b89852100c0a4ac3d515e14842d090967
+
+━━━ runtime: /home/skoonce/src/iree at the wheel's commit, static archives in /home/skoonce/src/iree-build (cuda)
+  ✓ wheel commit 89ece87b89852100c0a4ac3d515e14842d090967
+  ✓ source at 89ece87b89 2026-10-16
+  ✓ archives: 3 (27M build, CUDA HAL ON)
+
+━━━ shim: ffi/libiree_ffi.so, cuda
+  ✓ previous shim moved to /home/skoonce/src/libiree_ffi.so.2026-09-26.previous
+  ✓ ffi/libiree_ffi.so (1.5M), cuda + local-task + local-sync drivers, 8 entry points
+  ✓ removed 6 cached cuda .vmfb (a cache from another release would not load; they recompile at first use)
+
+━━━ smoke: the MobileNetV2 eval forward on cuda, cuda
+  ✓ mobilenetv2_fwd_eval ran on cuda: 32x10xf32=[0 0 0 0 0 0 0 0 0 0]...
+  ✓ sm_89 on IREE 3.13.0: compiles and runs
+  ✓ manifest: runs/2026-11-05-iree-cuda-setup/manifest.txt
+
+  Next, from this shell:
+    lake run mnist-iree                      # a few minutes; IREE_BACKEND defaults to cuda here
+    lake run cifar-iree                      # the six arms
+    LEAN_DEMO_GPU=1 lake run imagenette-iree # the seven, hours per net on one card
+  The lakefile puts .venv-iree/bin on PATH for the -iree groups itself; a bare binary wants it on PATH.
+════ iree_cpu_setup 2026-11-05 20:19:58 — target cuda — stages: venv runtime — IREE 3.12.0 — venv .venv-iree
+
+━━━ venv: .venv-iree with iree-base-compiler + iree-base-runtime 3.12.0, cmake, ninja
+  ⚠ .venv-iree exists without iree-compile 3.12.0 — installing into it
+Using Python 3.12.3 environment at: .venv-iree
+Resolved 8 packages in 299ms
+Downloading iree-base-runtime (14.6MiB)
+ Downloaded iree-base-runtime
+Prepared 1 package in 405ms
+Uninstalled 2 packages in 11ms
+Installed 2 packages in 7ms
+ - iree-base-compiler==3.13.0
+ + iree-base-compiler==3.12.0
+ - iree-base-runtime==3.13.0
+ + iree-base-runtime==3.12.0
+  ✓ IREE compiler version 3.12.0rc20260917 @ 2b05c5dbb2f2ecb27c0d3941e80ee8d2f16e890d
+
+━━━ runtime: /home/skoonce/src/iree at the wheel's commit, static archives in /home/skoonce/src/iree-build (cuda)
+  ✓ wheel commit 2b05c5dbb2f2ecb27c0d3941e80ee8d2f16e890d
+  ✓ source at 2b05c5dbb2 2026-09-16
+  ✓ archives: 3 (27M build, CUDA HAL ON)
+════ iree_cpu_setup 2026-11-05 20:22:00 — target cuda — stages: shim smoke — IREE 3.12.0 — venv .venv-iree
+
+━━━ shim: ffi/libiree_ffi.so, cuda
+  ✓ previous shim moved to /home/skoonce/src/libiree_ffi.so.2026-11-05.previous
+  ✓ ffi/libiree_ffi.so (1.5M), cuda + local-task + local-sync drivers, 8 entry points
+  ✓ removed 36 cached cuda .vmfb (a cache from another release would not load; they recompile at first use)
+
+━━━ smoke: the MobileNetV2 eval forward on cuda, cuda
+  ✓ mobilenetv2_fwd_eval ran on cuda: 32x10xf32=[0 0 0 0 0 0 0 0 0 0]...
+  ✓ sm_89 on IREE 3.12.0: compiles and runs
+  ✓ manifest: runs/2026-11-05-iree-cuda-setup/manifest.txt
+
+  Next, from this shell:
+    lake run mnist-iree                      # a few minutes; IREE_BACKEND defaults to cuda here
+    lake run cifar-iree                      # the six arms
+    LEAN_DEMO_GPU=1 lake run imagenette-iree # the seven, hours per net on one card
+  The lakefile puts .venv-iree/bin on PATH for the -iree groups itself; a bare binary wants it on PATH.

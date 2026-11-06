@@ -1,0 +1,6 @@
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → IREE FFI → GPU
+  (cached vmfb) .lake/build/linear_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/linear_fwd_cuda.vmfb
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (5786ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).

@@ -117,7 +117,9 @@ jobs:
             LeanMlir.Proofs.Codegen.ViTRender LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 
       - name: IREE (PyPI)
-        run: python3 -m pip install --quiet iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+        # 3.12.0, the row's pin (deploy/iree_cpu_setup.sh): 3.11.0's task device segfaults on the
+        # 224² artifacts and 3.13.0's NVPTX backend cannot compile the ResNet train steps for CUDA.
+        run: python3 -m pip install --quiet iree-base-compiler==3.12.0 iree-base-runtime==3.12.0
 
       - name: Gradchecks
         run: |
@@ -220,8 +222,9 @@ jobs:
             lake-jax-
 
       - name: Python (jax CPU + TensorFlow at the lockfile's versions, IREE)
-        # IREE 3.11.0 is PyPI's release; the 4060 Ti box runs a 3.12 nightly, and both ties pass on
-        # both (checked 2026-09-25: MNv4 4.1e-5, MNv2 ImageNet 2.1e-6 of scale).
+        # IREE 3.12.0 is the row's pin (the 4060 Ti box runs the same release since 2026-11-05); both
+        # ties passed on 3.11.0 and a 3.12 nightly alike (checked 2026-09-25: MNv4 4.1e-5, MNv2
+        # ImageNet 2.1e-6 of scale).
         # ⚠ TensorFlow is NOT optional: an ImageNet reference carries its tf.data pipeline at module
         # level, so exec'ing the prefix up to `loss_fn` imports it.
         run: |
@@ -229,7 +232,7 @@ jobs:
           lock() { sed -n "s/^$1==//p" jax/requirements-cuda-lock.txt; }
           python3 -m pip install --quiet "jax[cpu]==$(lock jax)" "tensorflow==$(lock tensorflow)" \
               "tensorflow-datasets==$(lock tensorflow-datasets)" pillow \
-              iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+              iree-base-compiler==3.12.0 iree-base-runtime==3.12.0
 
       - name: Emit the MNv4 reference
         # The MNv4 tie reads the Imagenette reference the exe writes before it would train (the
@@ -280,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      IREE_VERSION: '3.11.0'
+      IREE_VERSION: '3.12.0'
     steps:
       - uses: actions/checkout@v4
 
@@ -311,9 +314,11 @@ jobs:
 
       - name: Build libiree_ffi.so (IREE runtime from source, CPU only)
         if: steps.ffi.outputs.cache-hit != 'true'
-        # Runtime-only: the runtime submodules (~220 MB, not the LLVM chain), four static archives,
-        # local-task/local-sync drivers. `-DUSE_CPU` compiles the wrapper without a GPU driver.
-        # `--no-undefined`: a missing archive fails here, not at the first session create.
+        # Runtime-only: the runtime submodules (~220 MB, not the LLVM chain), three static archives
+        # (printf, its own archive in 3.11, is inside the unified one from 3.12), local-task/local-sync
+        # drivers. `-DUSE_CPU` compiles the wrapper without a GPU driver. `--no-undefined`: a missing
+        # archive fails here, not at the first session create. deploy/iree_cpu_setup.sh is the same
+        # recipe with the version as a knob.
         run: |
           set -e
           python3 -m pip install --quiet cmake ninja
@@ -325,14 +330,13 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF > /tmp/cmake.log
           B=/tmp/iree-build
           ninja -C $B runtime/src/iree/runtime/libiree_runtime_unified.a \
-            build_tools/third_party/flatcc/libflatcc_runtime.a build_tools/third_party/flatcc/libflatcc_parsing.a \
-            build_tools/third_party/printf/libprintf_printf.a
+            build_tools/third_party/flatcc/libflatcc_runtime.a build_tools/third_party/flatcc/libflatcc_parsing.a
           gcc -fPIC -O2 -c ffi/iree_ffi.c -o /tmp/iree_ffi.o -I/tmp/iree/runtime/src -I$B/runtime/src \
             -DIREE_ALLOCATOR_SYSTEM_CTL=iree_allocator_libc_ctl -DUSE_CPU
           gcc -shared -o ffi/libiree_ffi.so /tmp/iree_ffi.o \
             -Wl,--whole-archive $B/runtime/src/iree/runtime/libiree_runtime_unified.a -Wl,--no-whole-archive \
             -Wl,--start-group $B/build_tools/third_party/flatcc/libflatcc_runtime.a \
-              $B/build_tools/third_party/flatcc/libflatcc_parsing.a $B/build_tools/third_party/printf/libprintf_printf.a \
+              $B/build_tools/third_party/flatcc/libflatcc_parsing.a \
             -Wl,--end-group -lm -lpthread -ldl -Wl,--no-undefined
 
       - name: Python (IREE compiler; .venv with jax CPU at the lockfile's version, for the JAX side)

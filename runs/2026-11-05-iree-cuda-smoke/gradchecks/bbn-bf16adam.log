@@ -1,0 +1,38 @@
+GRADCHECK — @cifar8wb_bbn_bf16adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_bf16adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend iree
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16adam_train_step_cuda.vmfb
+  base loss 2.357074   ‖g‖ 2.891681   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.005907 at L2.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005148 at head.Wa
+             L1.(W,b)	0.002395
+             L2.(W,b)	0.005907
+             L3.(W,b)	0.003504
+             L4.(W,b)	0.001712
+             L5.(W,b)	0.003064
+             L6.(W,b)	0.004465
+             L7.(W,b)	0.003051
+             L8.(W,b)	0.002272
+             head.W9	0.010792
+             head.Wa	0.005148
+             head.Wb	0.034877
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000383	-0.000920	3.400988
+          L2	conv 16→16 @32² + BN + relu	0.000470	0.002394	4.095759
+          L3	conv 16→16 @16² + BN + relu	0.000385	0.000118	0.694971
+          L4	conv 16→16 @16² + BN + relu	0.000285	-0.000526	2.847831
+          L5	conv 16→32 @8² + BN + relu	0.000375	0.000694	0.851072
+          L6	conv 32→32 @8² + BN + relu	0.000368	0.000225	0.387937
+          L7	conv 32→32 @4² + BN + relu	0.000335	0.000257	0.233618
+          L8	conv 32→32 @4² + BN + relu	0.000267	0.000301	0.126088
+          head	dense 128→512→512→10	0.002556	0.002554	0.000629
+          whole	all 38 tensors	0.006175	0.007042	0.140481
+  worst rel 4.095759 at L2;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 3.516199
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.148928 at L5
+  25 invokes of @m.cifar8wb_bbn_bf16adam_train_step
+
+uncaught exception: TIER 1 A FAILED: ⟨g_W,W⟩+⟨g_b,b⟩ ≠ 0 at L2.(W,b) (|cos∠| 0.005907 > 0.000300) — the conv+BN VJP does not respect the scale invariance it is built on

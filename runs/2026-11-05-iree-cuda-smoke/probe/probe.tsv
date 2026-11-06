@@ -1,0 +1,9 @@
+# IREE 3.12.0 cuda sm_86, 4060 Ti, ares, : LEAN_MLIR_MAX_STEPS=60 LEAN_MLIR_PROBE_WARM=20 LEAN_MLIR_SKIP_EVAL=1; ms/step over steps 21-60 at batch 32
+net	gpu	median_ms	min_ms	p90_ms	mean_ms	wait_ms	train_80ep_min
+vit-verified-adam	1	9978	9458	10209	9937	520	3924.6
+convnext-verified-adam	1	5286	5180	5377	5289	106	2079.1
+mobilenetv2-verified-adam	1	2939	2895	3004	2948	44	1156.0
+mobilenetv4-verified-adam	1	3851	3701	4307	3949	150	1514.7
+efficientnet-verified-adam	1	3598	3419	3871	3655	179	1415.2
+resnet34-verified-adam	1	6074	5803	6169	6056	271	2389.1
+resnet50-verified-adam	1	7463	7177	7765	7482	286	2935.4

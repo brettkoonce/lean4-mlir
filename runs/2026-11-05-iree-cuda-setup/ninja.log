@@ -1,0 +1,415 @@
+ninja: Entering directory `/home/skoonce/src/iree-build'
+[0/2] Re-checking globbed directories...
+[1/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_time.objects.dir/time.c.o
+[2/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/allocator.c.o
+[3/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/bitfield.c.o
+[4/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/bitmap.c.o
+[5/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/printf.c.o
+[6/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/status.c.o
+[7/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/status_stack_trace.c.o
+[8/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/string_builder.c.o
+[9/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/string_view.c.o
+[10/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/time.c.o
+[11/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/wait_source.c.o
+[12/414] Building C object runtime/src/iree/base/CMakeFiles/iree_base_base.objects.dir/allocator_libc.c.o
+[13/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_memory.objects.dir/memory.c.o
+[14/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_sysfs.objects.dir/sysfs.c.o
+[15/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/affinity.c.o
+[16/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/mutex.c.o
+[17/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/numa_fallback.c.o
+[18/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/notification.c.o
+[19/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/numa_linux.c.o
+[20/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/numa_win32.c.o
+[21/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_threading.objects.dir/wait_address.c.o
+[22/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/address.c.o
+[23/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/address_generic.c.o
+[24/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/address_posix.c.o
+[25/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/address_win32.c.o
+[26/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/buffer_pool.c.o
+[27/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/event.c.o
+[28/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/file.c.o
+[29/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/frontier.c.o
+[30/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/frontier_tracker.c.o
+[31/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/notification.c.o
+[32/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/operation.c.o
+[33/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/primitive.c.o
+[34/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/proactor.c.o
+[35/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/region.c.o
+[36/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/semaphore.c.o
+[37/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/slab.c.o
+[38/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_async.objects.dir/socket.c.o
+[39/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_path.objects.dir/path.c.o
+[40/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_platform_topology.objects.dir/platform_topology.c.o
+[41/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_time.a
+[42/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_platform_topology.objects.dir/platform_topology_darwin.c.o
+[43/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_platform_topology.objects.dir/platform_topology_fallback.c.o
+[44/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_platform_topology.objects.dir/platform_topology_sysfs.c.o
+[45/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_platform_topology.objects.dir/platform_topology_win32.c.o
+[46/414] Building C object runtime/src/iree/io/CMakeFiles/iree_io_file_handle.objects.dir/file_contents.c.o
+[47/414] Building C object runtime/src/iree/io/CMakeFiles/iree_io_file_handle.objects.dir/file_handle.c.o
+[48/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/cli/flatcc_cli.c.o
+[49/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/external/hash/cmetrohash64.c.o
+[50/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/external/hash/str_set.c.o
+[51/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/external/hash/ptr_set.c.o
+[52/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/hash_tables/symbol_table.c.o
+[53/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/hash_tables/scope_table.c.o
+[54/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/hash_tables/name_table.c.o
+[55/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/hash_tables/schema_table.c.o
+[56/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/hash_tables/value_set.c.o
+[57/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/fileio.c.o
+[58/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/parser.c.o
+[59/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/semantics.c.o
+[60/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/coerce.c.o
+[61/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_schema.c.o
+[62/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/flatcc.c.o
+[63/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c.c.o
+[64/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_reader.c.o
+[65/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_sort.c.o
+[66/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_builder.c.o
+[67/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_verifier.c.o
+[68/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_sorter.c.o
+[69/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_json_parser.c.o
+[70/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/compiler/codegen_c_json_printer.c.o
+[71/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/runtime/builder.c.o
+[72/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/runtime/emitter.c.o
+[73/414] Building C object build_tools/third_party/flatcc/CMakeFiles/iree-flatcc-cli.dir/__/__/__/third_party/flatcc/src/runtime/refmap.c.o
+[74/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_cpu.objects.dir/cpu.c.o
+[75/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/allocator.c.o
+[76/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/allocator_heap.c.o
+[77/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/buffer.c.o
+[78/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/buffer_heap.c.o
+[79/414] Linking C static library runtime/src/iree/base/libiree_base_base.a
+[80/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/channel_provider.c.o
+[81/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/executable.c.o
+[82/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/fence.c.o
+[83/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/pool.c.o
+[84/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/profile_metrics.c.o
+[85/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/pool_set.c.o
+[86/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/profile_options.c.o
+[87/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/profile_sink.c.o
+[88/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/topology.c.o
+[89/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_parsing.dir/__/__/__/third_party/flatcc/src/runtime/verifier.c.o
+[90/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_signal.objects.dir/signal.c.o
+[91/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx2_fma.objects.dir/mmt4d_x86_64_avx2_fma.c.o
+[92/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx2_fma.objects.dir/pack_x86_64_avx2_fma.c.o
+[93/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx2_fma.objects.dir/unpack_x86_64_avx2_fma.c.o
+[94/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_atomic_slist.objects.dir/atomic_slist.c.o
+[95/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_base.objects.dir/conv_nchwc_x86_64_avx512_base.c.o
+[96/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_memory.a
+[97/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_sysfs.a
+[98/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_path.a
+[99/414] Linking C static library runtime/src/iree/io/libiree_io_file_handle.a
+[100/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_base.objects.dir/mmt4d_x86_64_avx512_base.c.o
+[101/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_base.objects.dir/pack_x86_64_avx512_base.c.o
+[102/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_base.objects.dir/unpack_x86_64_avx512_base.c.o
+[103/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_vnni.objects.dir/mmt4d_x86_64_avx512_vnni.c.o
+[104/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64_avx512_bf16.objects.dir/mmt4d_x86_64_avx512_bf16.c.o
+[105/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_cpu.a
+[106/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_profile_event_ring.objects.dir/profile_event_ring.c.o
+[107/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/buffer.c.o
+[108/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/context.c.o
+[109/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/instance.c.o
+[110/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/invocation.c.o
+[111/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/list.c.o
+[112/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/loop.c.o
+[113/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/loop_inline.c.o
+[114/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/module.c.o
+[115/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_platform_topology.a
+[116/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/native_module.c.o
+[117/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/ref.c.o
+[118/414] Linking C static library runtime/src/iree/base/threading/libiree_base_threading_threading.a
+[119/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/stack.c.o
+[120/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_uring.objects.dir/uring.c.o
+[121/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_sparse_table.objects.dir/sparse_table.c.o
+[122/414] Linking C static library build_tools/third_party/flatcc/libflatcc_parsing.a
+[123/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_buffer_ring.objects.dir/buffer_ring.c.o
+[124/414] Building C object runtime/src/iree/async/platform/linux/CMakeFiles/iree_async_platform_linux_signal.objects.dir/signal.c.o
+[125/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_timer_list.objects.dir/timer_list.c.o
+[126/414] Linking C executable tools/iree-flatcc-cli
+[127/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_completion_pool.objects.dir/completion_pool.c.o
+[128/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_continuation.objects.dir/continuation.c.o
+[129/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_message_pool.objects.dir/message_pool.c.o
+[130/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_operation_pool.objects.dir/operation_pool.c.o
+[131/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_sequence_emulation.objects.dir/sequence_emulation.c.o
+[132/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_ready_pool.objects.dir/ready_pool.c.o
+[133/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_arena.objects.dir/arena.c.o
+[134/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_fpu_state.objects.dir/fpu_state.c.o
+[135/414] Generating dummy_reader.h, dummy_builder.h, dummy_verifier.h, dummy_json_printer.h, dummy_json_parser.h
+[136/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_thread.objects.dir/thread.c.o
+[137/414] Generating bytecode_module_def_reader.h, bytecode_module_def_builder.h, bytecode_module_def_verifier.h, bytecode_module_def_json_printer.h, bytecode_module_def_json_parser.h
+[138/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_atomic_slist.a
+[139/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_thread.objects.dir/thread_darwin.c.o
+[140/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_thread.objects.dir/thread_pthreads.c.o
+[141/414] Linking C static library runtime/src/iree/async/libiree_async_async.a
+[142/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64.objects.dir/conv_nchwc_x86_64_entry_point.c.o
+[143/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64.objects.dir/mmt4d_x86_64_entry_point.c.o
+[144/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64.objects.dir/pack_x86_64_entry_point.c.o
+[145/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64.objects.dir/query_tile_sizes_x86_64_entry_point.c.o
+[146/414] Building C object runtime/src/iree/builtins/ukernel/arch/x86_64/CMakeFiles/iree_builtins_ukernel_arch_x86_64_x86_64.objects.dir/unpack_x86_64_entry_point.c.o
+[147/414] Building C object runtime/src/iree/base/threading/CMakeFiles/iree_base_threading_thread.objects.dir/thread_win32.c.o
+[148/414] Linking C static library runtime/src/iree/builtins/ukernel/arch/x86_64/libiree_builtins_ukernel_arch_x86_64_x86_64_avx2_fma.a
+[149/414] Linking C static library runtime/src/iree/builtins/ukernel/arch/x86_64/libiree_builtins_ukernel_arch_x86_64_x86_64_avx512_base.a
+[150/414] Linking C static library runtime/src/iree/builtins/ukernel/arch/x86_64/libiree_builtins_ukernel_arch_x86_64_x86_64_avx512_vnni.a
+[151/414] Linking C static library runtime/src/iree/builtins/ukernel/arch/x86_64/libiree_builtins_ukernel_arch_x86_64_x86_64_avx512_bf16.a
+[152/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/notification.c.o
+[153/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/proactor.c.o
+[154/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/proactor_probe.c.o
+[155/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_signal.a
+[156/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/proactor_registration.c.o
+[157/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/proactor_submit.c.o
+[158/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/relay.c.o
+[159/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_profile_event_ring.a
+[160/414] Building C object runtime/src/iree/async/platform/io_uring/CMakeFiles/iree_async_platform_io_uring_io_uring.objects.dir/socket.c.o
+[161/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/event_set_epoll.c.o
+[162/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/event_set_kqueue.c.o
+[163/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/event_set_poll.c.o
+[164/414] Linking C static library runtime/src/iree/async/platform/io_uring/libiree_async_platform_io_uring_buffer_ring.a
+[165/414] Linking C static library runtime/src/iree/async/platform/io_uring/libiree_async_platform_io_uring_uring.a
+[166/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/poll_set.c.o
+[167/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/fd_map.c.o
+[168/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/proactor.c.o
+[169/414] Linking C static library runtime/src/iree/async/platform/io_uring/libiree_async_platform_io_uring_sparse_table.a
+[170/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/relay.c.o
+[171/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/signal.c.o
+[172/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/socket.c.o
+[173/414] Linking C static library runtime/src/iree/async/platform/linux/libiree_async_platform_linux_signal.a
+[174/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/fence.c.o
+[175/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/wake.c.o
+[176/414] Building C object runtime/src/iree/async/platform/posix/CMakeFiles/iree_async_platform_posix_posix.objects.dir/worker.c.o
+[177/414] Linking C static library runtime/src/iree/async/platform/posix/libiree_async_platform_posix_timer_list.a
+[178/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_completion_pool.a
+[179/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_continuation.a
+[180/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_proactor_thread.objects.dir/proactor_thread.c.o
+[181/414] Generating op_table.h
+[182/414] Generating encoding_table.c;encoding_table.h
+[183/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_message_pool.a
+[184/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_operation_pool.a
+[185/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_ready_pool.a
+[186/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_sequence_emulation.a
+[187/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_arena.a
+[188/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_fpu_state.a
+[189/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/conv_nchwc.c.o
+[190/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/conv_nchwc_tile_generic.c.o
+[191/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/mmt4d.c.o
+[192/414] Linking C static library runtime/src/iree/base/threading/libiree_base_threading_thread.a
+[193/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/mmt4d_tile_generic.c.o
+[194/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/pack.c.o
+[195/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/pack_tile.c.o
+[196/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/query_tile_sizes.c.o
+[197/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/unpack.c.o
+[198/414] Building C object runtime/src/iree/builtins/ukernel/CMakeFiles/iree_builtins_ukernel_ukernel.objects.dir/unpack_tile.c.o
+[199/414] Linking C static library runtime/src/iree/builtins/ukernel/arch/x86_64/libiree_builtins_ukernel_arch_x86_64_x86_64.a
+[200/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_block_builder.objects.dir/block_builder.c.o
+[201/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_arch.objects.dir/arch/arm_32.c.o
+[202/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_arch.objects.dir/arch/arm_64.c.o
+[203/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_arch.objects.dir/arch/riscv.c.o
+[204/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_arch.objects.dir/arch/x86_32.c.o
+[205/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_arch.objects.dir/arch/x86_64.c.o
+[206/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_platform.objects.dir/platform/apple.c.o
+[207/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_platform.objects.dir/platform/generic.c.o
+[208/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_platform.objects.dir/platform/linux.c.o
+[209/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_platform.objects.dir/platform/windows.c.o
+[210/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_resource_set.objects.dir/resource_set.c.o
+[211/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_elf_format.objects.dir/elf_format.c.o
+[212/414] Building C object runtime/src/iree/async/CMakeFiles/iree_async_platform.objects.dir/proactor_platform.c.o
+[213/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_proactor_thread_runner.objects.dir/proactor_thread_runner.c.o
+[214/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_dynamic_library.objects.dir/dynamic_library_posix.c.o
+[215/414] Building C object runtime/src/iree/base/internal/CMakeFiles/iree_base_internal_dynamic_library.objects.dir/dynamic_library_win32.c.o
+[216/414] Linking C static library runtime/src/iree/async/platform/io_uring/libiree_async_platform_io_uring_io_uring.a
+[217/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_proactor_thread.a
+[218/414] Linking C static library runtime/src/iree/hal/drivers/local_task/libiree_hal_drivers_local_task_block_builder.a
+[219/414] Linking C static library runtime/src/iree/async/platform/posix/libiree_async_platform_posix_posix.a
+[220/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_format.objects.dir/executable_format.c.o
+[221/414] Linking C static library runtime/src/iree/builtins/ukernel/libiree_builtins_ukernel_ukernel.a
+[222/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_elf_module.objects.dir/elf_module.c.o
+[223/414] Building C object runtime/src/iree/hal/local/elf/CMakeFiles/iree_hal_local_elf_elf_module.objects.dir/fatelf.c.o
+[224/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_slab_provider.objects.dir/slab_provider.c.o
+[225/414] Linking C static library runtime/src/iree/hal/local/elf/libiree_hal_local_elf_platform.a
+[226/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/event.c.o
+[227/414] Linking C static library runtime/src/iree/hal/local/elf/libiree_hal_local_elf_arch.a
+[228/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_tlsf.objects.dir/tlsf.c.o
+[229/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_tracing.objects.dir/tracing.c.o
+[230/414] Generating executable_debug_info_reader.h, executable_debug_info_builder.h, executable_debug_info_verifier.h, executable_debug_info_json_printer.h, executable_debug_info_json_parser.h
+[231/414] Building C object runtime/src/iree/modules/vmvx/CMakeFiles/iree_modules_vmvx_vmvx.objects.dir/elementwise.c.o
+[232/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/executable_cache.c.o
+[233/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_environment.objects.dir/executable_environment.c.o
+[234/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_elf_format.a
+[235/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/executor.c.o
+[236/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/process.c.o
+[237/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/driver.c.o
+[238/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology.c.o
+[239/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/scope.c.o
+[240/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_cpuinfo.c.o
+[241/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_darwin.c.o
+[242/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_fallback.c.o
+[243/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_sysfs.c.o
+[244/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_wasm.c.o
+[245/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/topology_win32.c.o
+[246/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_task.objects.dir/worker.c.o
+[247/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/file.c.o
+[248/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/channel.c.o
+[249/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/buffer_view.c.o
+[250/414] Building C object runtime/src/iree/async/util/CMakeFiles/iree_async_util_proactor_pool.objects.dir/proactor_pool.c.o
+[251/414] Linking C static library runtime/src/iree/async/libiree_async_platform.a
+[252/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_loader.objects.dir/local_executable.c.o
+[253/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_proactor_thread_runner.a
+[254/414] Building C object runtime/src/iree/base/tooling/CMakeFiles/iree_base_tooling_flags.objects.dir/flags.c.o
+[255/414] Linking C static library runtime/src/iree/base/internal/libiree_base_internal_dynamic_library.a
+[256/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_dynamic_symbols.objects.dir/cuda_dynamic_symbols.c.o
+[257/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_dynamic_symbols.objects.dir/cuda_status_util.c.o
+[258/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_dynamic_symbols.objects.dir/nccl_dynamic_symbols.c.o
+[259/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_dynamic_symbols.objects.dir/nccl_status_util.c.o
+[260/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_loader.objects.dir/executable_loader.c.o
+[261/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/driver_registry.c.o
+[262/414] Linking C static library runtime/src/iree/hal/local/elf/libiree_hal_local_elf_elf_module.a
+[263/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_executable_format.a
+[264/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/topology_builder.c.o
+[265/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/semaphore.c.o
+[266/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/command_buffer_validation.c.o
+[267/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/device.c.o
+[268/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_cpu_slab_provider.objects.dir/cpu_slab_provider.c.o
+[269/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_passthrough_pool.objects.dir/passthrough_pool.c.o
+[270/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/command_buffer.c.o
+[271/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/device_group.c.o
+[272/414] Building C object runtime/src/iree/hal/memory/CMakeFiles/iree_hal_memory_tlsf_pool.objects.dir/tlsf_pool.c.o
+[273/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_tlsf.a
+[274/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_executable_header.objects.dir/executable_header.c.o
+[275/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_local.objects.dir/local_executable_cache.c.o
+[276/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_tracing.a
+[277/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/buffer_transfer.c.o
+[278/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/buffer_view_util.c.o
+[279/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_block_command_ops.objects.dir/block_command_ops.c.o
+[280/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_local.objects.dir/inline_command_buffer.c.o
+[281/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_library_util.objects.dir/executable_library_util.c.o
+[282/414] Generating cuda_executable_def_reader.h, cuda_executable_def_builder.h, cuda_executable_def_verifier.h, cuda_executable_def_json_printer.h, cuda_executable_def_json_parser.h
+[283/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_executable_plugin_manager.objects.dir/executable_plugin_manager.c.o
+[284/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_executable_debug_info.objects.dir/executable_debug_info.c.o
+[285/414] Building C object runtime/src/iree/vm/bytecode/isa/CMakeFiles/iree_vm_bytecode_isa_isa.objects.dir/encoding_table.c.o
+[286/414] Building C object runtime/src/iree/vm/bytecode/utils/CMakeFiles/iree_vm_bytecode_utils_utils.objects.dir/block_list.c.o
+[287/414] Linking C static library runtime/src/iree/task/libiree_task_task.a
+[288/414] Linking C static library runtime/src/iree/async/util/libiree_async_util_proactor_pool.a
+[289/414] Linking C static library runtime/src/iree/base/tooling/libiree_base_tooling_flags.a
+[290/414] Linking C static library runtime/src/iree/hal/drivers/cuda/libiree_hal_drivers_cuda_dynamic_symbols.a
+[291/414] Building C object runtime/src/iree/vm/bytecode/utils/CMakeFiles/iree_vm_bytecode_utils_utils.objects.dir/features.c.o
+[292/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_transient_buffer.objects.dir/transient_buffer.c.o
+[293/414] Building C object runtime/src/iree/hal/local/plugins/CMakeFiles/iree_hal_local_plugins_system_library_plugin.objects.dir/system_library_plugin.c.o
+[294/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_inline_dispatch.objects.dir/inline_dispatch.c.o
+[295/414] Building C object runtime/src/iree/hal/local/plugins/CMakeFiles/iree_hal_local_plugins_embedded_elf_plugin.objects.dir/embedded_elf_plugin.c.o
+[296/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_files.objects.dir/file_registry.c.o
+[297/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_stream_tracing.objects.dir/stream_tracing.c.o
+[298/414] Building C object runtime/src/iree/hal/local/loaders/CMakeFiles/iree_hal_local_loaders_embedded_elf_loader.objects.dir/embedded_elf_loader.c.o
+[299/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_collective_batch.objects.dir/collective_batch.c.o
+[300/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_executable_header.a
+[301/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_executable_debug_info.a
+[302/414] Building C object runtime/src/iree/vm/bytecode/CMakeFiles/iree_vm_bytecode_module.objects.dir/archive.c.o
+[303/414] Building C object runtime/src/iree/hal/local/loaders/CMakeFiles/iree_hal_local_loaders_system_library_loader.objects.dir/system_library_loader.c.o
+[304/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_queue_emulation.objects.dir/queue_emulation.c.o
+[305/414] Building C object runtime/src/iree/hal/CMakeFiles/iree_hal_hal.objects.dir/string_util.c.o
+[306/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_files.objects.dir/memory_file.c.o
+[307/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_files.objects.dir/fd_file.c.o
+[308/414] Building C object runtime/src/iree/modules/vmvx/CMakeFiles/iree_modules_vmvx_vmvx.objects.dir/module.c.o
+[309/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_deferred_command_buffer.objects.dir/deferred_command_buffer.c.o
+[310/414] Linking C static library runtime/src/iree/hal/libiree_hal_hal.a
+[311/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_executable_environment.a
+[312/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_executable_loader.a
+[313/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_queue_host_call_emulation.objects.dir/queue_host_call_emulation.c.o
+[314/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_resource_set.a
+[315/414] Building C object runtime/src/iree/hal/drivers/local_sync/CMakeFiles/iree_hal_drivers_local_sync_sync_driver.objects.dir/sync_event.c.o
+[316/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_executable_library_util.a
+[317/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_executable_plugin_manager.a
+[318/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_task_driver.objects.dir/task_event.c.o
+[319/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_slab_provider.a
+[320/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_deferred_command_buffer.a
+[321/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_block_command_buffer.objects.dir/block_command_buffer.c.o
+[322/414] Building C object runtime/src/iree/hal/local/CMakeFiles/iree_hal_local_profile.objects.dir/profile.c.o
+[323/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_transient_buffer.a
+[324/414] Building C object runtime/src/iree/hal/drivers/local_sync/CMakeFiles/iree_hal_drivers_local_sync_sync_driver.objects.dir/sync_driver.c.o
+[325/414] Building C object runtime/src/iree/hal/drivers/local_sync/CMakeFiles/iree_hal_drivers_local_sync_sync_driver.objects.dir/sync_semaphore.c.o
+[326/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_profile.a
+[327/414] Linking C static library runtime/src/iree/hal/local/loaders/libiree_hal_local_loaders_system_library_loader.a
+[328/414] Linking C static library runtime/src/iree/hal/local/loaders/libiree_hal_local_loaders_embedded_elf_loader.a
+[329/414] Linking C static library runtime/src/iree/hal/local/plugins/libiree_hal_local_plugins_embedded_elf_plugin.a
+[330/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_local.a
+[331/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_cpu_slab_provider.a
+[332/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_file_transfer.objects.dir/file_transfer.c.o
+[333/414] Linking C static library runtime/src/iree/hal/local/plugins/libiree_hal_local_plugins_system_library_plugin.a
+[334/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_task_driver.objects.dir/task_driver.c.o
+[335/414] Building C object runtime/src/iree/hal/local/plugins/registration/CMakeFiles/iree_hal_local_plugins_registration_registration.objects.dir/init.c.o
+[336/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_task_driver.objects.dir/task_semaphore.c.o
+[337/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_passthrough_pool.a
+[338/414] Linking C static library runtime/src/iree/hal/drivers/local_task/libiree_hal_drivers_local_task_block_command_ops.a
+[339/414] Linking C static library runtime/src/iree/hal/local/libiree_hal_local_inline_dispatch.a
+[340/414] Linking C static library runtime/src/iree/hal/memory/libiree_hal_memory_tlsf_pool.a
+[341/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_collective_batch.a
+[342/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_file_transfer.a
+[343/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_files.a
+[344/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_queue_emulation.a
+[345/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_stream_tracing.a
+[346/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_queue_host_call_emulation.a
+[347/414] Building C object runtime/src/iree/task/CMakeFiles/iree_task_api.objects.dir/api.c.o
+[348/414] Building C object runtime/src/iree/hal/local/loaders/registration/CMakeFiles/iree_hal_local_loaders_registration_registration.objects.dir/init.c.o
+[349/414] Linking C static library runtime/src/iree/hal/drivers/local_task/libiree_hal_drivers_local_task_block_command_buffer.a
+[350/414] Building C object runtime/src/iree/vm/CMakeFiles/iree_vm_impl.objects.dir/shims.c.o
+[351/414] Linking C static library runtime/src/iree/task/libiree_task_api.a
+[352/414] Linking C static library runtime/src/iree/hal/local/plugins/registration/libiree_hal_local_plugins_registration_registration.a
+[353/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_runtime.dir/__/__/__/third_party/flatcc/src/runtime/builder.c.o
+[354/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_runtime.dir/__/__/__/third_party/flatcc/src/runtime/emitter.c.o
+[355/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_runtime.dir/__/__/__/third_party/flatcc/src/runtime/json_parser.c.o
+[356/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_runtime.dir/__/__/__/third_party/flatcc/src/runtime/json_printer.c.o
+[357/414] Building C object build_tools/third_party/flatcc/CMakeFiles/flatcc_runtime.dir/__/__/__/third_party/flatcc/src/runtime/refmap.c.o
+[358/414] Linking C static library runtime/src/iree/vm/libiree_vm_impl.a
+[359/414] Building C object runtime/src/iree/hal/local/loaders/CMakeFiles/iree_hal_local_loaders_vmvx_module_loader.objects.dir/vmvx_module_loader.c.o
+[360/414] Linking C static library runtime/src/iree/vm/bytecode/isa/libiree_vm_bytecode_isa_isa.a
+[361/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/cuda_buffer.c.o
+[362/414] Linking C static library runtime/src/iree/modules/vmvx/libiree_modules_vmvx_vmvx.a
+[363/414] Linking C static library runtime/src/iree/vm/bytecode/utils/libiree_vm_bytecode_utils_utils.a
+[364/414] Linking C static library build_tools/third_party/flatcc/libflatcc_runtime.a
+[365/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/event_semaphore.c.o
+[366/414] Building C object runtime/src/iree/hal/utils/CMakeFiles/iree_hal_utils_deferred_work_queue.objects.dir/deferred_work_queue.c.o
+[367/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/memory_pools.c.o
+[368/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/cuda_allocator.c.o
+[369/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/event_pool.c.o
+[370/414] Linking C static library runtime/src/iree/hal/utils/libiree_hal_utils_deferred_work_queue.a
+[371/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_task_driver.objects.dir/task_device.c.o
+[372/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/graph_command_buffer.c.o
+[373/414] Building C object runtime/src/iree/vm/bytecode/CMakeFiles/iree_vm_bytecode_module.objects.dir/module.c.o
+[374/414] Building C object runtime/src/iree/modules/hal/CMakeFiles/iree_modules_hal_types.objects.dir/types.c.o
+[375/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/nop_executable_cache.c.o
+[376/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_block_processor.objects.dir/block_processor.c.o
+[377/414] Linking C static library runtime/src/iree/modules/hal/libiree_modules_hal_types.a
+[378/414] Linking C static library runtime/src/iree/hal/drivers/local_task/libiree_hal_drivers_local_task_block_processor.a
+[379/414] Building C object runtime/src/iree/hal/drivers/cuda/registration/CMakeFiles/iree_hal_drivers_cuda_registration_registration.objects.dir/driver_module.c.o
+[380/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/timepoint_pool.c.o
+[381/414] Building C object runtime/src/iree/hal/drivers/CMakeFiles/iree_hal_drivers_drivers.objects.dir/init.c.o
+[382/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/cuda_driver.c.o
+[383/414] Building C object runtime/src/iree/hal/drivers/local_sync/registration/CMakeFiles/iree_hal_drivers_local_sync_registration_registration.objects.dir/driver_module.c.o
+[384/414] Building C object runtime/src/iree/hal/drivers/local_task/registration/CMakeFiles/iree_hal_drivers_local_task_registration_registration.objects.dir/driver_module.c.o
+[385/414] Building C object runtime/src/iree/hal/drivers/local_sync/CMakeFiles/iree_hal_drivers_local_sync_sync_driver.objects.dir/sync_device.c.o
+[386/414] Building C object runtime/src/iree/modules/hal/utils/CMakeFiles/iree_modules_hal_utils_buffer_diagnostics.objects.dir/buffer_diagnostics.c.o
+[387/414] Building C object runtime/src/iree/modules/hal/CMakeFiles/iree_modules_hal_debugging.objects.dir/debugging.c.o
+[388/414] Linking C static library runtime/src/iree/hal/drivers/local_sync/libiree_hal_drivers_local_sync_sync_driver.a
+[389/414] Linking C static library runtime/src/iree/modules/hal/utils/libiree_modules_hal_utils_buffer_diagnostics.a
+[390/414] Linking C static library runtime/src/iree/modules/hal/libiree_modules_hal_debugging.a
+[391/414] Building C object runtime/src/iree/runtime/CMakeFiles/iree_runtime_impl.objects.dir/call.c.o
+[392/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/stream_command_buffer.c.o
+[393/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/nccl_channel.c.o
+[394/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/cuda_device.c.o
+[395/414] Building C object runtime/src/iree/runtime/CMakeFiles/iree_runtime_impl.objects.dir/instance.c.o
+[396/414] Building C object runtime/src/iree/hal/drivers/cuda/CMakeFiles/iree_hal_drivers_cuda_cuda.objects.dir/native_executable.c.o
+[397/414] Building C object runtime/src/iree/runtime/CMakeFiles/iree_runtime_impl.objects.dir/session.c.o
+[398/414] Linking C static library runtime/src/iree/hal/drivers/cuda/libiree_hal_drivers_cuda_cuda.a
+[399/414] Linking C static library runtime/src/iree/hal/drivers/cuda/registration/libiree_hal_drivers_cuda_registration_registration.a
+[400/414] Building C object runtime/src/iree/hal/drivers/local_task/CMakeFiles/iree_hal_drivers_local_task_task_driver.objects.dir/task_queue.c.o
+[401/414] Linking C static library runtime/src/iree/hal/drivers/local_task/libiree_hal_drivers_local_task_task_driver.a
+[402/414] Building C object runtime/src/iree/modules/hal/CMakeFiles/iree_modules_hal_hal.objects.dir/module.c.o
+[403/414] Linking C static library runtime/src/iree/modules/hal/libiree_modules_hal_hal.a
+[404/414] Building C object runtime/src/iree/vm/bytecode/CMakeFiles/iree_vm_bytecode_module.objects.dir/dispatch.c.o
+[405/414] Building C object runtime/src/iree/vm/bytecode/CMakeFiles/iree_vm_bytecode_module.objects.dir/verifier.c.o
+[406/414] Building C object runtime/src/iree/vm/bytecode/CMakeFiles/iree_vm_bytecode_module.objects.dir/disassembler.c.o
+[407/414] Linking C static library runtime/src/iree/vm/bytecode/libiree_vm_bytecode_module.a
+[408/414] Linking C static library runtime/src/iree/hal/local/loaders/libiree_hal_local_loaders_vmvx_module_loader.a
+[409/414] Linking C static library runtime/src/iree/hal/local/loaders/registration/libiree_hal_local_loaders_registration_registration.a
+[410/414] Linking C static library runtime/src/iree/hal/drivers/local_task/registration/libiree_hal_drivers_local_task_registration_registration.a
+[411/414] Linking C static library runtime/src/iree/hal/drivers/local_sync/registration/libiree_hal_drivers_local_sync_registration_registration.a
+[412/414] Linking C static library runtime/src/iree/hal/drivers/libiree_hal_drivers_drivers.a
+[413/414] Linking C static library runtime/src/iree/runtime/libiree_runtime_unified.a

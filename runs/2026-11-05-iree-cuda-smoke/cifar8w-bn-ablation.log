@@ -1,0 +1,33 @@
+════════ cifar8w-BN (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8w_bn_sgd_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8w_bn_fwd_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN sgd (constant lr 0.100000), He init
+  step 0/10: loss=2.412933
+  step 1/10: loss=2.416426
+  step 2/10: loss=2.504706
+Epoch 1/40: loss=2.386491 lr=0.100000
+  epoch 1: test_acc = 1589/10000 = 15.890000%  top5 = 5958/10000 = 59.580000%  [95% CI 15.19–16.62]
+done (trained CIFAR-CNN8-wide-BN sgd + constant lr via packed threading).
+════════ cifar8w-BN (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8w_bn_mom_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8w_bn_fwd_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN mom (constant lr 0.020000), He init
+  step 0/10: loss=2.412933
+  step 1/10: loss=2.339143
+  step 2/10: loss=2.351386
+Epoch 1/40: loss=2.344455 lr=0.020000
+  epoch 1: test_acc = 1640/10000 = 16.400000%  top5 = 6140/10000 = 61.400000%  [95% CI 15.69–17.14]
+done (trained CIFAR-CNN8-wide-BN mom + constant lr via packed threading).
+════════ cifar8w-BN (wide head) — AdamW (lr 1e-3) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8w_bn_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8w_bn_fwd_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN adam (constant lr 0.001000), He init
+  step 0/10: loss=2.412933
+  step 1/10: loss=2.427090
+  step 2/10: loss=2.404229
+Epoch 1/40: loss=2.345453 lr=0.001000
+  epoch 1: test_acc = 1855/10000 = 18.550000%  top5 = 6715/10000 = 67.150000%  [95% CI 17.80–19.32]
+done (trained CIFAR-CNN8-wide-BN adam + constant lr via packed threading).

@@ -1,0 +1,34 @@
+# nsys profile of iree-benchmark-module --device=cuda on the committed train steps compiled by IREE 3.12.0 for sm_86 (zero inputs, 2 invocations), one RTX 4060 Ti, ares, 2026-11-05. GPU kernel time per dispatch, top entries; the invoke's wall is the BM line.
+
+## vit_adam_train_step — 8826 ms per invoke
+time_pct	total_ns	instances	kernel
+96.5	16919274921	2	vit_adam_train_step_dispatch_877_conv_3x16x16x192x32x209x209_f32
+0.4	73144665	24	vit_adam_train_step_dispatch_272_matmul_6304x768x192_f32
+0.4	68513941	24	vit_adam_train_step_dispatch_277_matmul_6304x192x768_f32
+0.4	65784390	24	vit_adam_train_step_dispatch_279_matmul_192x768x6304_f32
+0.3	51153387	72	vit_adam_train_step_dispatch_287_matmul_6304x192x192_f32
+0.3	48809241	24	vit_adam_train_step_dispatch_23_matmul_6304x768x192_f32
+0.2	36550988	96	vit_adam_train_step_dispatch_290_matmul_192x192x6304_f32
+0.2	27183081	24	vit_adam_train_step_dispatch_275_matmul_768x192x6304_f32
+
+## mobilenetv2_adam_train_step — 1604 ms per invoke
+time_pct	total_ns	instances	kernel
+
+## convnext_adam_train_step — 2032 ms per invoke
+time_pct	total_ns	instances	kernel
+
+## vit_adam_train_step — CUDA API time (the host side)
+time_pct	total_ns	calls	avg_ns	api
+99.1	17586525930	2	8793262965.0	cuEventSynchronize
+0.4	66548018	2	33274009.0	cuMemPoolDestroy
+0.2	40678220	4	10169555.0	cuMemAllocFromPoolAsync
+0.1	20226434	1772	11414.5	cuLaunchKernel
+0.1	16382892	605	27079.2	cuMemPrefetchAsync
+0.1	13878421	607	22864.0	cuMemFree_v2
+0.0	4057470	1	4057470.0	cuModuleLoadDataEx
+0.0	4025294	605	6653.4	cuMemAllocManaged
+0.0	893350	292	3059.4	cuMemsetD8Async
+0.0	678292	4	169573.0	cuEventRecord
+
+## resnet34_adam_train_step — 3683 ms per invoke
+time_pct	total_ns	instances	kernel

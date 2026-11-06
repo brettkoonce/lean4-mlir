@@ -1,0 +1,12 @@
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/mobilenetv2_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/mobilenetv2_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/mobilenetv2_fwd_eval_cuda.vmfb
+  train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/295: loss=2.500534
+  step 1/295: loss=2.584036
+  step 2/295: loss=2.808486
+  PROBE: 2939 ms/step (median of 40 steps 21..60, MobileNetV2)
+  PROBE-SPREAD: min=2895 med=2939 p90=3004 mean=2948 ms/step (starvation wait = med-min = 44 ms)

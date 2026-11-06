@@ -1,0 +1,16 @@
+# The thirteen `-iree` twin binaries (lake run mnist-iree / cifar-iree / imagenette-iree) under LEAN_MLIR_LOWERER=iree IREE_BACKEND=cuda (sm_86 PTX), IREE 3.12.0, ares (one RTX 4060 Ti each), 2026-11-05.
+# Each run: iree-compile of the train step(s) and the forwards, LEAN_MLIR_MAX_EPOCHS=1 (and LEAN_MLIR_G2_STEPS=10 where the trainer takes it: the CIFAR and Imagenette ones), then the full eval. wall is end to end; the step-0 loss is ln 10 plus the head's init; the eval after one short epoch means nothing beyond "the eval forward runs". ms/step is the median over steps 21-60 of a separate 60-step probe (probe/), and the 80-ep column is 295 steps x 80 at that rate, training only.
+net	status	wall_s	maxrss_gb	loss_step0	loss_epoch1	eval_after_epoch1	ms_per_step	train_80ep_min	note
+mnist-linear-verified	PASS	7.4	0.8			8977/10000 = 89.770000%			
+mnist-mlp-verified	PASS	21.1	0.8			9202/10000 = 92.020000%			
+mnist-cnn-verified	PASS	72.4	0.8			9359/10000 = 93.590000%			
+cifar8w-ablation	PASS	10.6	1.0	2.315255	2.304144	1244/10000 = 12.440000%			3 arms, one row each: 12.440000% / 12.600000% / 12.720000%
+cifar8w-bn-ablation	PASS	14.5	1.0	2.412933	2.386491	1589/10000 = 15.890000%			3 arms, one row each: 15.890000% / 16.400000% / 18.550000%
+cifar8wb-bbn-ablation	PASS	30.3	1.0	2.431527	2.243387	1000/10000 = 10.000000%			6 arms, one row each: 10.000000% / 10.920000% / 16.260000% / 11.390000% / 10.460000% / 17.500000%
+resnet34-verified-adam	PASS	245.4	10.8	3.614358	2.934204	442/3925 = 11.261146%			
+resnet50-verified-adam	PASS	246.4	10.9	3.358058	2.835498	425/3925 = 10.828025%			
+mobilenetv2-verified-adam	PASS	49.7	9.9	2.500534	2.506986	439/3925 = 11.184713%			
+mobilenetv4-verified-adam	PASS	70.3	10.1	2.709661	2.511701	529/3925 = 13.477707%			
+efficientnet-verified-adam	PASS	50.1	10.0	2.444753	2.325503	610/3925 = 15.541401%			
+convnext-verified-adam	PASS	122.4	11.1	3.556978	3.168736	645/3925 = 16.433121%			
+vit-verified-adam	PASS	121.5	10.0	3.351305	2.598988	776/3925 = 19.770701%			

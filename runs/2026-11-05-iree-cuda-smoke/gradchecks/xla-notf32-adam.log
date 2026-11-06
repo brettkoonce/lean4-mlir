@@ -1,0 +1,61 @@
+I1105 20:37:31.440282 1171240 service.cc:154] XLA service 0x749ad8009400 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1105 20:37:31.440345 1171240 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1105 20:37:31.441847 1171240 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1105 20:37:31.441882 1171240 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12536774656 bytes) on device 0 for BFCAllocator.
+I1105 20:37:31.452807 1171240 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1105 20:37:32.238492 1171262 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 40 bytes spill stores, 40 bytes spill loads
+
+I1105 20:37:32.364751 1171251 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 32 bytes spill stores, 32 bytes spill loads
+
+I1105 20:37:32.605261 1171256 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 6392 bytes spill stores, 7388 bytes spill loads
+
+I1105 20:37:32.804596 1171266 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 712 bytes spill stores, 712 bytes spill loads
+
+I1105 20:37:33.141987 1171278 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 36 bytes spill stores, 36 bytes spill loads
+
+I1105 20:37:33.268119 1171257 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 544 bytes spill stores, 544 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_adam_train_step.mlir (@cifar8wb_bbn_adam_train_step, 133 outputs, 1 replica) in 2391 ms
+GRADCHECK — @cifar8wb_bbn_adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend xla
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  xla/pjrt verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  base loss 2.357584   ‖g‖ 2.885674   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.000001 at L8.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005200 at head.Wa
+             L1.(W,b)	0.000000
+             L2.(W,b)	0.000000
+             L3.(W,b)	0.000000
+             L4.(W,b)	0.000000
+             L5.(W,b)	0.000000
+             L6.(W,b)	0.000000
+             L7.(W,b)	0.000000
+             L8.(W,b)	0.000001
+             head.W9	0.010722
+             head.Wa	0.005200
+             head.Wb	0.035034
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000410	0.000416	0.014421
+          L2	conv 16→16 @32² + BN + relu	0.000462	0.000459	0.005707
+          L3	conv 16→16 @16² + BN + relu	0.000329	0.000320	0.026792
+          L4	conv 16→16 @16² + BN + relu	0.000287	0.000271	0.056219
+          L5	conv 16→32 @8² + BN + relu	0.000366	0.000384	0.048869
+          L6	conv 32→32 @8² + BN + relu	0.000362	0.000353	0.025374
+          L7	conv 32→32 @4² + BN + relu	0.000339	0.000332	0.021570
+          L8	conv 32→32 @4² + BN + relu	0.000266	0.000284	0.069774
+          head	dense 128→512→512→10	0.002555	0.002560	0.002081
+          whole	all 38 tensors	0.006162	0.006151	0.001736
+  worst rel 0.069774 at L8;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 0.005521
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.930226 at L8
+  25 invokes of @m.cifar8wb_bbn_adam_train_step
+
+uncaught exception: TIER 2 FAILED: L8 disagrees by rel 0.069774 > 0.020000 — the rendered backward's MAGNITUDE is not the gradient of the rendered forward

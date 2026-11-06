@@ -1,0 +1,6 @@
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → IREE FFI → GPU
+  (cached vmfb) .lake/build/mlp_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/mlp_fwd_cuda.vmfb
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+  epoch 1: loss = 0.413492, test_acc = 9202/10000 = 92.020000%  [95% CI 91.47–92.54] (14654ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).

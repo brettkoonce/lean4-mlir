@@ -23,7 +23,7 @@ GPU not required: CPU is the whole point. Needs iree.compiler + iree.runtime and
 python (the IREE install must be one install; see scripts/lib/_iree.py), e.g.
 
   uv venv --python 3.12 ../venv-cpu && uv pip install --python ../venv-cpu/bin/python \
-      jax==0.11.0 jaxlib==0.11.0 numpy==2.4.4 iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+      jax==0.11.0 jaxlib==0.11.0 numpy==2.4.4 iree-base-compiler==3.12.0 iree-base-runtime==3.12.0
 """
 import json
 import os

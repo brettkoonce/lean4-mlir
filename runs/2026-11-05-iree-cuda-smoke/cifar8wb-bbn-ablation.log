@@ -1,0 +1,90 @@
+════════ cifar8wb-bbn (batch-statistics BN) f32 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_sgd_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat sgd (constant lr 0.100000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.328106
+  step 2/10: loss=2.345248
+Epoch 1/40: loss=2.243387 lr=0.100000
+  epoch 1: test_acc = 1000/10000 = 10.000000%  top5 = 5009/10000 = 50.090000%  [95% CI 9.43–10.60]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_smoke312.bin.bn (384 floats x 2, hash 2622440116582746685)
+done (trained CIFAR-CNN8-wide-BN-batchstat sgd + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — Nesterov momentum (μ.9, lr 0.02) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_mom_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat mom (constant lr 0.020000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.337994
+  step 2/10: loss=2.308850
+Epoch 1/40: loss=2.255119 lr=0.020000
+  epoch 1: test_acc = 1092/10000 = 10.920000%  top5 = 5001/10000 = 50.010000%  [95% CI 10.32–11.55]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_smoke312.bin.bn (384 floats x 2, hash 13773989801271705126)
+done (trained CIFAR-CNN8-wide-BN-batchstat mom + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — AdamW (lr 1e-3) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat adam (constant lr 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.367903
+  step 2/10: loss=2.291753
+Epoch 1/40: loss=2.219805 lr=0.001000
+  epoch 1: test_acc = 1626/10000 = 16.260000%  top5 = 6074/10000 = 60.740000%  [95% CI 15.55–17.00]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_smoke312.bin.bn (384 floats x 2, hash 2586860489587665376)
+done (trained CIFAR-CNN8-wide-BN-batchstat adam + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16sgd_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16sgd (constant lr 0.100000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.434515
+  step 1/10: loss=2.343904
+  step 2/10: loss=2.344710
+Epoch 1/40: loss=2.268390 lr=0.100000
+  epoch 1: test_acc = 1139/10000 = 11.390000%  top5 = 5774/10000 = 57.740000%  [95% CI 10.78–12.03]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_smoke312.bin.bn (384 floats x 2, hash 4189975333647262105)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16sgd + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — Nesterov momentum (μ.9, lr 0.02) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16mom_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16mom (constant lr 0.020000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.434515
+  step 1/10: loss=2.331882
+  step 2/10: loss=2.311942
+Epoch 1/40: loss=2.248462 lr=0.020000
+  epoch 1: test_acc = 1046/10000 = 10.460000%  top5 = 5127/10000 = 51.270000%  [95% CI 9.88–11.08]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_smoke312.bin.bn (384 floats x 2, hash 10954079210657747443)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16mom + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — AdamW (lr 1e-3) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16adam (constant lr 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.434515
+  step 1/10: loss=2.367095
+  step 2/10: loss=2.291042
+Epoch 1/40: loss=2.219741 lr=0.001000
+  epoch 1: test_acc = 1750/10000 = 17.500000%  top5 = 6365/10000 = 63.650000%  [95% CI 16.77–18.26]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_smoke312.bin.bn (384 floats x 2, hash 144972340029243613)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16adam + constant lr via packed threading).

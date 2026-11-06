@@ -1,0 +1,11 @@
+host	ares
+target	cuda (cuda on cuda)
+cpu	AMD Ryzen Threadripper PRO 5955WX 16-Cores
+threads	32
+gpu	NVIDIA GeForce RTX 4060 Ti · driver 575.57.08 · chip sm_86; sm_89: compiles and runs
+iree	3.12.0rc20260917 @ 2b05c5dbb2f2ecb27c0d3941e80ee8d2f16e890d
+runtime_commit	2b05c5dbb2f2ecb27c0d3941e80ee8d2f16e890d
+gcc	gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+shim	1532120 bytes, no -DUSE_CPU, cuda + local-task + local-sync
+venv	.venv-iree
+repo	e892737b+dirty

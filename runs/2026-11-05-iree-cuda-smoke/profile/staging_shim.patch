@@ -1,0 +1,357 @@
+diff --git a/ffi/iree_ffi.c b/ffi/iree_ffi.c
+index e3337e6c..d6ddb6d4 100644
+--- a/ffi/iree_ffi.c
++++ b/ffi/iree_ffi.c
+@@ -6,7 +6,10 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <time.h>
++
+ #include "iree/runtime/api.h"
++#include "iree/hal/buffer_transfer.h"
+ 
+ // GPU driver selection: compile with -DUSE_HIP for AMD/ROCm,
+ // -DUSE_CUDA (or neither flag on CUDA systems) for NVIDIA,
+@@ -30,6 +33,14 @@ struct iree_ffi_session_t {
+   iree_runtime_instance_t* instance;
+   iree_hal_device_t* device;
+   iree_runtime_session_t* session;
++  // Staging for iree_ffi_invoke_f32 (below): every input of a call packed into ONE pinned host
++  // buffer, copied to the device in ONE transfer and bound as subspans; every output read back
++  // into ONE pinned host buffer. Grown on demand, kept across calls.
++  iree_hal_buffer_t* stage_in_host;
++  iree_hal_buffer_t* stage_in_dev;
++  iree_device_size_t stage_in_cap;
++  iree_hal_buffer_t* stage_out_host;
++  iree_device_size_t stage_out_cap;
+ };
+ typedef struct iree_ffi_session_t iree_ffi_session_t;
+ 
+@@ -100,62 +111,86 @@ fail:
+ 
+ void iree_ffi_session_release(iree_ffi_session_t* sess) {
+   if (!sess) return;
++  if (sess->stage_in_host) iree_hal_buffer_release(sess->stage_in_host);
++  if (sess->stage_in_dev) iree_hal_buffer_release(sess->stage_in_dev);
++  if (sess->stage_out_host) iree_hal_buffer_release(sess->stage_out_host);
+   if (sess->session) iree_runtime_session_release(sess->session);
+   if (sess->device) iree_hal_device_release(sess->device);
+   if (sess->instance) iree_runtime_instance_release(sess->instance);
+   free(sess);
+ }
+ 
+-// Helper: push a float32 tensor input from host memory.
+-// `dims` is a length-`rank` array of dimension sizes. `data` points to
+-// rank-major contiguous float32 values (total: product(dims) elements).
+-static iree_status_t push_input_f32(
+-    iree_runtime_call_t* call,
+-    iree_hal_device_t* device,
+-    int rank, const int64_t* dims, const float* data) {
+-  iree_hal_dim_t shape[8];
+-  if (rank > 8) return iree_make_status(IREE_STATUS_OUT_OF_RANGE, "rank > 8");
+-  iree_host_size_t total = 1;
+-  for (int i = 0; i < rank; i++) { shape[i] = (iree_hal_dim_t)dims[i]; total *= dims[i]; }
++// ---- Staging (iree_ffi_invoke_f32) ----
++// The HAL's one-tensor-at-a-time path — iree_hal_buffer_view_allocate_buffer_copy per input,
++// iree_hal_device_transfer_d2h per output — costs a pinned host staging allocation and free
++// (cuMemHostAlloc / cuMemFreeHost, ~1.7 ms each, both synchronizing) PER TENSOR on the CUDA HAL.
++// A verified train step has 300–600 of each (θ, m, v, per tensor), so a MobileNetV2 step spent
++// 2 s of its 3.7 s there and the GPU sat idle (nsys, ares, 2026-11-05). Here all inputs are
++// packed into one pinned host buffer, moved in ONE transfer into one device buffer and bound as
++// 64-byte-aligned subspans of it; outputs are copied device→pinned host one transfer each (no
++// allocation) and read off the mapping. Same code on the CPU device (everything is host memory,
++// the transfers are memcpys).
++#define IREE_FFI_ALIGN 64
++static iree_device_size_t ffi_align(iree_device_size_t n) {
++  return (n + IREE_FFI_ALIGN - 1) / IREE_FFI_ALIGN * IREE_FFI_ALIGN;
++}
+ 
+-  iree_hal_buffer_view_t* bv = NULL;
+-  iree_hal_buffer_params_t params = {
+-    .type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+-    .usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
+-  };
+-  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_allocate_buffer_copy(
+-      device, iree_hal_device_allocator(device),
+-      rank, shape,
+-      IREE_HAL_ELEMENT_TYPE_FLOAT_32,
+-      IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+-      params,
+-      iree_make_const_byte_span(data, total * sizeof(float)),
+-      &bv));
+-  iree_status_t status = iree_runtime_call_inputs_push_back_buffer_view(call, bv);
+-  iree_hal_buffer_view_release(bv);
++// N transfer commands in ONE command buffer, one queue submission, one wait — what the
++// runtime's iree_hal_device_transfer_range does for a single copy (buffer_transfer.c), for a batch:
++// each submission + wait costs 2–4 ms on the CUDA HAL, so 600 of them were 1.3–1.6 s a step.
++static iree_status_t ffi_transfer_and_wait(iree_hal_device_t* device, iree_host_size_t count,
++                                           const iree_hal_transfer_command_t* commands) {
++  if (count == 0) return iree_ok_status();
++  iree_hal_command_buffer_t* cb = NULL;
++  IREE_RETURN_IF_ERROR(iree_hal_create_transfer_command_buffer(
++      device, IREE_HAL_COMMAND_BUFFER_MODE_ONE_SHOT | IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION,
++      IREE_HAL_QUEUE_AFFINITY_ANY, count, commands, &cb));
++  iree_hal_semaphore_t* fence = NULL;
++  iree_status_t status = iree_hal_semaphore_create(device, IREE_HAL_QUEUE_AFFINITY_ANY, 0ull,
++                                                   IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &fence);
++  uint64_t signal_value = 1ull;
++  if (iree_status_is_ok(status)) {
++    iree_hal_semaphore_list_t signal = { .count = 1, .semaphores = &fence, .payload_values = &signal_value };
++    status = iree_hal_device_queue_execute(device, IREE_HAL_QUEUE_AFFINITY_ANY,
++                                           iree_hal_semaphore_list_empty(), signal, cb,
++                                           iree_hal_buffer_binding_table_empty(), IREE_HAL_EXECUTE_FLAG_NONE);
++  }
++  if (iree_status_is_ok(status)) {
++    status = iree_hal_semaphore_wait(fence, signal_value, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
++  }
++  iree_hal_command_buffer_release(cb);
++  if (fence) iree_hal_semaphore_release(fence);
+   return status;
+ }
+ 
+-// Helper: pop a float32 output and copy to host memory.
+-static iree_status_t pop_output_f32(
+-    iree_runtime_call_t* call,
+-    iree_hal_device_t* device,
+-    int64_t expected_total, float* out_data) {
+-  iree_hal_buffer_view_t* bv = NULL;
+-  IREE_RETURN_IF_ERROR(iree_runtime_call_outputs_pop_front_buffer_view(call, &bv));
+-  iree_status_t status = iree_hal_device_transfer_d2h(
+-      device, iree_hal_buffer_view_buffer(bv), 0, out_data,
+-      expected_total * sizeof(float),
+-      IREE_HAL_TRANSFER_BUFFER_FLAG_DEFAULT, iree_infinite_timeout());
+-  iree_hal_buffer_view_release(bv);
+-  return status;
++static iree_status_t ensure_staging(iree_ffi_session_t* sess, iree_device_size_t in_bytes,
++                                    iree_device_size_t out_bytes) {
++  iree_hal_allocator_t* alloc = iree_hal_device_allocator(sess->device);
++  const iree_hal_buffer_params_t host_params = {
++    .type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
++    .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_MAPPING,
++  };
++  const iree_hal_buffer_params_t dev_params = {
++    .type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
++    .usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
++  };
++  if (in_bytes > sess->stage_in_cap) {
++    if (sess->stage_in_host) { iree_hal_buffer_release(sess->stage_in_host); sess->stage_in_host = NULL; }
++    if (sess->stage_in_dev) { iree_hal_buffer_release(sess->stage_in_dev); sess->stage_in_dev = NULL; }
++    sess->stage_in_cap = 0;
++    IREE_RETURN_IF_ERROR(iree_hal_allocator_allocate_buffer(alloc, host_params, in_bytes, &sess->stage_in_host));
++    IREE_RETURN_IF_ERROR(iree_hal_allocator_allocate_buffer(alloc, dev_params, in_bytes, &sess->stage_in_dev));
++    sess->stage_in_cap = in_bytes;
++  }
++  if (out_bytes > sess->stage_out_cap) {
++    if (sess->stage_out_host) { iree_hal_buffer_release(sess->stage_out_host); sess->stage_out_host = NULL; }
++    sess->stage_out_cap = 0;
++    IREE_RETURN_IF_ERROR(iree_hal_allocator_allocate_buffer(alloc, host_params, out_bytes, &sess->stage_out_host));
++    sess->stage_out_cap = out_bytes;
++  }
++  return iree_ok_status();
+ }
+ 
+-// ---- Invoke function by name with N inputs and M outputs. ----
+-// All tensors are float32 for now. inputs/outputs are flat host arrays.
+-// Each input i is described by input_ranks[i] and input_dims (packed flat:
+-// dims for input 0, then dims for input 1, etc).
+-// Returns 0 on success, nonzero otherwise.
+ int iree_ffi_invoke_f32(
+     iree_ffi_session_t* sess,
+     const char* fn_name,
+@@ -167,43 +202,136 @@ int iree_ffi_invoke_f32(
+     const int64_t* output_totals,    // element count per output
+     float* const* output_data) {     // array of pointers
+ 
++  // IREE_FFI_TRACE=1: the call's three phases in ms on stderr, one line per invoke — push
++  // (stage + copy every input), invoke, pop (read back every output) — which side a slow
++  // step is slow on. (This is the entry the verified trainers' train step and forwards use.)
++  static int s_trace = -1;
++  if (s_trace < 0) { const char* e = getenv("IREE_FFI_TRACE"); s_trace = (e && atoi(e)) ? 1 : 0; }
++  static int s_invoke_idx = -1;
++  s_invoke_idx++;
++  struct timespec t0, t1, t2, t3;
++  if (s_trace) clock_gettime(CLOCK_MONOTONIC, &t0);
++
++  // Offsets of every input in the packed staging buffer, 64-byte aligned.
++  iree_device_size_t* in_off = (iree_device_size_t*)malloc(sizeof(iree_device_size_t) * (n_inputs + 1));
++  iree_device_size_t* in_len = (iree_device_size_t*)malloc(sizeof(iree_device_size_t) * (n_inputs + 1));
++  if (!in_off || !in_len) { free(in_off); free(in_len); fprintf(stderr, "iree_ffi: out of host memory\n"); return 1; }
++  iree_device_size_t total_in = 0;
++  int dims_offset = 0;
++  for (int i = 0; i < n_inputs; i++) {
++    iree_host_size_t total = 1;
++    for (int d = 0; d < input_ranks[i]; d++) total *= input_dims_flat[dims_offset + d];
++    dims_offset += input_ranks[i];
++    in_off[i] = total_in; in_len[i] = total * sizeof(float);
++    total_in += ffi_align(in_len[i]);
++  }
++  iree_device_size_t total_out = 0;
++  for (int i = 0; i < n_outputs; i++) total_out += ffi_align(output_totals[i] * sizeof(float));
++  if (total_in == 0) total_in = IREE_FFI_ALIGN;
++  if (total_out == 0) total_out = IREE_FFI_ALIGN;
++
++  iree_status_t status = ensure_staging(sess, total_in, total_out);
++  if (!iree_status_is_ok(status)) { print_status("staging_alloc", status); free(in_off); free(in_len); return 1; }
++
+   iree_runtime_call_t call;
+-  iree_status_t status = iree_runtime_call_initialize_by_name(
++  status = iree_runtime_call_initialize_by_name(
+       sess->session, iree_make_cstring_view(fn_name), &call);
+-  if (!iree_status_is_ok(status)) { print_status("call_init", status); return 1; }
+-
+-  // Push all inputs.
+-  int dims_offset = 0;
++  if (!iree_status_is_ok(status)) { print_status("call_init", status); free(in_off); free(in_len); return 1; }
++
++  // Push: pack every input into the pinned host buffer, one transfer to the device, one view per
++  // input over its subspan.
++  {
++    iree_hal_buffer_mapping_t map;
++    status = iree_hal_buffer_map_range(sess->stage_in_host, IREE_HAL_MAPPING_MODE_SCOPED,
++                                       IREE_HAL_MEMORY_ACCESS_WRITE, 0, total_in, &map);
++    if (iree_status_is_ok(status)) {
++      for (int i = 0; i < n_inputs; i++) memcpy(map.contents.data + in_off[i], input_data[i], in_len[i]);
++      status = iree_hal_buffer_unmap_range(&map);
++    }
++  }
++  if (iree_status_is_ok(status)) {
++    status = iree_hal_device_transfer_range(
++        sess->device, iree_hal_make_device_transfer_buffer(sess->stage_in_host), 0,
++        iree_hal_make_device_transfer_buffer(sess->stage_in_dev), 0, total_in,
++        IREE_HAL_TRANSFER_BUFFER_FLAG_DEFAULT, iree_infinite_timeout());
++  }
++  dims_offset = 0;
+   for (int i = 0; i < n_inputs && iree_status_is_ok(status); i++) {
+-    status = push_input_f32(&call, sess->device,
+-                            input_ranks[i], &input_dims_flat[dims_offset], input_data[i]);
++    iree_hal_dim_t shape[8];
++    if (input_ranks[i] > 8) { status = iree_make_status(IREE_STATUS_OUT_OF_RANGE, "rank > 8"); break; }
++    for (int d = 0; d < input_ranks[i]; d++) shape[d] = (iree_hal_dim_t)input_dims_flat[dims_offset + d];
+     dims_offset += input_ranks[i];
++    iree_hal_buffer_t* sub = NULL;
++    status = iree_hal_buffer_subspan(sess->stage_in_dev, in_off[i], in_len[i], iree_allocator_system(), &sub);
++    if (!iree_status_is_ok(status)) break;
++    iree_hal_buffer_view_t* bv = NULL;
++    status = iree_hal_buffer_view_create(sub, input_ranks[i], shape, IREE_HAL_ELEMENT_TYPE_FLOAT_32,
++                                         IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR, iree_allocator_system(), &bv);
++    iree_hal_buffer_release(sub);
++    if (!iree_status_is_ok(status)) break;
++    status = iree_runtime_call_inputs_push_back_buffer_view(&call, bv);
++    iree_hal_buffer_view_release(bv);
+   }
++  free(in_off); free(in_len);
+   if (!iree_status_is_ok(status)) { print_status("push_input", status);
+     iree_runtime_call_deinitialize(&call); return 2; }
+-
+-  // Granular hang-isolation trace (env IREE_FFI_TRACE=1).
+-  static int s_trace = -1;
+-  if (s_trace < 0) { const char* e = getenv("IREE_FFI_TRACE"); s_trace = (e && atoi(e)) ? 1 : 0; }
+-  static int s_invoke_idx = -1;
+-  s_invoke_idx++;
+-  if (s_trace) { fprintf(stderr, "[FFI] invoke #%d: before call_invoke\n", s_invoke_idx); fflush(stderr); }
++  if (s_trace) clock_gettime(CLOCK_MONOTONIC, &t1);
+ 
+   // Invoke.
+   status = iree_runtime_call_invoke(&call, 0);
+   if (!iree_status_is_ok(status)) { print_status("invoke", status);
+     iree_runtime_call_deinitialize(&call); return 3; }
+-  if (s_trace) { fprintf(stderr, "[FFI] invoke #%d: call_invoke returned; popping %d outputs\n", s_invoke_idx, n_outputs); fflush(stderr); }
+-
+-  // Pop outputs.
++  if (s_trace) clock_gettime(CLOCK_MONOTONIC, &t2);
++
++  // Pop: every output device→pinned host as ONE batch of copies (no allocation, one wait), then
++  // one mapping to read them all. The views are held until the copies have landed.
++  iree_hal_buffer_view_t** out_views = (iree_hal_buffer_view_t**)calloc(n_outputs + 1, sizeof(*out_views));
++  iree_hal_transfer_command_t* copies = (iree_hal_transfer_command_t*)calloc(n_outputs + 1, sizeof(*copies));
++  if (!out_views || !copies) status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED, "out of host memory");
++  iree_device_size_t out_off = 0;
++  int n_popped = 0;
+   for (int i = 0; i < n_outputs && iree_status_is_ok(status); i++) {
+-    status = pop_output_f32(&call, sess->device, output_totals[i], output_data[i]);
+-    if (s_trace && (i < 2 || i == n_outputs - 1)) { fprintf(stderr, "[FFI] invoke #%d: popped output %d\n", s_invoke_idx, i); fflush(stderr); }
++    status = iree_runtime_call_outputs_pop_front_buffer_view(&call, &out_views[i]);
++    if (!iree_status_is_ok(status)) break;
++    n_popped = i + 1;
++    iree_device_size_t len = output_totals[i] * sizeof(float);
++    copies[i].type = IREE_HAL_TRANSFER_COMMAND_TYPE_COPY;
++    copies[i].copy.source_buffer = iree_hal_buffer_view_buffer(out_views[i]);
++    copies[i].copy.source_offset = 0;
++    copies[i].copy.target_buffer = sess->stage_out_host;
++    copies[i].copy.target_offset = out_off;
++    copies[i].copy.length = len;
++    out_off += ffi_align(len);
++  }
++  if (iree_status_is_ok(status)) status = ffi_transfer_and_wait(sess->device, n_outputs, copies);
++  for (int i = 0; i < n_popped; i++) iree_hal_buffer_view_release(out_views[i]);
++  free(out_views); free(copies);
++  if (iree_status_is_ok(status)) {
++    iree_hal_buffer_mapping_t map;
++    status = iree_hal_buffer_map_range(sess->stage_out_host, IREE_HAL_MAPPING_MODE_SCOPED,
++                                       IREE_HAL_MEMORY_ACCESS_READ, 0, total_out, &map);
++    if (iree_status_is_ok(status)) {
++      out_off = 0;
++      for (int i = 0; i < n_outputs; i++) {
++        iree_device_size_t len = output_totals[i] * sizeof(float);
++        memcpy(output_data[i], map.contents.data + out_off, len);
++        out_off += ffi_align(len);
++      }
++      status = iree_hal_buffer_unmap_range(&map);
++    }
+   }
+   if (!iree_status_is_ok(status)) { print_status("pop_output", status);
+     iree_runtime_call_deinitialize(&call); return 4; }
+ 
+   iree_runtime_call_deinitialize(&call);
++  if (s_trace) {
++    clock_gettime(CLOCK_MONOTONIC, &t3);
++    #define IREE_FFI_MS(a, b) (((b).tv_sec - (a).tv_sec) * 1e3 + ((b).tv_nsec - (a).tv_nsec) / 1e6)
++    fprintf(stderr, "[FFI] invoke #%d %s: push %.1f ms (%d inputs, %lld B)  invoke %.1f ms  pop %.1f ms (%d outputs, %lld B)\n",
++            s_invoke_idx, fn_name, IREE_FFI_MS(t0, t1), n_inputs, (long long)total_in, IREE_FFI_MS(t1, t2),
++            IREE_FFI_MS(t2, t3), n_outputs, (long long)total_out);
++    fflush(stderr);
++  }
+   return 0;
+ }
+ 
+@@ -257,6 +385,13 @@ int iree_ffi_train_step_adam(
+     float* packed_params_out, float* loss_out,
+     int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out) {
+ 
++  // IREE_FFI_TRACE=1: the step's three phases (push = allocate + copy every input, invoke, pop =
++  // read back every output) in ms on stderr, one line per step — which side a slow step is slow on.
++  static int s_trace_adam = -1;
++  if (s_trace_adam < 0) { const char* e = getenv("IREE_FFI_TRACE"); s_trace_adam = (e && atoi(e)) ? 1 : 0; }
++  struct timespec t0, t1, t2, t3;
++  if (s_trace_adam) clock_gettime(CLOCK_MONOTONIC, &t0);
++
+   iree_runtime_call_t call;
+   iree_status_t s = iree_runtime_call_initialize_by_name(
+       sess->session, iree_make_cstring_view(fn_name), &call);
+@@ -292,10 +427,12 @@ int iree_ffi_train_step_adam(
+ 
+   if (!iree_status_is_ok(s)) { print_status("adam_train_push", s);
+     iree_runtime_call_deinitialize(&call); return 2; }
++  if (s_trace_adam) clock_gettime(CLOCK_MONOTONIC, &t1);
+ 
+   s = iree_runtime_call_invoke(&call, 0);
+   if (!iree_status_is_ok(s)) { print_status("adam_train_invoke", s);
+     iree_runtime_call_deinitialize(&call); return 3; }
++  if (s_trace_adam) clock_gettime(CLOCK_MONOTONIC, &t2);
+ 
+   data_off = 0;
+   for (int i = 0; i < n_params && iree_status_is_ok(s); i++) {
+@@ -318,6 +455,12 @@ int iree_ffi_train_step_adam(
+ 
+   iree_runtime_call_deinitialize(&call);
+   if (!iree_status_is_ok(s)) { print_status("adam_train_pop", s); return 4; }
++  if (s_trace_adam) {
++    clock_gettime(CLOCK_MONOTONIC, &t3);
++    fprintf(stderr, "[FFI] adam step: push %.1f ms (%d tensors, %lld floats)  invoke %.1f ms  pop %.1f ms\n",
++            IREE_FFI_MS(t0, t1), n_params, (long long)data_off, IREE_FFI_MS(t1, t2), IREE_FFI_MS(t2, t3));
++    fflush(stderr);
++  }
+   return 0;
+ }
+ 

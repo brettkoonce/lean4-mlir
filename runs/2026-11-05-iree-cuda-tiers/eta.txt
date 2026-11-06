@@ -1,0 +1,16 @@
+net               ms/step  train h  +eval h
+ViT-Tiny             9978     65.6     74.8
+ResNet-50            7463     49.1     56.0
+ResNet-34            6074     40.0     45.5
+ConvNeXt-T           5286     34.8     39.6
+MobileNetV4          3851     25.3     28.9
+EfficientNet-B0      3598     23.7     27.0
+MobileNetV2          2939     19.3     22.0
+
+card schedule (hours, +eval where training):
+  card0 (gpu0): ViT-Tiny 75h  = 75h
+  card1 (gpu1): ResNet-50 56h → MobileNetV2 22h  = 78h
+  card2 (gpu2): cifar-iree tail 5h → ResNet-34 46h → EfficientNet-B0 27h  = 78h
+  card3 (gpu3): cifar-iree tail 5h → ConvNeXt-T 40h → MobileNetV4 29h  = 74h
+
+critical path ≈ 78 h ≈ 3.3 days (ViT on card0 is 75h alone)

@@ -2212,6 +2212,18 @@ private def notePjrtPlugin : IO Unit := do
     IO.println "  ▸ PJRT_PLUGIN unset — falling back to the path compiled into ffi/pjrt_ffi.c \
 (a jax rocm/cuda plugin .so). If the run dies in dlopen, set PJRT_PLUGIN to your plugin."
 
+/-- The venv whose `bin/` holds `iree-compile`, for the PATH the IREE groups run under:
+    `.venv-iree` first (deploy/iree_cpu_setup.sh's; its own env because `.venv` is the pinned JAX
+    env of jax/requirements-cuda-lock.txt, one env per lock), then `.venv` (where the CPU box
+    installed it before 2026-11-05), else none, and the `iree-compile` on `$PATH` is the one that
+    runs (`findIreeCompile`, LeanMlir/Types.lean, resolves the same way at compile time). -/
+private def ireeVenvBin : IO (Option System.FilePath) := do
+  let cwd ← IO.currentDir
+  for v in [".venv-iree", ".venv"] do
+    let bin := cwd / v / "bin"
+    if ← System.FilePath.pathExists (bin / "iree-compile") then return some bin
+  return none
+
 /-- Build then run each named trainer in sequence (streaming) via `run.sh`.
 
     `xla := true` selects the PJRT peers: it builds the shim first and reports the plugin, and
@@ -2225,7 +2237,8 @@ private def notePjrtPlugin : IO Unit := do
     A trainer that fails does not stop the group — the rest of a 5½-hour Imagenette pass is worth
     having — but it is named at the end and the script exits 1. -/
 private def runDemoGroup (names : List String) (xla : Bool := false)
-    (gpu? backend? : Option String := none) (extra : Array String := #[]) : IO UInt32 := do
+    (gpu? backend? : Option String := none) (extra : Array String := #[])
+    (env : Array (String × Option String) := #[]) : IO UInt32 := do
   let backend ← match backend?, ← IO.getEnv "IREE_BACKEND" with
     | some b, _    => pure b
     | none, some b => pure b
@@ -2238,9 +2251,9 @@ private def runDemoGroup (names : List String) (xla : Bool := false)
     IO.println "━━━ XLA/PJRT backend ━━━"
     if !(← ensurePjrtShim) then return 1
     notePjrtPlugin
-  -- The IREE trainers shell out to `iree-compile`; put the project venv on PATH so
+  -- The IREE trainers shell out to `iree-compile`; put its venv on PATH so
   -- `lake run` works without pre-activating it (the usual one-click footgun).
-  let venvBin := (← IO.currentDir) / ".venv" / "bin"
+  let venvBin? ← ireeVenvBin
   -- Name the lowerer explicitly for BOTH groups. Binaries on `lowererLink` pick
   -- their backend from this at run time and DEFAULT to XLA, so without it
   -- `lake run *-iree` would silently run XLA.
@@ -2249,11 +2262,12 @@ private def runDemoGroup (names : List String) (xla : Bool := false)
   -- every chapter transcript ran and what Appendix B's tier times assume (1.3–2× the wall
   -- clock without it, numerics unchanged). Since 2026-09-29 that is ffi/pjrt_ffi.c's default,
   -- so nothing is injected here; PJRT_FFI_RESIDENT=0 in the env takes the copying path.
-  let runEnv ← do
-    if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
-             ("LEAN_MLIR_LOWERER", some lowerer)]
-    else pure #[("LEAN_MLIR_LOWERER", some lowerer)]
+  -- `env`: per-group additions (a compile flag one net needs), after the two every group gets.
+  let runEnv ← match venvBin? with
+    | some venvBin =>
+      pure (#[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
+              ("LEAN_MLIR_LOWERER", some lowerer)] ++ env)
+    | none => pure (#[("LEAN_MLIR_LOWERER", some lowerer)] ++ env)
   let mut failed : Array String := #[]
   for n in names do
     IO.println s!"\n━━━ {n}: build ━━━"
@@ -2290,16 +2304,28 @@ script «mnist-iree» do
   runDemoGroup mnistNets
 
 /-- `lake run cifar-iree` — the ch.4 six-arm optimizer ablation (SGD/momentum/adam ×
-    bn/no-bn) on the IREE lowerer.
+    bn/no-bn) and the batch-statistics BN net's six arms on the IREE lowerer: the SAME three
+    binaries as `lake run cifar`.
 
     These are the WIDE-head (`d1 = 512`) nets, because those are what Chapter 4
     actually runs and quotes: `cifar8w-bn-ablation` is the binary behind §4.1's
     listing and `runs/2026-08-12-cifar8w-6arm-xla-cuda/`. The narrow `d1 = 64`
     nets are still built and still proved — `cifarCnn8HasVJPAt` is parametric in
     the head width, so neither needs its own proof — they are just not what
-    `lake run cifar` shows. -/
+    `lake run cifar` shows.
+
+    `cifar8wb-bbn-ablation` runs with `--iree-codegen-llvmgpu-use-vector-distribution=false`:
+    IREE's GPU vector-distribution pipeline fails ("'func.func' op failed to distribute") on the
+    bf16 convolutions of its three bf16 arms, on 3.12.0 and 3.13.0 alike (ares, 2026-11-05); the
+    f32 arms and every other net compile without it, so only this binary carries the flag
+    (`IREE_EXTRA_FLAGS` is `ireeCompileArgs`' rebuild-free way in). Until 2026-11-05 the net was
+    left out of the twin for IREE 3.11's `llvm-cpu` miscompile of its pool backward, a release the
+    row no longer runs. -/
 script «cifar-iree» do
-  runDemoGroup (cifarNets.filter (· != "cifar8wb-bbn-ablation"))
+  let rc ← runDemoGroup (cifarNets.filter (· != "cifar8wb-bbn-ablation"))
+  let rcB ← runDemoGroup ["cifar8wb-bbn-ablation"]
+    (env := #[("IREE_EXTRA_FLAGS", some "--iree-codegen-llvmgpu-use-vector-distribution=false")])
+  return if rc != 0 then rc else rcB
 
 /-- `lake run imagenette-iree` — the Imagenette nets IREE lowers, the SAME binaries as
     `lake run imagenette` in the same book order, with the IREE lowerer selected instead of XLA:
@@ -3410,10 +3436,9 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
       notePjrtPlugin
       pure #[]
     else do
-      let venvBin := (← IO.currentDir) / ".venv" / "bin"
-      if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-        pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
-      else pure #[]
+      match ← ireeVenvBin with
+      | some venvBin => pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
+      | none => pure #[]
   let cmdName := if ref.xla then "benchmark-xla" else "benchmark"
   -- DIRECT MODE: measure every chapter's own trainer here instead of scaling a foreign
   --   reference. See `runDirectProbe`. XLA only — the IREE path has no in-process compile, so a

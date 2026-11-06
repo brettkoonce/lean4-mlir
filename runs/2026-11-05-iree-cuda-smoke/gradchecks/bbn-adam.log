@@ -1,0 +1,41 @@
+GRADCHECK — @cifar8wb_bbn_adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend iree
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  (cached vmfb) .lake/build/cifar8wb_bbn_adam_train_step_cuda.vmfb
+  base loss 2.357594   ‖g‖ 2.885719   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.000001 at L8.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005204 at head.Wa
+             L1.(W,b)	0.000000
+             L2.(W,b)	0.000000
+             L3.(W,b)	0.000000
+             L4.(W,b)	0.000000
+             L5.(W,b)	0.000000
+             L6.(W,b)	0.000000
+             L7.(W,b)	0.000000
+             L8.(W,b)	0.000001
+             head.W9	0.010729
+             head.Wa	0.005204
+             head.Wb	0.035034
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000410	0.000410	0.000189
+          L2	conv 16→16 @32² + BN + relu	0.000462	0.000461	0.001069
+          L3	conv 16→16 @16² + BN + relu	0.000329	0.000329	0.000859
+          L4	conv 16→16 @16² + BN + relu	0.000287	0.000287	0.000044
+          L5	conv 16→32 @8² + BN + relu	0.000366	0.000366	0.000356
+          L6	conv 32→32 @8² + BN + relu	0.000362	0.000362	0.000673
+          L7	conv 32→32 @4² + BN + relu	0.000339	0.000339	0.000311
+          L8	conv 32→32 @4² + BN + relu	0.000266	0.000266	0.000413
+          head	dense 128→512→512→10	0.002555	0.002557	0.000584
+          whole	all 38 tensors	0.006162	0.006131	0.005098
+  worst rel 0.005098 at whole;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 0.000291
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.999416 at head
+  25 invokes of @m.cifar8wb_bbn_adam_train_step
+
+  ✅ GRADCHECK PASSES.
+     TIER 1: the 8 BN-followed convs satisfy ⟨g_W,W⟩+⟨g_b,b⟩ = 0 to |cos∠| ≤ 0.000001, against 3 head weights that violate it by ≥ 0.005204 (7541.375673×).
+     TIER 2: all 9 groups and the whole net agree in magnitude to rel ≤ 0.005098, against a doubled-gradient control that misses by 0.999416 (196.025227× the tie).
+     The backward of verified_mlir/cifar8wb_bbn_adam_train_step.mlir is the gradient of its forward.

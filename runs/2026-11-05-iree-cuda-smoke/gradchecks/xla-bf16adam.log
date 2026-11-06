@@ -1,0 +1,64 @@
+I1105 20:36:47.468881 1170336 service.cc:154] XLA service 0x75ed64009320 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1105 20:36:47.468945 1170336 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1105 20:36:47.470988 1170336 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1105 20:36:47.471182 1170336 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12536774656 bytes) on device 0 for BFCAllocator.
+I1105 20:36:47.483528 1170336 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+E1105 20:36:48.833258 1170363 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1105 20:36:49.154126 1170363 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1105 20:36:49.454301 1170346 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 32 bytes spill stores, 32 bytes spill loads
+
+I1105 20:36:49.670506 1170375 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 40 bytes spill stores, 40 bytes spill loads
+
+I1105 20:36:49.671982 1170357 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 6392 bytes spill stores, 7388 bytes spill loads
+
+I1105 20:36:49.992142 1170375 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 712 bytes spill stores, 712 bytes spill loads
+
+I1105 20:36:50.761053 1170359 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 544 bytes spill stores, 544 bytes spill loads
+
+I1105 20:36:51.119699 1170361 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 36 bytes spill stores, 36 bytes spill loads
+
+E1105 20:36:51.458951 1170363 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_bf16adam_train_step.mlir (@cifar8wb_bbn_bf16adam_train_step, 133 outputs, 1 replica) in 6611 ms
+GRADCHECK — @cifar8wb_bbn_bf16adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_bf16adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend xla
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  xla/pjrt verified_mlir/cifar8wb_bbn_bf16adam_train_step.mlir
+  base loss 2.358832   ‖g‖ 2.878710   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.000345 at L2.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005171 at head.Wa
+             L1.(W,b)	0.000282
+             L2.(W,b)	0.000345
+             L3.(W,b)	0.000051
+             L4.(W,b)	0.000119
+             L5.(W,b)	0.000027
+             L6.(W,b)	0.000048
+             L7.(W,b)	0.000010
+             L8.(W,b)	0.000014
+             head.W9	0.010710
+             head.Wa	0.005171
+             head.Wb	0.035302
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000410	0.000730	0.780245
+          L2	conv 16→16 @32² + BN + relu	0.000462	0.000854	0.848398
+          L3	conv 16→16 @16² + BN + relu	0.000324	0.000781	1.414151
+          L4	conv 16→16 @16² + BN + relu	0.000283	0.000455	0.607707
+          L5	conv 16→32 @8² + BN + relu	0.000363	0.000337	0.072451
+          L6	conv 32→32 @8² + BN + relu	0.000358	0.000372	0.041094
+          L7	conv 32→32 @4² + BN + relu	0.000332	0.000342	0.032304
+          L8	conv 32→32 @4² + BN + relu	0.000268	0.000220	0.179258
+          head	dense 128→512→512→10	0.002568	0.002567	0.000179
+          whole	all 38 tensors	0.006147	0.006290	0.023174
+  worst rel 1.414151 at L3;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 1.124029
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.151602 at L2
+  25 invokes of @m.cifar8wb_bbn_bf16adam_train_step
+
+uncaught exception: TIER 1 A FAILED: ⟨g_W,W⟩+⟨g_b,b⟩ ≠ 0 at L2.(W,b) (|cos∠| 0.000345 > 0.000300) — the conv+BN VJP does not respect the scale invariance it is built on

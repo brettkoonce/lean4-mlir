@@ -1,0 +1,6 @@
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → IREE FFI → GPU
+  (cached vmfb) .lake/build/cnn_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cnn_fwd_cuda.vmfb
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+  epoch 1: loss = 0.349481, test_acc = 9359/10000 = 93.590000%  [95% CI 93.09–94.05] (65808ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

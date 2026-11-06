@@ -1,0 +1,54 @@
+════════ cifar8wb-bbn (batch-statistics BN) f32 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8wb_bbn_sgd_train_step.mlir
+  iree-compile verified_mlir/cifar8wb_bbn_fwd.mlir
+  iree-compile verified_mlir/cifar8wb_bbn_fwd_eval.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat sgd (constant lr 0.100000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.328106
+  step 2/10: loss=2.345248
+Epoch 1/40: loss=2.243387 lr=0.100000
+  epoch 1: test_acc = 1000/10000 = 10.000000%  top5 = 5009/10000 = 50.090000%  [95% CI 9.43–10.60]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_smoke.bin.bn (384 floats x 2, hash 2622440116582746685)
+done (trained CIFAR-CNN8-wide-BN-batchstat sgd + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — Nesterov momentum (μ.9, lr 0.02) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8wb_bbn_mom_train_step.mlir
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat mom (constant lr 0.020000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.337994
+  step 2/10: loss=2.308850
+Epoch 1/40: loss=2.255119 lr=0.020000
+  epoch 1: test_acc = 1092/10000 = 10.920000%  top5 = 5001/10000 = 50.010000%  [95% CI 10.32–11.55]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_smoke.bin.bn (384 floats x 2, hash 13773989801271705126)
+done (trained CIFAR-CNN8-wide-BN-batchstat mom + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — AdamW (lr 1e-3) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat adam (constant lr 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.431527
+  step 1/10: loss=2.367903
+  step 2/10: loss=2.291753
+Epoch 1/40: loss=2.219805 lr=0.001000
+  epoch 1: test_acc = 1626/10000 = 16.260000%  top5 = 6074/10000 = 60.740000%  [95% CI 15.55–17.00]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_smoke.bin.bn (384 floats x 2, hash 2586860489587665376)
+done (trained CIFAR-CNN8-wide-BN-batchstat adam + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8wb_bbn_bf16sgd_train_step.mlir
+uncaught exception: iree-compile failed:
+verified_mlir/cifar8wb_bbn_bf16sgd_train_step.mlir:375:13: warning: reads uninitialized values from an operand produced by a tensor.empty op. To disable this warning, pass --iree-global-opt-enable-warn-on-uninitialized-values=false .
+    %v313 = "stablehlo.select_and_scatter"(%v310, %v311, %v312) ({
+            ^
+verified_mlir/cifar8wb_bbn_bf16sgd_train_step.mlir:2:3: note: called from
+  func.func @cifar8wb_bbn_bf16sgd_train_step(%x: tensor<128x3072xf32>, %W1: tensor<16x3x3x3xf32>, %cb1: tensor<16xf32>, %g1: tensor<16xf32>, %bt1: tensor<16xf32>, %W2: tensor<16x16x3x3xf32>, %cb2: tensor<16xf32>, %g2: tensor<16xf32>, %bt2: tensor<16xf32>, %W3: tensor<16x16x3x3xf32>, %cb3: tensor<16xf32>, %g3: tensor<16xf32>, %bt3: tensor<16xf32>, %W4: tensor<16x16x3x3xf32>, %cb4: tensor<16xf32>, %g4: tensor<16xf32>, %bt4: tensor<16xf32>, %W5: tensor<32x16x3x3xf32>, %cb5: tensor<32xf32>, %g5: tensor<32xf32>, %bt5: tensor<32xf32>, %W6: tensor<32x32x3x3xf32>, %cb6: tensor<32xf32>, %g6: tensor<32xf32>, %bt6: tensor<32xf32>, %W7: tensor<32x32x3x3xf32>, %cb7: tensor<32xf32>, %g7: tensor<32xf32>, %bt7: tensor<32xf32>, %W8: tensor<32x32x3x3xf32>, %cb8: tensor<32xf32>, %g8: tensor<32xf32>, %bt8: tensor<32xf32>, %W9: tensor<128x512xf32>, %b9: tensor<512xf32>, %Wa: tensor<512x512xf32>, %ba: tensor<512xf32>, %Wb: tensor<512x10xf32>, %bb: tensor<10xf32>, %W1m: tensor<16x3x3x3xf32>, %cb1m: tensor<16xf32>, %g1m: tensor<16xf32>, %bt1m: tensor<16xf32>, %W2m: tensor<16x16x3x3xf32>, %cb2m: tensor<16xf32>, %g2m: tensor<16xf32>, %bt2m: tensor<16xf32>, %W3m: tensor<16x16x3x3xf32>, %cb3m: tensor<16xf32>, %g3m: tensor<16xf32>, %bt3m: tensor<16xf32>, %W4m: tensor<16x16x3x3xf32>, %cb4m: tensor<16xf32>, %g4m: tensor<16xf32>, %bt4m: tensor<16xf32>, %W5m: tensor<32x16x3x3xf32>, %cb5m: tensor<32xf32>, %g5m: tensor<32xf32>, %bt5m: tensor<32xf32>, %W6m: tensor<32x32x3x3xf32>, %cb6m: tensor<32xf32>, %g6m: tensor<32xf32>, %bt6m: tensor<32xf32>, %W7m: tensor<32x32x3x3xf32>, %cb7m: tensor<32xf32>, %g7m: tensor<32xf32>, 

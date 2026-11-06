@@ -1,0 +1,18 @@
+→ mnist-cnn-verified (GPU 3, cuda) → runs/2026-11-05-mnist-iree-cuda/mnist-cnn-verified.log
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → IREE FFI → GPU
+  (cached vmfb) .lake/build/cnn_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cnn_fwd_cuda.vmfb
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+  epoch 1: loss = 0.349481, test_acc = 9359/10000 = 93.590000%  [95% CI 93.09–94.05] (71313ms)
+  epoch 2: loss = 0.094464, test_acc = 9734/10000 = 97.340000%  [95% CI 97.01–97.64] (71348ms)
+  epoch 3: loss = 0.056360, test_acc = 9810/10000 = 98.100000%  [95% CI 97.81–98.35] (71524ms)
+  epoch 4: loss = 0.038020, test_acc = 9837/10000 = 98.370000%  [95% CI 98.10–98.60] (81287ms)
+  epoch 5: loss = 0.027882, test_acc = 9842/10000 = 98.420000%  [95% CI 98.16–98.65] (90977ms)
+  epoch 6: loss = 0.018315, test_acc = 9842/10000 = 98.420000%  [95% CI 98.16–98.65] (93040ms)
+  epoch 7: loss = 0.012334, test_acc = 9868/10000 = 98.680000%  [95% CI 98.44–98.89] (81281ms)
+  epoch 8: loss = 0.008850, test_acc = 9861/10000 = 98.610000%  [95% CI 98.36–98.82] (72638ms)
+  epoch 9: loss = 0.016332, test_acc = 9836/10000 = 98.360000%  [95% CI 98.09–98.59] (81575ms)
+  epoch 10: loss = 0.008703, test_acc = 9862/10000 = 98.620000%  [95% CI 98.37–98.83] (93286ms)
+  epoch 11: loss = 0.004025, test_acc = 9858/10000 = 98.580000%  [95% CI 98.33–98.79] (89563ms)
+  epoch 12: loss = 0.002311, test_acc = 9866/10000 = 98.660000%  [95% CI 98.42–98.87] (72275ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

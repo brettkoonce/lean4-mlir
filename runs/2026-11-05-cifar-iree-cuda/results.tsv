@@ -1,0 +1,14 @@
+# `lake run cifar-iree`'s three binaries, IREE 3.12.0 on one RTX 4060 Ti each (cuda, sm_86 PTX), ares, 2026-11-05: 40 epochs per arm, the final test accuracy against XLA/CUDA's five seeds per arm (runs/2026-09-01-cifar8w-6arm-constlr: nobn_s*, bn_s*, bf16_s* = the bbn net's bf16 arms; its f32 arms have no five-seed set and are compared to bn_s*).
+net	arm	top1	xla_range_5	verdict	wall
+cifar8w-ablation	SGD	68.64 %	68.03–70.73	inside	2.43 h
+cifar8w-ablation	Nesterov	73.86 %	71.05–74.36	inside	
+cifar8w-ablation	AdamW	71.65 %	71.04–73.82	inside	
+cifar8w-bn-ablation	SGD	75.45 %	74.14–75.21	over by 0.24 pt = 24.0 images	3.87 h
+cifar8w-bn-ablation	Nesterov	75.91 %	75.75–76.73	inside	
+cifar8w-bn-ablation	AdamW	74.02 %	74.24–74.46	under by 0.22 pt = 22.0 images	
+cifar8wb-bbn-ablation	f32 SGD	76.12 %	74.14–75.21	over by 0.91 pt = 91.0 images	8.41 h
+cifar8wb-bbn-ablation	f32 Nesterov	76.45 %	75.75–76.73	inside	
+cifar8wb-bbn-ablation	f32 AdamW	77.94 %	74.24–74.46	over by 3.48 pt = 348.0 images	
+cifar8wb-bbn-ablation	bf16 SGD	73.39 %	68.89–70.72	over by 2.67 pt = 267.0 images	
+cifar8wb-bbn-ablation	bf16 Nesterov	66.14 %	10.00–74.47	inside	
+cifar8wb-bbn-ablation	bf16 AdamW	70.76 %	72.23–74.00	under by 1.47 pt = 147.0 images	

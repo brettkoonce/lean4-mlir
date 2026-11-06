@@ -1,0 +1,9 @@
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/vit_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/vit_fwd_cuda.vmfb
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+  step 0/295: loss=3.351305
+  step 1/295: loss=3.004615
+  step 2/295: loss=2.555267
+  PROBE: 9978 ms/step (median of 40 steps 21..60, ViT-Tiny)
+  PROBE-SPREAD: min=9458 med=9978 p90=10209 mean=9937 ms/step (starvation wait = med-min = 520 ms)

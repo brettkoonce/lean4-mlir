@@ -1,7 +1,21 @@
 # iree_platform.md — the IREE row up to the bar the GPU rows meet
 
 Started 2026-11-04, on branch `iree-platform` (rebased onto origin/main a437a8b3 2026-11-05).
-Nothing here has run.
+
+**Running since 2026-11-05 (ares, four 4060 Ti).** D1 is REVISED to **3.12.0**: 3.13.0's NVPTX
+backend aborts in instruction selection (`Cannot select: v2i16 = umul_lohi`) on the ResNet-34 and
+ResNet-50 train steps for CUDA — the dispatch that flips a 512×512×3×3 kernel for the conv
+backward, delinearised with div/rem by 3 that LLVM narrows to a 16-bit vector — under every one of
+twelve compile flags tried; 3.12.0 (PyPI 2026-10-05) and the 3.14 nightly of 11-04 compile the same
+text, and 3.12.0 compiles all 35 artifacts the thirteen twins use. 3.12.0 also clears the CPU bar
+(§0: "3.12.0 and 3.13.0 run them"). S1 done (`deploy/iree_cpu_setup.sh` with `IREE_TARGET=cuda`,
+`.venv-iree` per D2, `runs/2026-11-05-iree-cuda-setup/`, the 3.13.0 attempt kept in its log and
+`manifest-3.13.0.txt`); S2 in `runs/2026-11-05-iree-cuda-smoke/` (the 3.13.0 pass under
+`iree-3.13.0/`); D4 lands as a per-binary flag: the bbn net's three bf16 arms need
+`--iree-codegen-llvmgpu-use-vector-distribution=false` on 3.12.0 and 3.13.0 alike (the f32 arms and
+every other net do not), carried by `cifar-iree` through `IREE_EXTRA_FLAGS`. S4b is off: ares has no
+7900 XTX (lspci: four 4060 Ti). The user: run the nets on the CUDA cards, all four, then the
+records and the LaTeX; no 3.11 compatibility owed.
 The row exists (planning/platforms_ladder.md §5, `support.tsv`, Table A-2); what it lacks is
 records. Every cell it has is either pre-verified-renderer (April–May, hand-written MLIR on the
 7900 XTX), a one-step oracle, or a ten-step CPU smoke. The `-iree` twins have never been run as

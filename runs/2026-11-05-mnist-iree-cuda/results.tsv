@@ -1,0 +1,5 @@
+# `lake run mnist-iree`'s three binaries, IREE 3.12.0 on one RTX 4060 Ti (cuda, sm_86 PTX), ares, 2026-11-05: 12 epochs each, the final test accuracy against XLA/CUDA's 30-seed median and range (runs/2026-09-01-mnist-n30).
+net	top1	xla_median_30	xla_range_30	verdict	wall
+mnist-linear-verified	92.10 %	92.10 %	92.10–92.10	inside	1.0 min
+mnist-mlp-verified	97.84 %	97.78 %	97.49–97.93	inside	3.8 min
+mnist-cnn-verified	98.66 %	98.78 %	97.39–98.94	inside	16.2 min

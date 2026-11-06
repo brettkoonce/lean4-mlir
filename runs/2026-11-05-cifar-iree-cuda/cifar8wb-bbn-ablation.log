@@ -1,0 +1,2214 @@
+════════ cifar8wb-bbn (batch-statistics BN) f32 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_sgd_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat sgd (constant lr 0.100000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.431527
+  step 1/390: loss=2.328106
+  step 2/390: loss=2.345248
+  step 100/390: loss=1.617689
+  step 200/390: loss=1.369743
+  step 300/390: loss=1.396838
+Epoch 1/40: loss=1.515846 lr=0.100000
+  epoch 1: test_acc = 4517/10000 = 45.170000%  top5 = 8964/10000 = 89.640000%  [95% CI 44.20–46.15]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15347970840286382232)
+  step 0/390: loss=1.185876
+  step 1/390: loss=1.296746
+  step 2/390: loss=1.255267
+  step 100/390: loss=1.265873
+  step 200/390: loss=1.101927
+  step 300/390: loss=1.105605
+Epoch 2/40: loss=1.134491 lr=0.100000
+  epoch 2: test_acc = 4685/10000 = 46.850000%  top5 = 9306/10000 = 93.060000%  [95% CI 45.87–47.83]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2520554513628385161)
+  step 0/390: loss=0.984552
+  step 1/390: loss=1.152696
+  step 2/390: loss=0.902093
+  step 100/390: loss=0.943445
+  step 200/390: loss=1.090755
+  step 300/390: loss=0.851921
+Epoch 3/40: loss=0.980281 lr=0.100000
+  epoch 3: test_acc = 6260/10000 = 62.600000%  top5 = 9634/10000 = 96.340000%  [95% CI 61.65–63.54]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17623092458824747952)
+  step 0/390: loss=1.025582
+  step 1/390: loss=0.984637
+  step 2/390: loss=0.702483
+  step 100/390: loss=0.882534
+  step 200/390: loss=0.886124
+  step 300/390: loss=0.983631
+Epoch 4/40: loss=0.879780 lr=0.100000
+  epoch 4: test_acc = 6025/10000 = 60.250000%  top5 = 9580/10000 = 95.800000%  [95% CI 59.29–61.21]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9168617582935534006)
+  step 0/390: loss=0.786409
+  step 1/390: loss=1.168493
+  step 2/390: loss=0.866258
+  step 100/390: loss=0.707317
+  step 200/390: loss=0.690460
+  step 300/390: loss=0.605781
+Epoch 5/40: loss=0.811133 lr=0.100000
+  epoch 5: test_acc = 6472/10000 = 64.720000%  top5 = 9587/10000 = 95.870000%  [95% CI 63.78–65.65]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2117679652308045824)
+  step 0/390: loss=0.867042
+  step 1/390: loss=0.598687
+  step 2/390: loss=0.748541
+  step 100/390: loss=0.731708
+  step 200/390: loss=0.787640
+  step 300/390: loss=0.740991
+Epoch 6/40: loss=0.759522 lr=0.100000
+  epoch 6: test_acc = 6533/10000 = 65.330000%  top5 = 9753/10000 = 97.530000%  [95% CI 64.39–66.26]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3503121535099960914)
+  step 0/390: loss=0.637339
+  step 1/390: loss=0.723497
+  step 2/390: loss=0.640275
+  step 100/390: loss=0.631186
+  step 200/390: loss=0.576816
+  step 300/390: loss=0.669174
+Epoch 7/40: loss=0.717551 lr=0.100000
+  epoch 7: test_acc = 6789/10000 = 67.890000%  top5 = 9634/10000 = 96.340000%  [95% CI 66.97–68.80]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17753629365735783080)
+  step 0/390: loss=0.743268
+  step 1/390: loss=0.623680
+  step 2/390: loss=0.553071
+  step 100/390: loss=0.729163
+  step 200/390: loss=0.671676
+  step 300/390: loss=0.626612
+Epoch 8/40: loss=0.679940 lr=0.100000
+  epoch 8: test_acc = 7028/10000 = 70.280000%  top5 = 9773/10000 = 97.730000%  [95% CI 69.38–71.17]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13609593299655912396)
+  step 0/390: loss=0.542402
+  step 1/390: loss=0.627305
+  step 2/390: loss=0.578066
+  step 100/390: loss=0.674286
+  step 200/390: loss=0.710730
+  step 300/390: loss=0.660641
+Epoch 9/40: loss=0.653894 lr=0.100000
+  epoch 9: test_acc = 6600/10000 = 66.000000%  top5 = 9666/10000 = 96.660000%  [95% CI 65.07–66.92]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 11672982773909363782)
+  step 0/390: loss=0.616314
+  step 1/390: loss=0.642801
+  step 2/390: loss=0.566195
+  step 100/390: loss=0.693341
+  step 200/390: loss=0.702223
+  step 300/390: loss=0.526918
+Epoch 10/40: loss=0.628509 lr=0.100000
+  epoch 10: test_acc = 6650/10000 = 66.500000%  top5 = 9720/10000 = 97.200000%  [95% CI 65.57–67.42]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17601017172001241868)
+  step 0/390: loss=0.498159
+  step 1/390: loss=0.569231
+  step 2/390: loss=0.660656
+  step 100/390: loss=0.611685
+  step 200/390: loss=0.559481
+  step 300/390: loss=0.540079
+Epoch 11/40: loss=0.603981 lr=0.100000
+  epoch 11: test_acc = 7152/10000 = 71.520000%  top5 = 9799/10000 = 97.990000%  [95% CI 70.63–72.40]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17669876143984089994)
+  step 0/390: loss=0.501503
+  step 1/390: loss=0.555454
+  step 2/390: loss=0.568983
+  step 100/390: loss=0.657008
+  step 200/390: loss=0.531242
+  step 300/390: loss=0.589029
+Epoch 12/40: loss=0.582960 lr=0.100000
+  epoch 12: test_acc = 7458/10000 = 74.580000%  top5 = 9820/10000 = 98.200000%  [95% CI 73.72–75.42]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3963842548234953109)
+  step 0/390: loss=0.676492
+  step 1/390: loss=0.728779
+  step 2/390: loss=0.568338
+  step 100/390: loss=0.699556
+  step 200/390: loss=0.495638
+  step 300/390: loss=0.663759
+Epoch 13/40: loss=0.566996 lr=0.100000
+  epoch 13: test_acc = 7439/10000 = 74.390000%  top5 = 9847/10000 = 98.470000%  [95% CI 73.53–75.24]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 5477952910709973290)
+  step 0/390: loss=0.558202
+  step 1/390: loss=0.470793
+  step 2/390: loss=0.577051
+  step 100/390: loss=0.491163
+  step 200/390: loss=0.538570
+  step 300/390: loss=0.601646
+Epoch 14/40: loss=0.550582 lr=0.100000
+  epoch 14: test_acc = 7422/10000 = 74.220000%  top5 = 9844/10000 = 98.440000%  [95% CI 73.35–75.07]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 10169622464695545987)
+  step 0/390: loss=0.494293
+  step 1/390: loss=0.530829
+  step 2/390: loss=0.634550
+  step 100/390: loss=0.543826
+  step 200/390: loss=0.581582
+  step 300/390: loss=0.488779
+Epoch 15/40: loss=0.535605 lr=0.100000
+  epoch 15: test_acc = 7532/10000 = 75.320000%  top5 = 9838/10000 = 98.380000%  [95% CI 74.47–76.16]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17907985128448168200)
+  step 0/390: loss=0.424595
+  step 1/390: loss=0.370654
+  step 2/390: loss=0.546501
+  step 100/390: loss=0.449814
+  step 200/390: loss=0.633341
+  step 300/390: loss=0.527043
+Epoch 16/40: loss=0.518581 lr=0.100000
+  epoch 16: test_acc = 7372/10000 = 73.720000%  top5 = 9814/10000 = 98.140000%  [95% CI 72.85–74.57]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 11364895851979736194)
+  step 0/390: loss=0.487313
+  step 1/390: loss=0.408672
+  step 2/390: loss=0.625113
+  step 100/390: loss=0.476110
+  step 200/390: loss=0.562341
+  step 300/390: loss=0.574058
+Epoch 17/40: loss=0.507982 lr=0.100000
+  epoch 17: test_acc = 7363/10000 = 73.630000%  top5 = 9806/10000 = 98.060000%  [95% CI 72.76–74.48]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 197845005046015808)
+  step 0/390: loss=0.511711
+  step 1/390: loss=0.555926
+  step 2/390: loss=0.476868
+  step 100/390: loss=0.514707
+  step 200/390: loss=0.490379
+  step 300/390: loss=0.403551
+Epoch 18/40: loss=0.492549 lr=0.100000
+  epoch 18: test_acc = 7133/10000 = 71.330000%  top5 = 9726/10000 = 97.260000%  [95% CI 70.44–72.21]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 1808812394378062134)
+  step 0/390: loss=0.447260
+  step 1/390: loss=0.500553
+  step 2/390: loss=0.459192
+  step 100/390: loss=0.537566
+  step 200/390: loss=0.362733
+  step 300/390: loss=0.459407
+Epoch 19/40: loss=0.482081 lr=0.100000
+  epoch 19: test_acc = 7423/10000 = 74.230000%  top5 = 9797/10000 = 97.970000%  [95% CI 73.36–75.08]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3849564286205660786)
+  step 0/390: loss=0.641526
+  step 1/390: loss=0.399271
+  step 2/390: loss=0.321871
+  step 100/390: loss=0.423619
+  step 200/390: loss=0.443989
+  step 300/390: loss=0.447101
+Epoch 20/40: loss=0.471309 lr=0.100000
+  epoch 20: test_acc = 7217/10000 = 72.170000%  top5 = 9696/10000 = 96.960000%  [95% CI 71.28–73.04]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 5243891243907231995)
+  step 0/390: loss=0.479924
+  step 1/390: loss=0.442257
+  step 2/390: loss=0.322686
+  step 100/390: loss=0.330649
+  step 200/390: loss=0.386000
+  step 300/390: loss=0.481839
+Epoch 21/40: loss=0.459791 lr=0.100000
+  epoch 21: test_acc = 7368/10000 = 73.680000%  top5 = 9836/10000 = 98.360000%  [95% CI 72.81–74.53]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 16410387648422568993)
+  step 0/390: loss=0.374034
+  step 1/390: loss=0.366428
+  step 2/390: loss=0.559126
+  step 100/390: loss=0.492488
+  step 200/390: loss=0.448350
+  step 300/390: loss=0.334060
+Epoch 22/40: loss=0.450453 lr=0.100000
+  epoch 22: test_acc = 7508/10000 = 75.080000%  top5 = 9803/10000 = 98.030000%  [95% CI 74.22–75.92]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 1527054273409067603)
+  step 0/390: loss=0.366537
+  step 1/390: loss=0.480926
+  step 2/390: loss=0.373960
+  step 100/390: loss=0.333966
+  step 200/390: loss=0.539178
+  step 300/390: loss=0.435046
+Epoch 23/40: loss=0.434819 lr=0.100000
+  epoch 23: test_acc = 7574/10000 = 75.740000%  top5 = 9833/10000 = 98.330000%  [95% CI 74.89–76.57]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 4805476036380200084)
+  step 0/390: loss=0.359007
+  step 1/390: loss=0.420639
+  step 2/390: loss=0.358270
+  step 100/390: loss=0.363807
+  step 200/390: loss=0.371608
+  step 300/390: loss=0.484755
+Epoch 24/40: loss=0.428165 lr=0.100000
+  epoch 24: test_acc = 7606/10000 = 76.060000%  top5 = 9842/10000 = 98.420000%  [95% CI 75.21–76.89]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 1581254689353936607)
+  step 0/390: loss=0.406166
+  step 1/390: loss=0.502853
+  step 2/390: loss=0.439258
+  step 100/390: loss=0.531520
+  step 200/390: loss=0.434876
+  step 300/390: loss=0.334023
+Epoch 25/40: loss=0.421806 lr=0.100000
+  epoch 25: test_acc = 7340/10000 = 73.400000%  top5 = 9817/10000 = 98.170000%  [95% CI 72.53–74.26]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 1609038028458081181)
+  step 0/390: loss=0.458854
+  step 1/390: loss=0.448804
+  step 2/390: loss=0.450568
+  step 100/390: loss=0.455599
+  step 200/390: loss=0.422910
+  step 300/390: loss=0.347275
+Epoch 26/40: loss=0.410465 lr=0.100000
+  epoch 26: test_acc = 7668/10000 = 76.680000%  top5 = 9865/10000 = 98.650000%  [95% CI 75.84–77.50]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 14241094428567390127)
+  step 0/390: loss=0.305237
+  step 1/390: loss=0.327765
+  step 2/390: loss=0.344080
+  step 100/390: loss=0.538641
+  step 200/390: loss=0.462135
+  step 300/390: loss=0.305088
+Epoch 27/40: loss=0.400359 lr=0.100000
+  epoch 27: test_acc = 7534/10000 = 75.340000%  top5 = 9813/10000 = 98.130000%  [95% CI 74.49–76.17]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15701269486082491908)
+  step 0/390: loss=0.404185
+  step 1/390: loss=0.506294
+  step 2/390: loss=0.380220
+  step 100/390: loss=0.407429
+  step 200/390: loss=0.340816
+  step 300/390: loss=0.419896
+Epoch 28/40: loss=0.392730 lr=0.100000
+  epoch 28: test_acc = 7379/10000 = 73.790000%  top5 = 9811/10000 = 98.110000%  [95% CI 72.92–74.64]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15905327578072127290)
+  step 0/390: loss=0.433861
+  step 1/390: loss=0.297009
+  step 2/390: loss=0.324782
+  step 100/390: loss=0.373577
+  step 200/390: loss=0.433678
+  step 300/390: loss=0.348739
+Epoch 29/40: loss=0.381047 lr=0.100000
+  epoch 29: test_acc = 7702/10000 = 77.020000%  top5 = 9837/10000 = 98.370000%  [95% CI 76.19–77.83]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 4025801444444530550)
+  step 0/390: loss=0.239092
+  step 1/390: loss=0.462999
+  step 2/390: loss=0.360475
+  step 100/390: loss=0.366451
+  step 200/390: loss=0.431858
+  step 300/390: loss=0.356083
+Epoch 30/40: loss=0.378742 lr=0.100000
+  epoch 30: test_acc = 7479/10000 = 74.790000%  top5 = 9790/10000 = 97.900000%  [95% CI 73.93–75.63]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9876559440363195665)
+  step 0/390: loss=0.296155
+  step 1/390: loss=0.449082
+  step 2/390: loss=0.334888
+  step 100/390: loss=0.441443
+  step 200/390: loss=0.439887
+  step 300/390: loss=0.262805
+Epoch 31/40: loss=0.368852 lr=0.100000
+  epoch 31: test_acc = 7601/10000 = 76.010000%  top5 = 9806/10000 = 98.060000%  [95% CI 75.16–76.84]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9372726569168560363)
+  step 0/390: loss=0.324638
+  step 1/390: loss=0.380926
+  step 2/390: loss=0.302637
+  step 100/390: loss=0.306197
+  step 200/390: loss=0.352504
+  step 300/390: loss=0.316674
+Epoch 32/40: loss=0.362613 lr=0.100000
+  epoch 32: test_acc = 7717/10000 = 77.170000%  top5 = 9848/10000 = 98.480000%  [95% CI 76.34–77.98]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15744179523198413754)
+  step 0/390: loss=0.229894
+  step 1/390: loss=0.461815
+  step 2/390: loss=0.309804
+  step 100/390: loss=0.494310
+  step 200/390: loss=0.335881
+  step 300/390: loss=0.413259
+Epoch 33/40: loss=0.355592 lr=0.100000
+  epoch 33: test_acc = 7631/10000 = 76.310000%  top5 = 9848/10000 = 98.480000%  [95% CI 75.47–77.13]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 7016510043797383262)
+  step 0/390: loss=0.378308
+  step 1/390: loss=0.302246
+  step 2/390: loss=0.255154
+  step 100/390: loss=0.275584
+  step 200/390: loss=0.400413
+  step 300/390: loss=0.401329
+Epoch 34/40: loss=0.347126 lr=0.100000
+  epoch 34: test_acc = 7704/10000 = 77.040000%  top5 = 9846/10000 = 98.460000%  [95% CI 76.21–77.85]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 7032547520941758317)
+  step 0/390: loss=0.324618
+  step 1/390: loss=0.427707
+  step 2/390: loss=0.374715
+  step 100/390: loss=0.379540
+  step 200/390: loss=0.221477
+  step 300/390: loss=0.411380
+Epoch 35/40: loss=0.338342 lr=0.100000
+  epoch 35: test_acc = 7712/10000 = 77.120000%  top5 = 9847/10000 = 98.470000%  [95% CI 76.29–77.93]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 8713127716757074678)
+  step 0/390: loss=0.325978
+  step 1/390: loss=0.369044
+  step 2/390: loss=0.349972
+  step 100/390: loss=0.337230
+  step 200/390: loss=0.321661
+  step 300/390: loss=0.355542
+Epoch 36/40: loss=0.330789 lr=0.100000
+  epoch 36: test_acc = 7710/10000 = 77.100000%  top5 = 9857/10000 = 98.570000%  [95% CI 76.27–77.91]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15431258148573195420)
+  step 0/390: loss=0.265112
+  step 1/390: loss=0.322990
+  step 2/390: loss=0.290486
+  step 100/390: loss=0.334722
+  step 200/390: loss=0.321031
+  step 300/390: loss=0.347339
+Epoch 37/40: loss=0.325464 lr=0.100000
+  epoch 37: test_acc = 7417/10000 = 74.170000%  top5 = 9811/10000 = 98.110000%  [95% CI 73.30–75.02]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 10373433474062457482)
+  step 0/390: loss=0.269916
+  step 1/390: loss=0.314013
+  step 2/390: loss=0.326102
+  step 100/390: loss=0.440843
+  step 200/390: loss=0.310271
+  step 300/390: loss=0.357624
+Epoch 38/40: loss=0.317194 lr=0.100000
+  epoch 38: test_acc = 7306/10000 = 73.060000%  top5 = 9730/10000 = 97.300000%  [95% CI 72.18–73.92]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13541511328037863923)
+  step 0/390: loss=0.245539
+  step 1/390: loss=0.293424
+  step 2/390: loss=0.268979
+  step 100/390: loss=0.184477
+  step 200/390: loss=0.246321
+  step 300/390: loss=0.419645
+Epoch 39/40: loss=0.310001 lr=0.100000
+  epoch 39: test_acc = 7227/10000 = 72.270000%  top5 = 9816/10000 = 98.160000%  [95% CI 71.38–73.14]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 10665024618578820142)
+  step 0/390: loss=0.275148
+  step 1/390: loss=0.285464
+  step 2/390: loss=0.328949
+  step 100/390: loss=0.251259
+  step 200/390: loss=0.272929
+  step 300/390: loss=0.377363
+Epoch 40/40: loss=0.304961 lr=0.100000
+  epoch 40: test_acc = 7612/10000 = 76.120000%  top5 = 9835/10000 = 98.350000%  [95% CI 75.27–76.95]
+    BN companion -> .lake/build/cifar8wb_bbn_sgd_ckpt_iree.bin.bn (384 floats x 2, hash 8259317668615557715)
+done (trained CIFAR-CNN8-wide-BN-batchstat sgd + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — Nesterov momentum (μ.9, lr 0.02) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_mom_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat mom (constant lr 0.020000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.431527
+  step 1/390: loss=2.337994
+  step 2/390: loss=2.308850
+  step 100/390: loss=1.481651
+  step 200/390: loss=1.253001
+  step 300/390: loss=1.244732
+Epoch 1/40: loss=1.391882 lr=0.020000
+  epoch 1: test_acc = 4322/10000 = 43.220000%  top5 = 8500/10000 = 85.000000%  [95% CI 42.25–44.19]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 12972101347568562044)
+  step 0/390: loss=1.114288
+  step 1/390: loss=1.174541
+  step 2/390: loss=1.097242
+  step 100/390: loss=1.085245
+  step 200/390: loss=0.923097
+  step 300/390: loss=0.979105
+Epoch 2/40: loss=1.024702 lr=0.020000
+  epoch 2: test_acc = 6016/10000 = 60.160000%  top5 = 9566/10000 = 95.660000%  [95% CI 59.20–61.12]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 4052706808880874977)
+  step 0/390: loss=0.861803
+  step 1/390: loss=0.963645
+  step 2/390: loss=0.824045
+  step 100/390: loss=0.962035
+  step 200/390: loss=0.864802
+  step 300/390: loss=0.919741
+Epoch 3/40: loss=0.898506 lr=0.020000
+  epoch 3: test_acc = 6587/10000 = 65.870000%  top5 = 9705/10000 = 97.050000%  [95% CI 64.93–66.79]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 16454936187504658513)
+  step 0/390: loss=0.898874
+  step 1/390: loss=0.946103
+  step 2/390: loss=0.785372
+  step 100/390: loss=0.704349
+  step 200/390: loss=0.831974
+  step 300/390: loss=0.963341
+Epoch 4/40: loss=0.812886 lr=0.020000
+  epoch 4: test_acc = 6179/10000 = 61.790000%  top5 = 9603/10000 = 96.030000%  [95% CI 60.83–62.74]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 3467835087777716523)
+  step 0/390: loss=0.748698
+  step 1/390: loss=0.922015
+  step 2/390: loss=0.740311
+  step 100/390: loss=0.564246
+  step 200/390: loss=0.699483
+  step 300/390: loss=0.586472
+Epoch 5/40: loss=0.748387 lr=0.020000
+  epoch 5: test_acc = 6128/10000 = 61.280000%  top5 = 9497/10000 = 94.970000%  [95% CI 60.32–62.23]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 8109205594572304344)
+  step 0/390: loss=0.779943
+  step 1/390: loss=0.519041
+  step 2/390: loss=0.838772
+  step 100/390: loss=0.628977
+  step 200/390: loss=0.773825
+  step 300/390: loss=0.697258
+Epoch 6/40: loss=0.703555 lr=0.020000
+  epoch 6: test_acc = 7060/10000 = 70.600000%  top5 = 9792/10000 = 97.920000%  [95% CI 69.70–71.48]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 4608417085778959189)
+  step 0/390: loss=0.558737
+  step 1/390: loss=0.667099
+  step 2/390: loss=0.740367
+  step 100/390: loss=0.593137
+  step 200/390: loss=0.597934
+  step 300/390: loss=0.653914
+Epoch 7/40: loss=0.667328 lr=0.020000
+  epoch 7: test_acc = 6774/10000 = 67.740000%  top5 = 9709/10000 = 97.090000%  [95% CI 66.82–68.65]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 12912694036205713303)
+  step 0/390: loss=0.651995
+  step 1/390: loss=0.630063
+  step 2/390: loss=0.554589
+  step 100/390: loss=0.555228
+  step 200/390: loss=0.680754
+  step 300/390: loss=0.605118
+Epoch 8/40: loss=0.633522 lr=0.020000
+  epoch 8: test_acc = 6920/10000 = 69.200000%  top5 = 9775/10000 = 97.750000%  [95% CI 68.29–70.10]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 1210427530507753770)
+  step 0/390: loss=0.618418
+  step 1/390: loss=0.479057
+  step 2/390: loss=0.484056
+  step 100/390: loss=0.566205
+  step 200/390: loss=0.582769
+  step 300/390: loss=0.608300
+Epoch 9/40: loss=0.608380 lr=0.020000
+  epoch 9: test_acc = 7380/10000 = 73.800000%  top5 = 9814/10000 = 98.140000%  [95% CI 72.93–74.65]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 10491876879402933305)
+  step 0/390: loss=0.573296
+  step 1/390: loss=0.560865
+  step 2/390: loss=0.426752
+  step 100/390: loss=0.715339
+  step 200/390: loss=0.596136
+  step 300/390: loss=0.542373
+Epoch 10/40: loss=0.587467 lr=0.020000
+  epoch 10: test_acc = 6976/10000 = 69.760000%  top5 = 9669/10000 = 96.690000%  [95% CI 68.85–70.65]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 16760981979228537493)
+  step 0/390: loss=0.490365
+  step 1/390: loss=0.539096
+  step 2/390: loss=0.558119
+  step 100/390: loss=0.454922
+  step 200/390: loss=0.606411
+  step 300/390: loss=0.583116
+Epoch 11/40: loss=0.561312 lr=0.020000
+  epoch 11: test_acc = 7339/10000 = 73.390000%  top5 = 9809/10000 = 98.090000%  [95% CI 72.51–74.25]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 9462889468012567486)
+  step 0/390: loss=0.464896
+  step 1/390: loss=0.571489
+  step 2/390: loss=0.566694
+  step 100/390: loss=0.453683
+  step 200/390: loss=0.522855
+  step 300/390: loss=0.523655
+Epoch 12/40: loss=0.543843 lr=0.020000
+  epoch 12: test_acc = 7266/10000 = 72.660000%  top5 = 9794/10000 = 97.940000%  [95% CI 71.78–73.52]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 13272058158022559474)
+  step 0/390: loss=0.507696
+  step 1/390: loss=0.547427
+  step 2/390: loss=0.514280
+  step 100/390: loss=0.572201
+  step 200/390: loss=0.635339
+  step 300/390: loss=0.611838
+Epoch 13/40: loss=0.525712 lr=0.020000
+  epoch 13: test_acc = 7402/10000 = 74.020000%  top5 = 9812/10000 = 98.120000%  [95% CI 73.15–74.87]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 9898116925075158440)
+  step 0/390: loss=0.480066
+  step 1/390: loss=0.391812
+  step 2/390: loss=0.571843
+  step 100/390: loss=0.546822
+  step 200/390: loss=0.406502
+  step 300/390: loss=0.524247
+Epoch 14/40: loss=0.509313 lr=0.020000
+  epoch 14: test_acc = 7611/10000 = 76.110000%  top5 = 9852/10000 = 98.520000%  [95% CI 75.26–76.94]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 4243673652959954597)
+  step 0/390: loss=0.408674
+  step 1/390: loss=0.455584
+  step 2/390: loss=0.648574
+  step 100/390: loss=0.512132
+  step 200/390: loss=0.553980
+  step 300/390: loss=0.515779
+Epoch 15/40: loss=0.493602 lr=0.020000
+  epoch 15: test_acc = 6130/10000 = 61.300000%  top5 = 9338/10000 = 93.380000%  [95% CI 60.34–62.25]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 5039798343644919939)
+  step 0/390: loss=0.394854
+  step 1/390: loss=0.330740
+  step 2/390: loss=0.442749
+  step 100/390: loss=0.443248
+  step 200/390: loss=0.521597
+  step 300/390: loss=0.500427
+Epoch 16/40: loss=0.480629 lr=0.020000
+  epoch 16: test_acc = 7455/10000 = 74.550000%  top5 = 9793/10000 = 97.930000%  [95% CI 73.69–75.39]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 5921395004471348410)
+  step 0/390: loss=0.467954
+  step 1/390: loss=0.468729
+  step 2/390: loss=0.500652
+  step 100/390: loss=0.463110
+  step 200/390: loss=0.472748
+  step 300/390: loss=0.446631
+Epoch 17/40: loss=0.466970 lr=0.020000
+  epoch 17: test_acc = 7354/10000 = 73.540000%  top5 = 9782/10000 = 97.820000%  [95% CI 72.67–74.40]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 8020488381680279117)
+  step 0/390: loss=0.404366
+  step 1/390: loss=0.449405
+  step 2/390: loss=0.336058
+  step 100/390: loss=0.424663
+  step 200/390: loss=0.458009
+  step 300/390: loss=0.448248
+Epoch 18/40: loss=0.455618 lr=0.020000
+  epoch 18: test_acc = 7571/10000 = 75.710000%  top5 = 9809/10000 = 98.090000%  [95% CI 74.86–76.54]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 8939861246913404351)
+  step 0/390: loss=0.474806
+  step 1/390: loss=0.544753
+  step 2/390: loss=0.349472
+  step 100/390: loss=0.528013
+  step 200/390: loss=0.304911
+  step 300/390: loss=0.446301
+Epoch 19/40: loss=0.445662 lr=0.020000
+  epoch 19: test_acc = 7434/10000 = 74.340000%  top5 = 9754/10000 = 97.540000%  [95% CI 73.47–75.19]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 10584903895203890367)
+  step 0/390: loss=0.542766
+  step 1/390: loss=0.440571
+  step 2/390: loss=0.292709
+  step 100/390: loss=0.441114
+  step 200/390: loss=0.399247
+  step 300/390: loss=0.463561
+Epoch 20/40: loss=0.429080 lr=0.020000
+  epoch 20: test_acc = 7353/10000 = 73.530000%  top5 = 9779/10000 = 97.790000%  [95% CI 72.66–74.39]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 5285180367096075755)
+  step 0/390: loss=0.357686
+  step 1/390: loss=0.450684
+  step 2/390: loss=0.341166
+  step 100/390: loss=0.357510
+  step 200/390: loss=0.343798
+  step 300/390: loss=0.457499
+Epoch 21/40: loss=0.427360 lr=0.020000
+  epoch 21: test_acc = 7590/10000 = 75.900000%  top5 = 9861/10000 = 98.610000%  [95% CI 75.05–76.73]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 15576035096514429372)
+  step 0/390: loss=0.454003
+  step 1/390: loss=0.462965
+  step 2/390: loss=0.511323
+  step 100/390: loss=0.435395
+  step 200/390: loss=0.481275
+  step 300/390: loss=0.355804
+Epoch 22/40: loss=0.409808 lr=0.020000
+  epoch 22: test_acc = 7642/10000 = 76.420000%  top5 = 9843/10000 = 98.430000%  [95% CI 75.58–77.24]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 16041990664056366720)
+  step 0/390: loss=0.325172
+  step 1/390: loss=0.494747
+  step 2/390: loss=0.299902
+  step 100/390: loss=0.388239
+  step 200/390: loss=0.366633
+  step 300/390: loss=0.508363
+Epoch 23/40: loss=0.399195 lr=0.020000
+  epoch 23: test_acc = 7113/10000 = 71.130000%  top5 = 9725/10000 = 97.250000%  [95% CI 70.23–72.01]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 16916383181780777924)
+  step 0/390: loss=0.388638
+  step 1/390: loss=0.393203
+  step 2/390: loss=0.385233
+  step 100/390: loss=0.308450
+  step 200/390: loss=0.331247
+  step 300/390: loss=0.396864
+Epoch 24/40: loss=0.389716 lr=0.020000
+  epoch 24: test_acc = 7543/10000 = 75.430000%  top5 = 9851/10000 = 98.510000%  [95% CI 74.58–76.26]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 10100039252305238165)
+  step 0/390: loss=0.399708
+  step 1/390: loss=0.464869
+  step 2/390: loss=0.432364
+  step 100/390: loss=0.415982
+  step 200/390: loss=0.380531
+  step 300/390: loss=0.408028
+Epoch 25/40: loss=0.379725 lr=0.020000
+  epoch 25: test_acc = 7725/10000 = 77.250000%  top5 = 9854/10000 = 98.540000%  [95% CI 76.42–78.06]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 6445252705846989294)
+  step 0/390: loss=0.372320
+  step 1/390: loss=0.464466
+  step 2/390: loss=0.436205
+  step 100/390: loss=0.372278
+  step 200/390: loss=0.446531
+  step 300/390: loss=0.366620
+Epoch 26/40: loss=0.372900 lr=0.020000
+  epoch 26: test_acc = 7581/10000 = 75.810000%  top5 = 9855/10000 = 98.550000%  [95% CI 74.96–76.64]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 5432730847820745864)
+  step 0/390: loss=0.417365
+  step 1/390: loss=0.386460
+  step 2/390: loss=0.333697
+  step 100/390: loss=0.534763
+  step 200/390: loss=0.379424
+  step 300/390: loss=0.255352
+Epoch 27/40: loss=0.360587 lr=0.020000
+  epoch 27: test_acc = 7842/10000 = 78.420000%  top5 = 9880/10000 = 98.800000%  [95% CI 77.60–79.22]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 18364980163377901127)
+  step 0/390: loss=0.335290
+  step 1/390: loss=0.424089
+  step 2/390: loss=0.342913
+  step 100/390: loss=0.315622
+  step 200/390: loss=0.330815
+  step 300/390: loss=0.273243
+Epoch 28/40: loss=0.356361 lr=0.020000
+  epoch 28: test_acc = 7712/10000 = 77.120000%  top5 = 9856/10000 = 98.560000%  [95% CI 76.29–77.93]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 8348397738840777090)
+  step 0/390: loss=0.384036
+  step 1/390: loss=0.278801
+  step 2/390: loss=0.320756
+  step 100/390: loss=0.306795
+  step 200/390: loss=0.347202
+  step 300/390: loss=0.355106
+Epoch 29/40: loss=0.343916 lr=0.020000
+  epoch 29: test_acc = 7570/10000 = 75.700000%  top5 = 9779/10000 = 97.790000%  [95% CI 74.85–76.53]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 4294214314437866979)
+  step 0/390: loss=0.222466
+  step 1/390: loss=0.451356
+  step 2/390: loss=0.363378
+  step 100/390: loss=0.246463
+  step 200/390: loss=0.341882
+  step 300/390: loss=0.392086
+Epoch 30/40: loss=0.336684 lr=0.020000
+  epoch 30: test_acc = 7309/10000 = 73.090000%  top5 = 9790/10000 = 97.900000%  [95% CI 72.21–73.95]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 7947306662980168377)
+  step 0/390: loss=0.263677
+  step 1/390: loss=0.343537
+  step 2/390: loss=0.308473
+  step 100/390: loss=0.458556
+  step 200/390: loss=0.241530
+  step 300/390: loss=0.332963
+Epoch 31/40: loss=0.327289 lr=0.020000
+  epoch 31: test_acc = 7655/10000 = 76.550000%  top5 = 9859/10000 = 98.590000%  [95% CI 75.71–77.37]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 8453514190366435999)
+  step 0/390: loss=0.341057
+  step 1/390: loss=0.297868
+  step 2/390: loss=0.273653
+  step 100/390: loss=0.220835
+  step 200/390: loss=0.333294
+  step 300/390: loss=0.259762
+Epoch 32/40: loss=0.322215 lr=0.020000
+  epoch 32: test_acc = 7560/10000 = 75.600000%  top5 = 9827/10000 = 98.270000%  [95% CI 74.75–76.43]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 1435328575250983126)
+  step 0/390: loss=0.226615
+  step 1/390: loss=0.446401
+  step 2/390: loss=0.236923
+  step 100/390: loss=0.327602
+  step 200/390: loss=0.364918
+  step 300/390: loss=0.365074
+Epoch 33/40: loss=0.313937 lr=0.020000
+  epoch 33: test_acc = 7800/10000 = 78.000000%  top5 = 9841/10000 = 98.410000%  [95% CI 77.18–78.80]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 6987880528806120762)
+  step 0/390: loss=0.283026
+  step 1/390: loss=0.221422
+  step 2/390: loss=0.193190
+  step 100/390: loss=0.231902
+  step 200/390: loss=0.529030
+  step 300/390: loss=0.333970
+Epoch 34/40: loss=0.305096 lr=0.020000
+  epoch 34: test_acc = 7612/10000 = 76.120000%  top5 = 9864/10000 = 98.640000%  [95% CI 75.27–76.95]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 2005298504326582764)
+  step 0/390: loss=0.290031
+  step 1/390: loss=0.297899
+  step 2/390: loss=0.222232
+  step 100/390: loss=0.279801
+  step 200/390: loss=0.169892
+  step 300/390: loss=0.278592
+Epoch 35/40: loss=0.299737 lr=0.020000
+  epoch 35: test_acc = 7416/10000 = 74.160000%  top5 = 9820/10000 = 98.200000%  [95% CI 73.29–75.01]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 6103413435425462296)
+  step 0/390: loss=0.357284
+  step 1/390: loss=0.370237
+  step 2/390: loss=0.277260
+  step 100/390: loss=0.285292
+  step 200/390: loss=0.198183
+  step 300/390: loss=0.333114
+Epoch 36/40: loss=0.291010 lr=0.020000
+  epoch 36: test_acc = 7725/10000 = 77.250000%  top5 = 9831/10000 = 98.310000%  [95% CI 76.42–78.06]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 16129153115112876446)
+  step 0/390: loss=0.257324
+  step 1/390: loss=0.148452
+  step 2/390: loss=0.298563
+  step 100/390: loss=0.350438
+  step 200/390: loss=0.270575
+  step 300/390: loss=0.337348
+Epoch 37/40: loss=0.280433 lr=0.020000
+  epoch 37: test_acc = 7736/10000 = 77.360000%  top5 = 9825/10000 = 98.250000%  [95% CI 76.53–78.17]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 4453996669641059678)
+  step 0/390: loss=0.267507
+  step 1/390: loss=0.345121
+  step 2/390: loss=0.261546
+  step 100/390: loss=0.274363
+  step 200/390: loss=0.281778
+  step 300/390: loss=0.362116
+Epoch 38/40: loss=0.271267 lr=0.020000
+  epoch 38: test_acc = 7417/10000 = 74.170000%  top5 = 9793/10000 = 97.930000%  [95% CI 73.30–75.02]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 11825386180969242364)
+  step 0/390: loss=0.233384
+  step 1/390: loss=0.261003
+  step 2/390: loss=0.292342
+  step 100/390: loss=0.272697
+  step 200/390: loss=0.241432
+  step 300/390: loss=0.317231
+Epoch 39/40: loss=0.268326 lr=0.020000
+  epoch 39: test_acc = 7715/10000 = 77.150000%  top5 = 9825/10000 = 98.250000%  [95% CI 76.32–77.96]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 5701373244961290380)
+  step 0/390: loss=0.221776
+  step 1/390: loss=0.209152
+  step 2/390: loss=0.248769
+  step 100/390: loss=0.320583
+  step 200/390: loss=0.244641
+  step 300/390: loss=0.274540
+Epoch 40/40: loss=0.261779 lr=0.020000
+  epoch 40: test_acc = 7645/10000 = 76.450000%  top5 = 9863/10000 = 98.630000%  [95% CI 75.61–77.27]
+    BN companion -> .lake/build/cifar8wb_bbn_mom_ckpt_iree.bin.bn (384 floats x 2, hash 15982667503549279742)
+done (trained CIFAR-CNN8-wide-BN-batchstat mom + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) f32 — AdamW (lr 1e-3) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat adam (constant lr 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.431527
+  step 1/390: loss=2.367903
+  step 2/390: loss=2.291753
+  step 100/390: loss=1.570067
+  step 200/390: loss=1.380452
+  step 300/390: loss=1.349862
+Epoch 1/40: loss=1.447579 lr=0.001000
+  epoch 1: test_acc = 4730/10000 = 47.300000%  top5 = 9017/10000 = 90.170000%  [95% CI 46.32–48.28]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 7096184945458812103)
+  step 0/390: loss=1.157129
+  step 1/390: loss=1.202267
+  step 2/390: loss=1.103853
+  step 100/390: loss=1.160504
+  step 200/390: loss=1.008413
+  step 300/390: loss=1.090984
+Epoch 2/40: loss=1.086977 lr=0.001000
+  epoch 2: test_acc = 6085/10000 = 60.850000%  top5 = 9587/10000 = 95.870000%  [95% CI 59.89–61.80]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 10482780698294421714)
+  step 0/390: loss=0.870312
+  step 1/390: loss=1.191952
+  step 2/390: loss=0.918852
+  step 100/390: loss=0.859508
+  step 200/390: loss=0.931599
+  step 300/390: loss=0.978410
+Epoch 3/40: loss=0.941390 lr=0.001000
+  epoch 3: test_acc = 6343/10000 = 63.430000%  top5 = 9636/10000 = 96.360000%  [95% CI 62.48–64.37]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 16738887820437666539)
+  step 0/390: loss=0.948388
+  step 1/390: loss=1.019363
+  step 2/390: loss=0.714336
+  step 100/390: loss=0.830799
+  step 200/390: loss=0.848719
+  step 300/390: loss=0.849033
+Epoch 4/40: loss=0.850680 lr=0.001000
+  epoch 4: test_acc = 5887/10000 = 58.870000%  top5 = 9385/10000 = 93.850000%  [95% CI 57.90–59.83]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 6423010936754602022)
+  step 0/390: loss=0.723521
+  step 1/390: loss=1.036968
+  step 2/390: loss=0.857999
+  step 100/390: loss=0.608734
+  step 200/390: loss=0.772250
+  step 300/390: loss=0.529700
+Epoch 5/40: loss=0.788653 lr=0.001000
+  epoch 5: test_acc = 5933/10000 = 59.330000%  top5 = 9382/10000 = 93.820000%  [95% CI 58.36–60.29]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 1904428718706639145)
+  step 0/390: loss=0.805791
+  step 1/390: loss=0.719776
+  step 2/390: loss=0.747906
+  step 100/390: loss=0.696128
+  step 200/390: loss=0.729145
+  step 300/390: loss=0.746981
+Epoch 6/40: loss=0.735048 lr=0.001000
+  epoch 6: test_acc = 6817/10000 = 68.170000%  top5 = 9711/10000 = 97.110000%  [95% CI 67.25–69.08]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 14856210333605861145)
+  step 0/390: loss=0.656823
+  step 1/390: loss=0.715916
+  step 2/390: loss=0.772341
+  step 100/390: loss=0.675991
+  step 200/390: loss=0.656799
+  step 300/390: loss=0.725775
+Epoch 7/40: loss=0.699415 lr=0.001000
+  epoch 7: test_acc = 7191/10000 = 71.910000%  top5 = 9763/10000 = 97.630000%  [95% CI 71.02–72.78]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 18021556052806390075)
+  step 0/390: loss=0.764201
+  step 1/390: loss=0.635326
+  step 2/390: loss=0.479320
+  step 100/390: loss=0.617105
+  step 200/390: loss=0.704327
+  step 300/390: loss=0.685893
+Epoch 8/40: loss=0.662030 lr=0.001000
+  epoch 8: test_acc = 7032/10000 = 70.320000%  top5 = 9743/10000 = 97.430000%  [95% CI 69.42–71.21]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 10470259637535862553)
+  step 0/390: loss=0.594703
+  step 1/390: loss=0.630327
+  step 2/390: loss=0.536412
+  step 100/390: loss=0.566016
+  step 200/390: loss=0.571534
+  step 300/390: loss=0.760790
+Epoch 9/40: loss=0.639285 lr=0.001000
+  epoch 9: test_acc = 7239/10000 = 72.390000%  top5 = 9779/10000 = 97.790000%  [95% CI 71.51–73.26]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 8369825235011160500)
+  step 0/390: loss=0.529311
+  step 1/390: loss=0.734377
+  step 2/390: loss=0.534993
+  step 100/390: loss=0.707473
+  step 200/390: loss=0.714888
+  step 300/390: loss=0.530920
+Epoch 10/40: loss=0.613245 lr=0.001000
+  epoch 10: test_acc = 7432/10000 = 74.320000%  top5 = 9823/10000 = 98.230000%  [95% CI 73.45–75.17]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 8945920136100950603)
+  step 0/390: loss=0.485108
+  step 1/390: loss=0.517500
+  step 2/390: loss=0.543706
+  step 100/390: loss=0.602164
+  step 200/390: loss=0.607876
+  step 300/390: loss=0.524156
+Epoch 11/40: loss=0.589315 lr=0.001000
+  epoch 11: test_acc = 7252/10000 = 72.520000%  top5 = 9732/10000 = 97.320000%  [95% CI 71.64–73.39]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 1556017063169403737)
+  step 0/390: loss=0.527375
+  step 1/390: loss=0.513849
+  step 2/390: loss=0.484333
+  step 100/390: loss=0.518835
+  step 200/390: loss=0.554806
+  step 300/390: loss=0.636338
+Epoch 12/40: loss=0.570243 lr=0.001000
+  epoch 12: test_acc = 7120/10000 = 71.200000%  top5 = 9698/10000 = 96.980000%  [95% CI 70.30–72.08]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 4171068957119391084)
+  step 0/390: loss=0.593491
+  step 1/390: loss=0.567063
+  step 2/390: loss=0.623569
+  step 100/390: loss=0.548437
+  step 200/390: loss=0.546233
+  step 300/390: loss=0.656640
+Epoch 13/40: loss=0.549395 lr=0.001000
+  epoch 13: test_acc = 7270/10000 = 72.700000%  top5 = 9760/10000 = 97.600000%  [95% CI 71.82–73.56]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 7252045569220273475)
+  step 0/390: loss=0.568286
+  step 1/390: loss=0.509767
+  step 2/390: loss=0.598338
+  step 100/390: loss=0.484541
+  step 200/390: loss=0.411035
+  step 300/390: loss=0.523692
+Epoch 14/40: loss=0.534977 lr=0.001000
+  epoch 14: test_acc = 7277/10000 = 72.770000%  top5 = 9761/10000 = 97.610000%  [95% CI 71.89–73.63]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 400412471482036792)
+  step 0/390: loss=0.423856
+  step 1/390: loss=0.478234
+  step 2/390: loss=0.528482
+  step 100/390: loss=0.622908
+  step 200/390: loss=0.627494
+  step 300/390: loss=0.480954
+Epoch 15/40: loss=0.514589 lr=0.001000
+  epoch 15: test_acc = 7185/10000 = 71.850000%  top5 = 9782/10000 = 97.820000%  [95% CI 70.96–72.72]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 16947830239237203105)
+  step 0/390: loss=0.381868
+  step 1/390: loss=0.314172
+  step 2/390: loss=0.551351
+  step 100/390: loss=0.449561
+  step 200/390: loss=0.557623
+  step 300/390: loss=0.465760
+Epoch 16/40: loss=0.499080 lr=0.001000
+  epoch 16: test_acc = 7404/10000 = 74.040000%  top5 = 9811/10000 = 98.110000%  [95% CI 73.17–74.89]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 9426048197800491228)
+  step 0/390: loss=0.410761
+  step 1/390: loss=0.449457
+  step 2/390: loss=0.508781
+  step 100/390: loss=0.382293
+  step 200/390: loss=0.548048
+  step 300/390: loss=0.487328
+Epoch 17/40: loss=0.486071 lr=0.001000
+  epoch 17: test_acc = 7639/10000 = 76.390000%  top5 = 9827/10000 = 98.270000%  [95% CI 75.55–77.21]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 4261261547887377865)
+  step 0/390: loss=0.454859
+  step 1/390: loss=0.490837
+  step 2/390: loss=0.413017
+  step 100/390: loss=0.428734
+  step 200/390: loss=0.641189
+  step 300/390: loss=0.540473
+Epoch 18/40: loss=0.466700 lr=0.001000
+  epoch 18: test_acc = 7589/10000 = 75.890000%  top5 = 9815/10000 = 98.150000%  [95% CI 75.04–76.72]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 6994854236245426383)
+  step 0/390: loss=0.506990
+  step 1/390: loss=0.515904
+  step 2/390: loss=0.402909
+  step 100/390: loss=0.457545
+  step 200/390: loss=0.362690
+  step 300/390: loss=0.494251
+Epoch 19/40: loss=0.458691 lr=0.001000
+  epoch 19: test_acc = 7337/10000 = 73.370000%  top5 = 9743/10000 = 97.430000%  [95% CI 72.49–74.23]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 3566541920814274494)
+  step 0/390: loss=0.465722
+  step 1/390: loss=0.427914
+  step 2/390: loss=0.368691
+  step 100/390: loss=0.359827
+  step 200/390: loss=0.466584
+  step 300/390: loss=0.373907
+Epoch 20/40: loss=0.441465 lr=0.001000
+  epoch 20: test_acc = 7721/10000 = 77.210000%  top5 = 9841/10000 = 98.410000%  [95% CI 76.38–78.02]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 5697674876087888359)
+  step 0/390: loss=0.380548
+  step 1/390: loss=0.421288
+  step 2/390: loss=0.430632
+  step 100/390: loss=0.338765
+  step 200/390: loss=0.329410
+  step 300/390: loss=0.411264
+Epoch 21/40: loss=0.433514 lr=0.001000
+  epoch 21: test_acc = 7699/10000 = 76.990000%  top5 = 9834/10000 = 98.340000%  [95% CI 76.15–77.80]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 15563249568970263656)
+  step 0/390: loss=0.364905
+  step 1/390: loss=0.416972
+  step 2/390: loss=0.430608
+  step 100/390: loss=0.556454
+  step 200/390: loss=0.414751
+  step 300/390: loss=0.329610
+Epoch 22/40: loss=0.415825 lr=0.001000
+  epoch 22: test_acc = 7489/10000 = 74.890000%  top5 = 9807/10000 = 98.070000%  [95% CI 74.03–75.73]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 12909976183448696820)
+  step 0/390: loss=0.352266
+  step 1/390: loss=0.408322
+  step 2/390: loss=0.305240
+  step 100/390: loss=0.339092
+  step 200/390: loss=0.441435
+  step 300/390: loss=0.516232
+Epoch 23/40: loss=0.403730 lr=0.001000
+  epoch 23: test_acc = 7636/10000 = 76.360000%  top5 = 9830/10000 = 98.300000%  [95% CI 75.52–77.18]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 6342916193150293680)
+  step 0/390: loss=0.328547
+  step 1/390: loss=0.390441
+  step 2/390: loss=0.395606
+  step 100/390: loss=0.379939
+  step 200/390: loss=0.286559
+  step 300/390: loss=0.396060
+Epoch 24/40: loss=0.391498 lr=0.001000
+  epoch 24: test_acc = 7480/10000 = 74.800000%  top5 = 9786/10000 = 97.860000%  [95% CI 73.94–75.64]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 10843343530751194251)
+  step 0/390: loss=0.338912
+  step 1/390: loss=0.373595
+  step 2/390: loss=0.342981
+  step 100/390: loss=0.402742
+  step 200/390: loss=0.428198
+  step 300/390: loss=0.393200
+Epoch 25/40: loss=0.382084 lr=0.001000
+  epoch 25: test_acc = 7347/10000 = 73.470000%  top5 = 9707/10000 = 97.070000%  [95% CI 72.60–74.33]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 16686995797147409313)
+  step 0/390: loss=0.343403
+  step 1/390: loss=0.455208
+  step 2/390: loss=0.354331
+  step 100/390: loss=0.257143
+  step 200/390: loss=0.340106
+  step 300/390: loss=0.367183
+Epoch 26/40: loss=0.373941 lr=0.001000
+  epoch 26: test_acc = 7380/10000 = 73.800000%  top5 = 9744/10000 = 97.440000%  [95% CI 72.93–74.65]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 15941745917611976664)
+  step 0/390: loss=0.339117
+  step 1/390: loss=0.276545
+  step 2/390: loss=0.323381
+  step 100/390: loss=0.432381
+  step 200/390: loss=0.398872
+  step 300/390: loss=0.328734
+Epoch 27/40: loss=0.358600 lr=0.001000
+  epoch 27: test_acc = 7533/10000 = 75.330000%  top5 = 9766/10000 = 97.660000%  [95% CI 74.48–76.17]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 8939413671585379296)
+  step 0/390: loss=0.300429
+  step 1/390: loss=0.375435
+  step 2/390: loss=0.331283
+  step 100/390: loss=0.389065
+  step 200/390: loss=0.307888
+  step 300/390: loss=0.471199
+Epoch 28/40: loss=0.352963 lr=0.001000
+  epoch 28: test_acc = 7700/10000 = 77.000000%  top5 = 9820/10000 = 98.200000%  [95% CI 76.16–77.81]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 11003234034957670024)
+  step 0/390: loss=0.390740
+  step 1/390: loss=0.361340
+  step 2/390: loss=0.252074
+  step 100/390: loss=0.276211
+  step 200/390: loss=0.370892
+  step 300/390: loss=0.288638
+Epoch 29/40: loss=0.338430 lr=0.001000
+  epoch 29: test_acc = 7853/10000 = 78.530000%  top5 = 9827/10000 = 98.270000%  [95% CI 77.71–79.32]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 12252013101741106777)
+  step 0/390: loss=0.267971
+  step 1/390: loss=0.372351
+  step 2/390: loss=0.323169
+  step 100/390: loss=0.337017
+  step 200/390: loss=0.337947
+  step 300/390: loss=0.374688
+Epoch 30/40: loss=0.327574 lr=0.001000
+  epoch 30: test_acc = 7645/10000 = 76.450000%  top5 = 9820/10000 = 98.200000%  [95% CI 75.61–77.27]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 5694912968429429508)
+  step 0/390: loss=0.344883
+  step 1/390: loss=0.402327
+  step 2/390: loss=0.290291
+  step 100/390: loss=0.453030
+  step 200/390: loss=0.354306
+  step 300/390: loss=0.320719
+Epoch 31/40: loss=0.313828 lr=0.001000
+  epoch 31: test_acc = 7775/10000 = 77.750000%  top5 = 9834/10000 = 98.340000%  [95% CI 76.92–78.55]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 10661280239165556858)
+  step 0/390: loss=0.300682
+  step 1/390: loss=0.242864
+  step 2/390: loss=0.290358
+  step 100/390: loss=0.269724
+  step 200/390: loss=0.328973
+  step 300/390: loss=0.227548
+Epoch 32/40: loss=0.313361 lr=0.001000
+  epoch 32: test_acc = 7722/10000 = 77.220000%  top5 = 9835/10000 = 98.350000%  [95% CI 76.39–78.03]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 12074072501296966654)
+  step 0/390: loss=0.333886
+  step 1/390: loss=0.337344
+  step 2/390: loss=0.256869
+  step 100/390: loss=0.325212
+  step 200/390: loss=0.290220
+  step 300/390: loss=0.241889
+Epoch 33/40: loss=0.295915 lr=0.001000
+  epoch 33: test_acc = 7437/10000 = 74.370000%  top5 = 9801/10000 = 98.010000%  [95% CI 73.51–75.22]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 5295588350663764906)
+  step 0/390: loss=0.273170
+  step 1/390: loss=0.234117
+  step 2/390: loss=0.246979
+  step 100/390: loss=0.358367
+  step 200/390: loss=0.316841
+  step 300/390: loss=0.223832
+Epoch 34/40: loss=0.292895 lr=0.001000
+  epoch 34: test_acc = 7713/10000 = 77.130000%  top5 = 9825/10000 = 98.250000%  [95% CI 76.30–77.94]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 15115787542271638034)
+  step 0/390: loss=0.222422
+  step 1/390: loss=0.202221
+  step 2/390: loss=0.299303
+  step 100/390: loss=0.287699
+  step 200/390: loss=0.238359
+  step 300/390: loss=0.356298
+Epoch 35/40: loss=0.280732 lr=0.001000
+  epoch 35: test_acc = 7667/10000 = 76.670000%  top5 = 9832/10000 = 98.320000%  [95% CI 75.83–77.49]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 12393593524338675691)
+  step 0/390: loss=0.230313
+  step 1/390: loss=0.306433
+  step 2/390: loss=0.237374
+  step 100/390: loss=0.248811
+  step 200/390: loss=0.326171
+  step 300/390: loss=0.332236
+Epoch 36/40: loss=0.270337 lr=0.001000
+  epoch 36: test_acc = 7705/10000 = 77.050000%  top5 = 9812/10000 = 98.120000%  [95% CI 76.22–77.86]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 10472160423538507691)
+  step 0/390: loss=0.252477
+  step 1/390: loss=0.138789
+  step 2/390: loss=0.336755
+  step 100/390: loss=0.246915
+  step 200/390: loss=0.195014
+  step 300/390: loss=0.275427
+Epoch 37/40: loss=0.262706 lr=0.001000
+  epoch 37: test_acc = 7798/10000 = 77.980000%  top5 = 9825/10000 = 98.250000%  [95% CI 77.16–78.78]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 4324321726692312045)
+  step 0/390: loss=0.190025
+  step 1/390: loss=0.311906
+  step 2/390: loss=0.230112
+  step 100/390: loss=0.342259
+  step 200/390: loss=0.264470
+  step 300/390: loss=0.355681
+Epoch 38/40: loss=0.253896 lr=0.001000
+  epoch 38: test_acc = 7613/10000 = 76.130000%  top5 = 9815/10000 = 98.150000%  [95% CI 75.28–76.96]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 8274797988764145470)
+  step 0/390: loss=0.236401
+  step 1/390: loss=0.254003
+  step 2/390: loss=0.265594
+  step 100/390: loss=0.204191
+  step 200/390: loss=0.155478
+  step 300/390: loss=0.305978
+Epoch 39/40: loss=0.245789 lr=0.001000
+  epoch 39: test_acc = 7506/10000 = 75.060000%  top5 = 9789/10000 = 97.890000%  [95% CI 74.20–75.90]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 13555588737181947945)
+  step 0/390: loss=0.154525
+  step 1/390: loss=0.182998
+  step 2/390: loss=0.204178
+  step 100/390: loss=0.207574
+  step 200/390: loss=0.244565
+  step 300/390: loss=0.282687
+Epoch 40/40: loss=0.241737 lr=0.001000
+  epoch 40: test_acc = 7794/10000 = 77.940000%  top5 = 9838/10000 = 98.380000%  [95% CI 77.12–78.74]
+    BN companion -> .lake/build/cifar8wb_bbn_adam_ckpt_iree.bin.bn (384 floats x 2, hash 14112954887547294978)
+done (trained CIFAR-CNN8-wide-BN-batchstat adam + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — SGD (lr 0.1) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16sgd_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16sgd (constant lr 0.100000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.434515
+  step 1/390: loss=2.343904
+  step 2/390: loss=2.344710
+  step 100/390: loss=1.711216
+  step 200/390: loss=1.398627
+  step 300/390: loss=1.400853
+Epoch 1/40: loss=1.557120 lr=0.100000
+  epoch 1: test_acc = 2930/10000 = 29.300000%  top5 = 7865/10000 = 78.650000%  [95% CI 28.42–30.20]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 8374488491564926308)
+  step 0/390: loss=1.489210
+  step 1/390: loss=1.398596
+  step 2/390: loss=1.256029
+  step 100/390: loss=1.210863
+  step 200/390: loss=1.150590
+  step 300/390: loss=1.184344
+Epoch 2/40: loss=1.203638 lr=0.100000
+  epoch 2: test_acc = 4082/10000 = 40.820000%  top5 = 8288/10000 = 82.880000%  [95% CI 39.86–41.79]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13750579315379471025)
+  step 0/390: loss=1.032118
+  step 1/390: loss=1.235877
+  step 2/390: loss=1.015835
+  step 100/390: loss=1.044335
+  step 200/390: loss=1.039594
+  step 300/390: loss=0.969648
+Epoch 3/40: loss=1.047986 lr=0.100000
+  epoch 3: test_acc = 4589/10000 = 45.890000%  top5 = 9222/10000 = 92.220000%  [95% CI 44.92–46.87]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9735595845680646679)
+  step 0/390: loss=1.089287
+  step 1/390: loss=1.038021
+  step 2/390: loss=0.843221
+  step 100/390: loss=0.966255
+  step 200/390: loss=0.857727
+  step 300/390: loss=1.099686
+Epoch 4/40: loss=0.939968 lr=0.100000
+  epoch 4: test_acc = 3941/10000 = 39.410000%  top5 = 8343/10000 = 83.430000%  [95% CI 38.46–40.37]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 953159912092308366)
+  step 0/390: loss=0.794809
+  step 1/390: loss=1.070673
+  step 2/390: loss=0.950799
+  step 100/390: loss=0.739804
+  step 200/390: loss=0.849772
+  step 300/390: loss=0.622925
+Epoch 5/40: loss=0.871609 lr=0.100000
+  epoch 5: test_acc = 2478/10000 = 24.780000%  top5 = 5791/10000 = 57.910000%  [95% CI 23.94–25.64]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9735432779406717514)
+  step 0/390: loss=0.889516
+  step 1/390: loss=0.607593
+  step 2/390: loss=0.900959
+  step 100/390: loss=0.770497
+  step 200/390: loss=0.955972
+  step 300/390: loss=0.753289
+Epoch 6/40: loss=0.814106 lr=0.100000
+  epoch 6: test_acc = 4090/10000 = 40.900000%  top5 = 8932/10000 = 89.320000%  [95% CI 39.94–41.87]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9553234610114805023)
+  step 0/390: loss=0.704198
+  step 1/390: loss=0.717474
+  step 2/390: loss=0.850377
+  step 100/390: loss=0.666645
+  step 200/390: loss=0.665740
+  step 300/390: loss=0.862925
+Epoch 7/40: loss=0.765917 lr=0.100000
+  epoch 7: test_acc = 4613/10000 = 46.130000%  top5 = 8530/10000 = 85.300000%  [95% CI 45.15–47.11]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 18267928771750488754)
+  step 0/390: loss=0.843934
+  step 1/390: loss=0.759974
+  step 2/390: loss=0.548167
+  step 100/390: loss=0.647047
+  step 200/390: loss=0.618003
+  step 300/390: loss=0.817793
+Epoch 8/40: loss=0.724446 lr=0.100000
+  epoch 8: test_acc = 2803/10000 = 28.030000%  top5 = 6295/10000 = 62.950000%  [95% CI 27.16–28.92]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 7554452204936510271)
+  step 0/390: loss=0.702706
+  step 1/390: loss=0.730867
+  step 2/390: loss=0.642765
+  step 100/390: loss=0.648180
+  step 200/390: loss=0.694275
+  step 300/390: loss=0.752757
+Epoch 9/40: loss=0.694809 lr=0.100000
+  epoch 9: test_acc = 5957/10000 = 59.570000%  top5 = 9375/10000 = 93.750000%  [95% CI 58.60–60.53]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 6276436609056567806)
+  step 0/390: loss=0.643092
+  step 1/390: loss=0.727103
+  step 2/390: loss=0.535694
+  step 100/390: loss=0.841944
+  step 200/390: loss=0.862675
+  step 300/390: loss=0.539057
+Epoch 10/40: loss=0.673329 lr=0.100000
+  epoch 10: test_acc = 3614/10000 = 36.140000%  top5 = 6744/10000 = 67.440000%  [95% CI 35.20–37.09]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2191686323805628112)
+  step 0/390: loss=0.547658
+  step 1/390: loss=0.670930
+  step 2/390: loss=0.698406
+  step 100/390: loss=0.583868
+  step 200/390: loss=0.563214
+  step 300/390: loss=0.613932
+Epoch 11/40: loss=0.643523 lr=0.100000
+  epoch 11: test_acc = 6037/10000 = 60.370000%  top5 = 9540/10000 = 95.400000%  [95% CI 59.41–61.32]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2906023518833046959)
+  step 0/390: loss=0.524843
+  step 1/390: loss=0.592654
+  step 2/390: loss=0.593106
+  step 100/390: loss=0.587815
+  step 200/390: loss=0.640808
+  step 300/390: loss=0.569548
+Epoch 12/40: loss=0.620934 lr=0.100000
+  epoch 12: test_acc = 5322/10000 = 53.220000%  top5 = 9166/10000 = 91.660000%  [95% CI 52.24–54.20]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 1214285026455452963)
+  step 0/390: loss=0.652763
+  step 1/390: loss=0.700678
+  step 2/390: loss=0.557033
+  step 100/390: loss=0.765902
+  step 200/390: loss=0.526438
+  step 300/390: loss=0.778249
+Epoch 13/40: loss=0.607915 lr=0.100000
+  epoch 13: test_acc = 5891/10000 = 58.910000%  top5 = 9359/10000 = 93.590000%  [95% CI 57.94–59.87]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 973460931335424524)
+  step 0/390: loss=0.620933
+  step 1/390: loss=0.487906
+  step 2/390: loss=0.635897
+  step 100/390: loss=0.694028
+  step 200/390: loss=0.513841
+  step 300/390: loss=0.581038
+Epoch 14/40: loss=0.585487 lr=0.100000
+  epoch 14: test_acc = 4504/10000 = 45.040000%  top5 = 9145/10000 = 91.450000%  [95% CI 44.07–46.02]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17067401196388974385)
+  step 0/390: loss=0.417377
+  step 1/390: loss=0.534690
+  step 2/390: loss=0.620732
+  step 100/390: loss=0.566578
+  step 200/390: loss=0.659318
+  step 300/390: loss=0.560677
+Epoch 15/40: loss=0.569908 lr=0.100000
+  epoch 15: test_acc = 5640/10000 = 56.400000%  top5 = 9646/10000 = 96.460000%  [95% CI 55.43–57.37]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2782340062997705205)
+  step 0/390: loss=0.377245
+  step 1/390: loss=0.419558
+  step 2/390: loss=0.581822
+  step 100/390: loss=0.489268
+  step 200/390: loss=0.657842
+  step 300/390: loss=0.504723
+Epoch 16/40: loss=0.554752 lr=0.100000
+  epoch 16: test_acc = 5322/10000 = 53.220000%  top5 = 9229/10000 = 92.290000%  [95% CI 52.24–54.20]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13102097738180785464)
+  step 0/390: loss=0.521850
+  step 1/390: loss=0.471496
+  step 2/390: loss=0.609769
+  step 100/390: loss=0.510033
+  step 200/390: loss=0.528393
+  step 300/390: loss=0.745895
+Epoch 17/40: loss=0.541320 lr=0.100000
+  epoch 17: test_acc = 5227/10000 = 52.270000%  top5 = 9493/10000 = 94.930000%  [95% CI 51.29–53.25]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15959567869055433902)
+  step 0/390: loss=0.518330
+  step 1/390: loss=0.515840
+  step 2/390: loss=0.365702
+  step 100/390: loss=0.509814
+  step 200/390: loss=0.571407
+  step 300/390: loss=0.532743
+Epoch 18/40: loss=0.521211 lr=0.100000
+  epoch 18: test_acc = 5898/10000 = 58.980000%  top5 = 9417/10000 = 94.170000%  [95% CI 58.01–59.94]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3915532332291229411)
+  step 0/390: loss=0.598308
+  step 1/390: loss=0.575674
+  step 2/390: loss=0.406553
+  step 100/390: loss=0.623563
+  step 200/390: loss=0.361933
+  step 300/390: loss=0.466111
+Epoch 19/40: loss=0.513093 lr=0.100000
+  epoch 19: test_acc = 5398/10000 = 53.980000%  top5 = 9221/10000 = 92.210000%  [95% CI 53.00–54.96]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 17417711470687025384)
+  step 0/390: loss=0.590664
+  step 1/390: loss=0.484713
+  step 2/390: loss=0.310693
+  step 100/390: loss=0.479581
+  step 200/390: loss=0.544119
+  step 300/390: loss=0.569919
+Epoch 20/40: loss=0.496427 lr=0.100000
+  epoch 20: test_acc = 5351/10000 = 53.510000%  top5 = 8990/10000 = 89.900000%  [95% CI 52.53–54.49]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 12834637750824869365)
+  step 0/390: loss=0.443519
+  step 1/390: loss=0.466669
+  step 2/390: loss=0.375207
+  step 100/390: loss=0.414563
+  step 200/390: loss=0.521545
+  step 300/390: loss=0.531111
+Epoch 21/40: loss=0.490064 lr=0.100000
+  epoch 21: test_acc = 6927/10000 = 69.270000%  top5 = 9706/10000 = 97.060000%  [95% CI 68.36–70.17]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 15084309468686806197)
+  step 0/390: loss=0.385786
+  step 1/390: loss=0.571435
+  step 2/390: loss=0.625770
+  step 100/390: loss=0.513575
+  step 200/390: loss=0.631162
+  step 300/390: loss=0.441632
+Epoch 22/40: loss=0.471339 lr=0.100000
+  epoch 22: test_acc = 6209/10000 = 62.090000%  top5 = 9641/10000 = 96.410000%  [95% CI 61.13–63.04]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 16406656292185225287)
+  step 0/390: loss=0.460992
+  step 1/390: loss=0.489575
+  step 2/390: loss=0.407416
+  step 100/390: loss=0.462074
+  step 200/390: loss=0.476369
+  step 300/390: loss=0.542998
+Epoch 23/40: loss=0.457816 lr=0.100000
+  epoch 23: test_acc = 5586/10000 = 55.860000%  top5 = 9439/10000 = 94.390000%  [95% CI 54.88–56.83]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 11986485586690524918)
+  step 0/390: loss=0.498040
+  step 1/390: loss=0.406121
+  step 2/390: loss=0.428295
+  step 100/390: loss=0.442855
+  step 200/390: loss=0.343599
+  step 300/390: loss=0.633306
+Epoch 24/40: loss=0.449508 lr=0.100000
+  epoch 24: test_acc = 5575/10000 = 55.750000%  top5 = 9317/10000 = 93.170000%  [95% CI 54.77–56.72]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9734973530988978845)
+  step 0/390: loss=0.350034
+  step 1/390: loss=0.558714
+  step 2/390: loss=0.525001
+  step 100/390: loss=0.617209
+  step 200/390: loss=0.428544
+  step 300/390: loss=0.383850
+Epoch 25/40: loss=0.442806 lr=0.100000
+  epoch 25: test_acc = 6535/10000 = 65.350000%  top5 = 9655/10000 = 96.550000%  [95% CI 64.41–66.28]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 5537832440575490403)
+  step 0/390: loss=0.440455
+  step 1/390: loss=0.538165
+  step 2/390: loss=0.485923
+  step 100/390: loss=0.383800
+  step 200/390: loss=0.404730
+  step 300/390: loss=0.369301
+Epoch 26/40: loss=0.432372 lr=0.100000
+  epoch 26: test_acc = 3791/10000 = 37.910000%  top5 = 8381/10000 = 83.810000%  [95% CI 36.96–38.87]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 4947186715539963069)
+  step 0/390: loss=0.416174
+  step 1/390: loss=0.339443
+  step 2/390: loss=0.403489
+  step 100/390: loss=0.591483
+  step 200/390: loss=0.494450
+  step 300/390: loss=0.385417
+Epoch 27/40: loss=0.422920 lr=0.100000
+  epoch 27: test_acc = 5053/10000 = 50.530000%  top5 = 9205/10000 = 92.050000%  [95% CI 49.55–51.51]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 10010684219496938719)
+  step 0/390: loss=0.446054
+  step 1/390: loss=0.408427
+  step 2/390: loss=0.364964
+  step 100/390: loss=0.456214
+  step 200/390: loss=0.289334
+  step 300/390: loss=0.468789
+Epoch 28/40: loss=0.416441 lr=0.100000
+  epoch 28: test_acc = 6902/10000 = 69.020000%  top5 = 9628/10000 = 96.280000%  [95% CI 68.11–69.92]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9928619674653119006)
+  step 0/390: loss=0.515974
+  step 1/390: loss=0.380429
+  step 2/390: loss=0.357210
+  step 100/390: loss=0.469346
+  step 200/390: loss=0.349026
+  step 300/390: loss=0.369862
+Epoch 29/40: loss=0.403146 lr=0.100000
+  epoch 29: test_acc = 6110/10000 = 61.100000%  top5 = 9399/10000 = 93.990000%  [95% CI 60.14–62.05]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3306694894331027845)
+  step 0/390: loss=0.315791
+  step 1/390: loss=0.521709
+  step 2/390: loss=0.535691
+  step 100/390: loss=0.339121
+  step 200/390: loss=0.399058
+  step 300/390: loss=0.422191
+Epoch 30/40: loss=0.398142 lr=0.100000
+  epoch 30: test_acc = 5912/10000 = 59.120000%  top5 = 9540/10000 = 95.400000%  [95% CI 58.15–60.08]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 3939524262567516092)
+  step 0/390: loss=0.315737
+  step 1/390: loss=0.477659
+  step 2/390: loss=0.288590
+  step 100/390: loss=0.449997
+  step 200/390: loss=0.468180
+  step 300/390: loss=0.355877
+Epoch 31/40: loss=0.390834 lr=0.100000
+  epoch 31: test_acc = 5979/10000 = 59.790000%  top5 = 9447/10000 = 94.470000%  [95% CI 58.83–60.75]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 16223992860666297525)
+  step 0/390: loss=0.396870
+  step 1/390: loss=0.338627
+  step 2/390: loss=0.318221
+  step 100/390: loss=0.273075
+  step 200/390: loss=0.359173
+  step 300/390: loss=0.266865
+Epoch 32/40: loss=0.383070 lr=0.100000
+  epoch 32: test_acc = 6696/10000 = 66.960000%  top5 = 9665/10000 = 96.650000%  [95% CI 66.03–67.88]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 16872365419343194761)
+  step 0/390: loss=0.325857
+  step 1/390: loss=0.491182
+  step 2/390: loss=0.420606
+  step 100/390: loss=0.438600
+  step 200/390: loss=0.287525
+  step 300/390: loss=0.496229
+Epoch 33/40: loss=0.375240 lr=0.100000
+  epoch 33: test_acc = 6211/10000 = 62.110000%  top5 = 9507/10000 = 95.070000%  [95% CI 61.15–63.06]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 12142189137549634417)
+  step 0/390: loss=0.396257
+  step 1/390: loss=0.356400
+  step 2/390: loss=0.397418
+  step 100/390: loss=0.390046
+  step 200/390: loss=0.469443
+  step 300/390: loss=0.282068
+Epoch 34/40: loss=0.363996 lr=0.100000
+  epoch 34: test_acc = 7170/10000 = 71.700000%  top5 = 9791/10000 = 97.910000%  [95% CI 70.81–72.57]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13573153082819576565)
+  step 0/390: loss=0.394020
+  step 1/390: loss=0.326440
+  step 2/390: loss=0.331651
+  step 100/390: loss=0.350792
+  step 200/390: loss=0.223632
+  step 300/390: loss=0.344179
+Epoch 35/40: loss=0.360050 lr=0.100000
+  epoch 35: test_acc = 6781/10000 = 67.810000%  top5 = 9682/10000 = 96.820000%  [95% CI 66.89–68.72]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 5886523527677159691)
+  step 0/390: loss=0.321760
+  step 1/390: loss=0.267170
+  step 2/390: loss=0.454094
+  step 100/390: loss=0.275744
+  step 200/390: loss=0.263347
+  step 300/390: loss=0.337758
+Epoch 36/40: loss=0.354658 lr=0.100000
+  epoch 36: test_acc = 6853/10000 = 68.530000%  top5 = 9632/10000 = 96.320000%  [95% CI 67.61–69.43]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 2840383250409161013)
+  step 0/390: loss=0.284201
+  step 1/390: loss=0.234691
+  step 2/390: loss=0.356069
+  step 100/390: loss=0.422229
+  step 200/390: loss=0.372177
+  step 300/390: loss=0.289081
+Epoch 37/40: loss=0.342961 lr=0.100000
+  epoch 37: test_acc = 4837/10000 = 48.370000%  top5 = 8705/10000 = 87.050000%  [95% CI 47.39–49.35]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 6909344973271210785)
+  step 0/390: loss=0.374810
+  step 1/390: loss=0.310431
+  step 2/390: loss=0.294760
+  step 100/390: loss=0.432063
+  step 200/390: loss=0.423642
+  step 300/390: loss=0.463867
+Epoch 38/40: loss=0.337742 lr=0.100000
+  epoch 38: test_acc = 4034/10000 = 40.340000%  top5 = 8157/10000 = 81.570000%  [95% CI 39.38–41.31]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 13544916921174185459)
+  step 0/390: loss=0.199396
+  step 1/390: loss=0.392879
+  step 2/390: loss=0.368625
+  step 100/390: loss=0.316055
+  step 200/390: loss=0.328308
+  step 300/390: loss=0.368492
+Epoch 39/40: loss=0.330613 lr=0.100000
+  epoch 39: test_acc = 6227/10000 = 62.270000%  top5 = 9474/10000 = 94.740000%  [95% CI 61.32–63.22]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 9562274459778090843)
+  step 0/390: loss=0.273174
+  step 1/390: loss=0.325754
+  step 2/390: loss=0.340827
+  step 100/390: loss=0.426436
+  step 200/390: loss=0.392876
+  step 300/390: loss=0.355624
+Epoch 40/40: loss=0.326475 lr=0.100000
+  epoch 40: test_acc = 7339/10000 = 73.390000%  top5 = 9811/10000 = 98.110000%  [95% CI 72.51–74.25]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16sgd_ckpt_iree.bin.bn (384 floats x 2, hash 10895215951593013159)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16sgd + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — Nesterov momentum (μ.9, lr 0.02) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16mom_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16mom (constant lr 0.020000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.434515
+  step 1/390: loss=2.331882
+  step 2/390: loss=2.311942
+  step 100/390: loss=1.526330
+  step 200/390: loss=1.205714
+  step 300/390: loss=1.296838
+Epoch 1/40: loss=1.423896 lr=0.020000
+  epoch 1: test_acc = 4228/10000 = 42.280000%  top5 = 8329/10000 = 83.290000%  [95% CI 41.31–43.25]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 17960264012151238590)
+  step 0/390: loss=1.074013
+  step 1/390: loss=1.204260
+  step 2/390: loss=1.177896
+  step 100/390: loss=1.037614
+  step 200/390: loss=1.042737
+  step 300/390: loss=1.060400
+Epoch 2/40: loss=1.036303 lr=0.020000
+  epoch 2: test_acc = 3283/10000 = 32.830000%  top5 = 7666/10000 = 76.660000%  [95% CI 31.92–33.76]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 11597493198371325366)
+  step 0/390: loss=0.898060
+  step 1/390: loss=1.073022
+  step 2/390: loss=0.803805
+  step 100/390: loss=0.845899
+  step 200/390: loss=0.916519
+  step 300/390: loss=0.855446
+Epoch 3/40: loss=0.915662 lr=0.020000
+  epoch 3: test_acc = 4140/10000 = 41.400000%  top5 = 8151/10000 = 81.510000%  [95% CI 40.44–42.37]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 4453281323385446908)
+  step 0/390: loss=0.941242
+  step 1/390: loss=0.954414
+  step 2/390: loss=0.654856
+  step 100/390: loss=0.821954
+  step 200/390: loss=0.788736
+  step 300/390: loss=0.824181
+Epoch 4/40: loss=0.836672 lr=0.020000
+  epoch 4: test_acc = 3275/10000 = 32.750000%  top5 = 6856/10000 = 68.560000%  [95% CI 31.84–33.68]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3413508254007864360)
+  step 0/390: loss=0.759792
+  step 1/390: loss=1.026086
+  step 2/390: loss=0.763511
+  step 100/390: loss=0.682704
+  step 200/390: loss=0.752629
+  step 300/390: loss=0.723815
+Epoch 5/40: loss=0.775523 lr=0.020000
+  epoch 5: test_acc = 4134/10000 = 41.340000%  top5 = 7619/10000 = 76.190000%  [95% CI 40.38–42.31]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3537963598504802970)
+  step 0/390: loss=0.784129
+  step 1/390: loss=0.649582
+  step 2/390: loss=0.807634
+  step 100/390: loss=0.711760
+  step 200/390: loss=0.813352
+  step 300/390: loss=0.694094
+Epoch 6/40: loss=0.735013 lr=0.020000
+  epoch 6: test_acc = 5494/10000 = 54.940000%  top5 = 9292/10000 = 92.920000%  [95% CI 53.96–55.91]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 13522514940958602481)
+  step 0/390: loss=0.547091
+  step 1/390: loss=0.630940
+  step 2/390: loss=0.755799
+  step 100/390: loss=0.655630
+  step 200/390: loss=0.654581
+  step 300/390: loss=0.720916
+Epoch 7/40: loss=0.698244 lr=0.020000
+  epoch 7: test_acc = 5219/10000 = 52.190000%  top5 = 9304/10000 = 93.040000%  [95% CI 51.21–53.17]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 16643384414756489327)
+  step 0/390: loss=0.663812
+  step 1/390: loss=0.704241
+  step 2/390: loss=0.509966
+  step 100/390: loss=0.644331
+  step 200/390: loss=0.608812
+  step 300/390: loss=0.826512
+Epoch 8/40: loss=0.670022 lr=0.020000
+  epoch 8: test_acc = 3433/10000 = 34.330000%  top5 = 8290/10000 = 82.900000%  [95% CI 33.41–35.27]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 17247480132701738332)
+  step 0/390: loss=0.595876
+  step 1/390: loss=0.523287
+  step 2/390: loss=0.550758
+  step 100/390: loss=0.662862
+  step 200/390: loss=0.567195
+  step 300/390: loss=0.682065
+Epoch 9/40: loss=0.639213 lr=0.020000
+  epoch 9: test_acc = 3820/10000 = 38.200000%  top5 = 7591/10000 = 75.910000%  [95% CI 37.25–39.16]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 13861387158747682027)
+  step 0/390: loss=0.559880
+  step 1/390: loss=0.597952
+  step 2/390: loss=0.531592
+  step 100/390: loss=0.640713
+  step 200/390: loss=0.716492
+  step 300/390: loss=0.513242
+Epoch 10/40: loss=0.613059 lr=0.020000
+  epoch 10: test_acc = 4902/10000 = 49.020000%  top5 = 9343/10000 = 93.430000%  [95% CI 48.04–50.00]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 14675367553670272098)
+  step 0/390: loss=0.472227
+  step 1/390: loss=0.540310
+  step 2/390: loss=0.571847
+  step 100/390: loss=0.558833
+  step 200/390: loss=0.606592
+  step 300/390: loss=0.591239
+Epoch 11/40: loss=0.592747 lr=0.020000
+  epoch 11: test_acc = 5926/10000 = 59.260000%  top5 = 9553/10000 = 95.530000%  [95% CI 58.29–60.22]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 6595780723733330740)
+  step 0/390: loss=0.592479
+  step 1/390: loss=0.550046
+  step 2/390: loss=0.559350
+  step 100/390: loss=0.566617
+  step 200/390: loss=0.504682
+  step 300/390: loss=0.597029
+Epoch 12/40: loss=0.571851 lr=0.020000
+  epoch 12: test_acc = 5279/10000 = 52.790000%  top5 = 9288/10000 = 92.880000%  [95% CI 51.81–53.77]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 13504720491391824133)
+  step 0/390: loss=0.546913
+  step 1/390: loss=0.679760
+  step 2/390: loss=0.480264
+  step 100/390: loss=0.681003
+  step 200/390: loss=0.595753
+  step 300/390: loss=0.682606
+Epoch 13/40: loss=0.558828 lr=0.020000
+  epoch 13: test_acc = 5751/10000 = 57.510000%  top5 = 9520/10000 = 95.200000%  [95% CI 56.54–58.48]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3028057836301287228)
+  step 0/390: loss=0.545658
+  step 1/390: loss=0.535111
+  step 2/390: loss=0.578984
+  step 100/390: loss=0.563287
+  step 200/390: loss=0.460318
+  step 300/390: loss=0.501628
+Epoch 14/40: loss=0.541395 lr=0.020000
+  epoch 14: test_acc = 4667/10000 = 46.670000%  top5 = 8644/10000 = 86.440000%  [95% CI 45.69–47.65]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3535269744297783888)
+  step 0/390: loss=0.417550
+  step 1/390: loss=0.491179
+  step 2/390: loss=0.682461
+  step 100/390: loss=0.620537
+  step 200/390: loss=0.593599
+  step 300/390: loss=0.547105
+Epoch 15/40: loss=0.521627 lr=0.020000
+  epoch 15: test_acc = 5143/10000 = 51.430000%  top5 = 9163/10000 = 91.630000%  [95% CI 50.45–52.41]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3679828240615480305)
+  step 0/390: loss=0.405264
+  step 1/390: loss=0.348158
+  step 2/390: loss=0.612554
+  step 100/390: loss=0.559632
+  step 200/390: loss=0.655190
+  step 300/390: loss=0.596684
+Epoch 16/40: loss=0.506657 lr=0.020000
+  epoch 16: test_acc = 6133/10000 = 61.330000%  top5 = 9478/10000 = 94.780000%  [95% CI 60.37–62.28]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 6799330234519451503)
+  step 0/390: loss=0.484702
+  step 1/390: loss=0.419765
+  step 2/390: loss=0.521698
+  step 100/390: loss=0.466088
+  step 200/390: loss=0.456534
+  step 300/390: loss=0.578894
+Epoch 17/40: loss=0.498809 lr=0.020000
+  epoch 17: test_acc = 2877/10000 = 28.770000%  top5 = 7316/10000 = 73.160000%  [95% CI 27.89–29.67]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 13224054630497120426)
+  step 0/390: loss=0.469211
+  step 1/390: loss=0.538718
+  step 2/390: loss=0.430551
+  step 100/390: loss=0.410723
+  step 200/390: loss=0.469083
+  step 300/390: loss=0.417708
+Epoch 18/40: loss=0.487416 lr=0.020000
+  epoch 18: test_acc = 5676/10000 = 56.760000%  top5 = 9065/10000 = 90.650000%  [95% CI 55.79–57.73]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15685408781915834728)
+  step 0/390: loss=0.509884
+  step 1/390: loss=0.582570
+  step 2/390: loss=0.427335
+  step 100/390: loss=0.515650
+  step 200/390: loss=0.315136
+  step 300/390: loss=0.372605
+Epoch 19/40: loss=0.478092 lr=0.020000
+  epoch 19: test_acc = 6855/10000 = 68.550000%  top5 = 9736/10000 = 97.360000%  [95% CI 67.63–69.45]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15792773479464734838)
+  step 0/390: loss=0.514081
+  step 1/390: loss=0.377599
+  step 2/390: loss=0.305317
+  step 100/390: loss=0.394215
+  step 200/390: loss=0.570768
+  step 300/390: loss=0.431985
+Epoch 20/40: loss=0.460986 lr=0.020000
+  epoch 20: test_acc = 6250/10000 = 62.500000%  top5 = 9588/10000 = 95.880000%  [95% CI 61.55–63.44]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 7293615668230141415)
+  step 0/390: loss=0.425112
+  step 1/390: loss=0.486474
+  step 2/390: loss=0.373884
+  step 100/390: loss=0.406305
+  step 200/390: loss=0.404791
+  step 300/390: loss=0.428978
+Epoch 21/40: loss=0.452904 lr=0.020000
+  epoch 21: test_acc = 6096/10000 = 60.960000%  top5 = 9525/10000 = 95.250000%  [95% CI 60.00–61.91]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3681544410173591262)
+  step 0/390: loss=0.399965
+  step 1/390: loss=0.456808
+  step 2/390: loss=0.541745
+  step 100/390: loss=0.600547
+  step 200/390: loss=0.490996
+  step 300/390: loss=0.372979
+Epoch 22/40: loss=0.443036 lr=0.020000
+  epoch 22: test_acc = 5922/10000 = 59.220000%  top5 = 9519/10000 = 95.190000%  [95% CI 58.25–60.18]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15134996243793799597)
+  step 0/390: loss=0.369450
+  step 1/390: loss=0.402149
+  step 2/390: loss=0.324543
+  step 100/390: loss=0.326533
+  step 200/390: loss=0.477389
+  step 300/390: loss=0.527652
+Epoch 23/40: loss=0.431044 lr=0.020000
+  epoch 23: test_acc = 7241/10000 = 72.410000%  top5 = 9731/10000 = 97.310000%  [95% CI 71.53–73.28]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 1159133072967381277)
+  step 0/390: loss=0.362930
+  step 1/390: loss=0.416744
+  step 2/390: loss=0.353179
+  step 100/390: loss=0.369647
+  step 200/390: loss=0.333823
+  step 300/390: loss=0.541625
+Epoch 24/40: loss=0.417788 lr=0.020000
+  epoch 24: test_acc = 6144/10000 = 61.440000%  top5 = 9244/10000 = 92.440000%  [95% CI 60.48–62.39]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 7402656851826415392)
+  step 0/390: loss=0.378342
+  step 1/390: loss=0.491832
+  step 2/390: loss=0.412819
+  step 100/390: loss=0.475014
+  step 200/390: loss=0.414466
+  step 300/390: loss=0.411635
+Epoch 25/40: loss=0.408462 lr=0.020000
+  epoch 25: test_acc = 6726/10000 = 67.260000%  top5 = 9690/10000 = 96.900000%  [95% CI 66.33–68.17]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 3351492153786349185)
+  step 0/390: loss=0.371753
+  step 1/390: loss=0.440364
+  step 2/390: loss=0.502339
+  step 100/390: loss=0.232179
+  step 200/390: loss=0.355269
+  step 300/390: loss=0.385801
+Epoch 26/40: loss=0.400545 lr=0.020000
+  epoch 26: test_acc = 6130/10000 = 61.300000%  top5 = 9702/10000 = 97.020000%  [95% CI 60.34–62.25]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 128747662000343820)
+  step 0/390: loss=0.296473
+  step 1/390: loss=0.289093
+  step 2/390: loss=0.389654
+  step 100/390: loss=0.592990
+  step 200/390: loss=0.352408
+  step 300/390: loss=0.307963
+Epoch 27/40: loss=0.393164 lr=0.020000
+  epoch 27: test_acc = 7232/10000 = 72.320000%  top5 = 9746/10000 = 97.460000%  [95% CI 71.43–73.19]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 9640851330060674349)
+  step 0/390: loss=0.326646
+  step 1/390: loss=0.558372
+  step 2/390: loss=0.305809
+  step 100/390: loss=0.434107
+  step 200/390: loss=0.266900
+  step 300/390: loss=0.431667
+Epoch 28/40: loss=0.377864 lr=0.020000
+  epoch 28: test_acc = 6117/10000 = 61.170000%  top5 = 9607/10000 = 96.070000%  [95% CI 60.21–62.12]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 10706064029083776871)
+  step 0/390: loss=0.520775
+  step 1/390: loss=0.377744
+  step 2/390: loss=0.346121
+  step 100/390: loss=0.369496
+  step 200/390: loss=0.354510
+  step 300/390: loss=0.357479
+Epoch 29/40: loss=0.371566 lr=0.020000
+  epoch 29: test_acc = 6715/10000 = 67.150000%  top5 = 9687/10000 = 96.870000%  [95% CI 66.22–68.06]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 11486091226897346528)
+  step 0/390: loss=0.300664
+  step 1/390: loss=0.425108
+  step 2/390: loss=0.417950
+  step 100/390: loss=0.334971
+  step 200/390: loss=0.375261
+  step 300/390: loss=0.327984
+Epoch 30/40: loss=0.359842 lr=0.020000
+  epoch 30: test_acc = 6602/10000 = 66.020000%  top5 = 9634/10000 = 96.340000%  [95% CI 65.09–66.94]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 634891522813160652)
+  step 0/390: loss=0.275204
+  step 1/390: loss=0.352022
+  step 2/390: loss=0.287450
+  step 100/390: loss=0.454736
+  step 200/390: loss=0.458183
+  step 300/390: loss=0.354382
+Epoch 31/40: loss=0.352334 lr=0.020000
+  epoch 31: test_acc = 5141/10000 = 51.410000%  top5 = 9067/10000 = 90.670000%  [95% CI 50.43–52.39]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15015848704004827686)
+  step 0/390: loss=0.303297
+  step 1/390: loss=0.187071
+  step 2/390: loss=0.245964
+  step 100/390: loss=0.244785
+  step 200/390: loss=0.343596
+  step 300/390: loss=0.313247
+Epoch 32/40: loss=0.345527 lr=0.020000
+  epoch 32: test_acc = 6840/10000 = 68.400000%  top5 = 9707/10000 = 97.070000%  [95% CI 67.48–69.30]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 11295319179323835760)
+  step 0/390: loss=0.280518
+  step 1/390: loss=0.362237
+  step 2/390: loss=0.327156
+  step 100/390: loss=0.374756
+  step 200/390: loss=0.407856
+  step 300/390: loss=0.579556
+Epoch 33/40: loss=0.336431 lr=0.020000
+  epoch 33: test_acc = 6158/10000 = 61.580000%  top5 = 9330/10000 = 93.300000%  [95% CI 60.62–62.53]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15696983184274979588)
+  step 0/390: loss=0.316967
+  step 1/390: loss=0.292377
+  step 2/390: loss=0.274903
+  step 100/390: loss=0.296209
+  step 200/390: loss=0.450501
+  step 300/390: loss=0.332367
+Epoch 34/40: loss=0.329597 lr=0.020000
+  epoch 34: test_acc = 6722/10000 = 67.220000%  top5 = 9670/10000 = 96.700000%  [95% CI 66.29–68.13]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 15776401216530164791)
+  step 0/390: loss=0.287357
+  step 1/390: loss=0.288118
+  step 2/390: loss=0.313303
+  step 100/390: loss=0.349558
+  step 200/390: loss=0.182030
+  step 300/390: loss=0.404066
+Epoch 35/40: loss=0.322747 lr=0.020000
+  epoch 35: test_acc = 7603/10000 = 76.030000%  top5 = 9795/10000 = 97.950000%  [95% CI 75.18–76.86]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 991393284558023859)
+  step 0/390: loss=0.331025
+  step 1/390: loss=0.320699
+  step 2/390: loss=0.337038
+  step 100/390: loss=0.195449
+  step 200/390: loss=0.329090
+  step 300/390: loss=0.257469
+Epoch 36/40: loss=0.314631 lr=0.020000
+  epoch 36: test_acc = 7182/10000 = 71.820000%  top5 = 9657/10000 = 96.570000%  [95% CI 70.93–72.69]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 9837404001148581163)
+  step 0/390: loss=0.342665
+  step 1/390: loss=0.211612
+  step 2/390: loss=0.317154
+  step 100/390: loss=0.296740
+  step 200/390: loss=0.364602
+  step 300/390: loss=0.305743
+Epoch 37/40: loss=0.305746 lr=0.020000
+  epoch 37: test_acc = 5041/10000 = 50.410000%  top5 = 8724/10000 = 87.240000%  [95% CI 49.43–51.39]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 14345884909891558507)
+  step 0/390: loss=0.272194
+  step 1/390: loss=0.237618
+  step 2/390: loss=0.329092
+  step 100/390: loss=0.355601
+  step 200/390: loss=0.326414
+  step 300/390: loss=0.318005
+Epoch 38/40: loss=0.296180 lr=0.020000
+  epoch 38: test_acc = 5864/10000 = 58.640000%  top5 = 9549/10000 = 95.490000%  [95% CI 57.67–59.60]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 16033658047415062877)
+  step 0/390: loss=0.230962
+  step 1/390: loss=0.322518
+  step 2/390: loss=0.290143
+  step 100/390: loss=0.281567
+  step 200/390: loss=0.261792
+  step 300/390: loss=0.345301
+Epoch 39/40: loss=0.291146 lr=0.020000
+  epoch 39: test_acc = 7275/10000 = 72.750000%  top5 = 9704/10000 = 97.040000%  [95% CI 71.87–73.61]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 9448872002567892126)
+  step 0/390: loss=0.232667
+  step 1/390: loss=0.206676
+  step 2/390: loss=0.222169
+  step 100/390: loss=0.378984
+  step 200/390: loss=0.274931
+  step 300/390: loss=0.403773
+Epoch 40/40: loss=0.287447 lr=0.020000
+  epoch 40: test_acc = 6614/10000 = 66.140000%  top5 = 9531/10000 = 95.310000%  [95% CI 65.21–67.06]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16mom_ckpt_iree.bin.bn (384 floats x 2, hash 8417028136287380074)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16mom + constant lr via packed threading).
+════════ cifar8wb-bbn (batch-statistics BN) bf16 — AdamW (lr 1e-3) ════════
+Wide-head CIFAR-10 CNN + per-channel BatchNorm at BATCH statistics (8 convs, BATCHED op family, d1=512, running-stat eval) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/cifar8wb_bbn_bf16adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/cifar8wb_bbn_fwd_eval_cuda.vmfb
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat bf16adam (constant lr 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/390: loss=2.434515
+  step 1/390: loss=2.367095
+  step 2/390: loss=2.291042
+  step 100/390: loss=1.511935
+  step 200/390: loss=1.341360
+  step 300/390: loss=1.331005
+Epoch 1/40: loss=1.468408 lr=0.001000
+  epoch 1: test_acc = 2288/10000 = 22.880000%  top5 = 6938/10000 = 69.380000%  [95% CI 22.07–23.71]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 15005420324211573828)
+  step 0/390: loss=1.112930
+  step 1/390: loss=1.284308
+  step 2/390: loss=1.279995
+  step 100/390: loss=1.168419
+  step 200/390: loss=1.175013
+  step 300/390: loss=1.100213
+Epoch 2/40: loss=1.126709 lr=0.001000
+  epoch 2: test_acc = 2987/10000 = 29.870000%  top5 = 7422/10000 = 74.220000%  [95% CI 28.98–30.77]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 14130207756281216734)
+  step 0/390: loss=1.012916
+  step 1/390: loss=1.200796
+  step 2/390: loss=0.886086
+  step 100/390: loss=1.055036
+  step 200/390: loss=1.014787
+  step 300/390: loss=0.998735
+Epoch 3/40: loss=0.996325 lr=0.001000
+  epoch 3: test_acc = 1324/10000 = 13.240000%  top5 = 6270/10000 = 62.700000%  [95% CI 12.59–13.92]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 17852915067767150846)
+  step 0/390: loss=0.964141
+  step 1/390: loss=0.992408
+  step 2/390: loss=0.808447
+  step 100/390: loss=0.885033
+  step 200/390: loss=0.919711
+  step 300/390: loss=0.952810
+Epoch 4/40: loss=0.911954 lr=0.001000
+  epoch 4: test_acc = 4650/10000 = 46.500000%  top5 = 9004/10000 = 90.040000%  [95% CI 45.52–47.48]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 12805214379400720499)
+  step 0/390: loss=0.757754
+  step 1/390: loss=1.064888
+  step 2/390: loss=0.812615
+  step 100/390: loss=0.613978
+  step 200/390: loss=0.831835
+  step 300/390: loss=0.702967
+Epoch 5/40: loss=0.842014 lr=0.001000
+  epoch 5: test_acc = 3335/10000 = 33.350000%  top5 = 7208/10000 = 72.080000%  [95% CI 32.43–34.28]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 18071797678550295814)
+  step 0/390: loss=0.900627
+  step 1/390: loss=0.611271
+  step 2/390: loss=0.866056
+  step 100/390: loss=0.652378
+  step 200/390: loss=0.896145
+  step 300/390: loss=0.803876
+Epoch 6/40: loss=0.787978 lr=0.001000
+  epoch 6: test_acc = 4341/10000 = 43.410000%  top5 = 8978/10000 = 89.780000%  [95% CI 42.44–44.38]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 4684642214292239532)
+  step 0/390: loss=0.700663
+  step 1/390: loss=0.636069
+  step 2/390: loss=0.784656
+  step 100/390: loss=0.800577
+  step 200/390: loss=0.657501
+  step 300/390: loss=0.832545
+Epoch 7/40: loss=0.751783 lr=0.001000
+  epoch 7: test_acc = 6143/10000 = 61.430000%  top5 = 9510/10000 = 95.100000%  [95% CI 60.47–62.38]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 4570623970905244103)
+  step 0/390: loss=0.771331
+  step 1/390: loss=0.692594
+  step 2/390: loss=0.566096
+  step 100/390: loss=0.715305
+  step 200/390: loss=0.687518
+  step 300/390: loss=0.663136
+Epoch 8/40: loss=0.715795 lr=0.001000
+  epoch 8: test_acc = 4778/10000 = 47.780000%  top5 = 8137/10000 = 81.370000%  [95% CI 46.80–48.76]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 15087344254155472983)
+  step 0/390: loss=0.669877
+  step 1/390: loss=0.666905
+  step 2/390: loss=0.530925
+  step 100/390: loss=0.696212
+  step 200/390: loss=0.745713
+  step 300/390: loss=0.683322
+Epoch 9/40: loss=0.685144 lr=0.001000
+  epoch 9: test_acc = 6015/10000 = 60.150000%  top5 = 9469/10000 = 94.690000%  [95% CI 59.19–61.11]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 3530426591698796808)
+  step 0/390: loss=0.680404
+  step 1/390: loss=0.732660
+  step 2/390: loss=0.550090
+  step 100/390: loss=0.769062
+  step 200/390: loss=0.897491
+  step 300/390: loss=0.553044
+Epoch 10/40: loss=0.658080 lr=0.001000
+  epoch 10: test_acc = 6707/10000 = 67.070000%  top5 = 9614/10000 = 96.140000%  [95% CI 66.14–67.98]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 11193841966672236490)
+  step 0/390: loss=0.532812
+  step 1/390: loss=0.592362
+  step 2/390: loss=0.580450
+  step 100/390: loss=0.629094
+  step 200/390: loss=0.744509
+  step 300/390: loss=0.613796
+Epoch 11/40: loss=0.637772 lr=0.001000
+  epoch 11: test_acc = 6083/10000 = 60.830000%  top5 = 9544/10000 = 95.440000%  [95% CI 59.87–61.78]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 11223991890964216103)
+  step 0/390: loss=0.546491
+  step 1/390: loss=0.544826
+  step 2/390: loss=0.675234
+  step 100/390: loss=0.641907
+  step 200/390: loss=0.616657
+  step 300/390: loss=0.656900
+Epoch 12/40: loss=0.614609 lr=0.001000
+  epoch 12: test_acc = 6037/10000 = 60.370000%  top5 = 9516/10000 = 95.160000%  [95% CI 59.41–61.32]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 12770372310989438719)
+  step 0/390: loss=0.609177
+  step 1/390: loss=0.630100
+  step 2/390: loss=0.475464
+  step 100/390: loss=0.699046
+  step 200/390: loss=0.547479
+  step 300/390: loss=0.685271
+Epoch 13/40: loss=0.589508 lr=0.001000
+  epoch 13: test_acc = 6893/10000 = 68.930000%  top5 = 9756/10000 = 97.560000%  [95% CI 68.02–69.83]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 2305671976395657273)
+  step 0/390: loss=0.594615
+  step 1/390: loss=0.544644
+  step 2/390: loss=0.628138
+  step 100/390: loss=0.526198
+  step 200/390: loss=0.531658
+  step 300/390: loss=0.638564
+Epoch 14/40: loss=0.569940 lr=0.001000
+  epoch 14: test_acc = 6626/10000 = 66.260000%  top5 = 9394/10000 = 93.940000%  [95% CI 65.33–67.18]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 2380345205486511122)
+  step 0/390: loss=0.484586
+  step 1/390: loss=0.521489
+  step 2/390: loss=0.500518
+  step 100/390: loss=0.542434
+  step 200/390: loss=0.665299
+  step 300/390: loss=0.580652
+Epoch 15/40: loss=0.553647 lr=0.001000
+  epoch 15: test_acc = 6773/10000 = 67.730000%  top5 = 9729/10000 = 97.290000%  [95% CI 66.81–68.64]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 9401713463830126211)
+  step 0/390: loss=0.441386
+  step 1/390: loss=0.384032
+  step 2/390: loss=0.605757
+  step 100/390: loss=0.484090
+  step 200/390: loss=0.597749
+  step 300/390: loss=0.541136
+Epoch 16/40: loss=0.541288 lr=0.001000
+  epoch 16: test_acc = 4642/10000 = 46.420000%  top5 = 8179/10000 = 81.790000%  [95% CI 45.44–47.40]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 212988118379200581)
+  step 0/390: loss=0.549855
+  step 1/390: loss=0.435532
+  step 2/390: loss=0.529435
+  step 100/390: loss=0.381846
+  step 200/390: loss=0.560792
+  step 300/390: loss=0.604382
+Epoch 17/40: loss=0.522050 lr=0.001000
+  epoch 17: test_acc = 4808/10000 = 48.080000%  top5 = 8313/10000 = 83.130000%  [95% CI 47.10–49.06]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 6613360110855054358)
+  step 0/390: loss=0.442088
+  step 1/390: loss=0.483247
+  step 2/390: loss=0.352759
+  step 100/390: loss=0.476623
+  step 200/390: loss=0.650275
+  step 300/390: loss=0.516225
+Epoch 18/40: loss=0.514115 lr=0.001000
+  epoch 18: test_acc = 7079/10000 = 70.790000%  top5 = 9690/10000 = 96.900000%  [95% CI 69.89–71.67]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 1874831607255436237)
+  step 0/390: loss=0.434278
+  step 1/390: loss=0.563871
+  step 2/390: loss=0.441956
+  step 100/390: loss=0.550752
+  step 200/390: loss=0.314772
+  step 300/390: loss=0.534971
+Epoch 19/40: loss=0.492372 lr=0.001000
+  epoch 19: test_acc = 5899/10000 = 58.990000%  top5 = 9428/10000 = 94.280000%  [95% CI 58.02–59.95]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 11029707649750596871)
+  step 0/390: loss=0.477341
+  step 1/390: loss=0.398722
+  step 2/390: loss=0.364151
+  step 100/390: loss=0.486720
+  step 200/390: loss=0.424811
+  step 300/390: loss=0.539876
+Epoch 20/40: loss=0.478030 lr=0.001000
+  epoch 20: test_acc = 6560/10000 = 65.600000%  top5 = 9571/10000 = 95.710000%  [95% CI 64.66–66.52]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 8786756059591527326)
+  step 0/390: loss=0.376035
+  step 1/390: loss=0.375204
+  step 2/390: loss=0.370015
+  step 100/390: loss=0.404651
+  step 200/390: loss=0.449517
+  step 300/390: loss=0.500513
+Epoch 21/40: loss=0.470231 lr=0.001000
+  epoch 21: test_acc = 6579/10000 = 65.790000%  top5 = 9664/10000 = 96.640000%  [95% CI 64.85–66.71]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 9374642366376668094)
+  step 0/390: loss=0.417430
+  step 1/390: loss=0.456864
+  step 2/390: loss=0.503936
+  step 100/390: loss=0.522342
+  step 200/390: loss=0.573349
+  step 300/390: loss=0.479953
+Epoch 22/40: loss=0.453533 lr=0.001000
+  epoch 22: test_acc = 6970/10000 = 69.700000%  top5 = 9764/10000 = 97.640000%  [95% CI 68.79–70.59]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 11060417611565574521)
+  step 0/390: loss=0.354581
+  step 1/390: loss=0.487728
+  step 2/390: loss=0.431696
+  step 100/390: loss=0.348853
+  step 200/390: loss=0.422721
+  step 300/390: loss=0.583684
+Epoch 23/40: loss=0.446467 lr=0.001000
+  epoch 23: test_acc = 5205/10000 = 52.050000%  top5 = 9287/10000 = 92.870000%  [95% CI 51.07–53.03]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 384192206206856772)
+  step 0/390: loss=0.336384
+  step 1/390: loss=0.467728
+  step 2/390: loss=0.351450
+  step 100/390: loss=0.379587
+  step 200/390: loss=0.320099
+  step 300/390: loss=0.551428
+Epoch 24/40: loss=0.425899 lr=0.001000
+  epoch 24: test_acc = 5799/10000 = 57.990000%  top5 = 9162/10000 = 91.620000%  [95% CI 57.02–58.95]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 13566767279092369038)
+  step 0/390: loss=0.408933
+  step 1/390: loss=0.428841
+  step 2/390: loss=0.469248
+  step 100/390: loss=0.529435
+  step 200/390: loss=0.404136
+  step 300/390: loss=0.491424
+Epoch 25/40: loss=0.415330 lr=0.001000
+  epoch 25: test_acc = 7075/10000 = 70.750000%  top5 = 9636/10000 = 96.360000%  [95% CI 69.85–71.63]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 18167301561622977035)
+  step 0/390: loss=0.415692
+  step 1/390: loss=0.453240
+  step 2/390: loss=0.456917
+  step 100/390: loss=0.395560
+  step 200/390: loss=0.387497
+  step 300/390: loss=0.403741
+Epoch 26/40: loss=0.403772 lr=0.001000
+  epoch 26: test_acc = 7165/10000 = 71.650000%  top5 = 9750/10000 = 97.500000%  [95% CI 70.76–72.52]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 2939663696039432051)
+  step 0/390: loss=0.387587
+  step 1/390: loss=0.260095
+  step 2/390: loss=0.352977
+  step 100/390: loss=0.498511
+  step 200/390: loss=0.390292
+  step 300/390: loss=0.269782
+Epoch 27/40: loss=0.395640 lr=0.001000
+  epoch 27: test_acc = 7301/10000 = 73.010000%  top5 = 9768/10000 = 97.680000%  [95% CI 72.13–73.87]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 17687761569735832861)
+  step 0/390: loss=0.404853
+  step 1/390: loss=0.461426
+  step 2/390: loss=0.403731
+  step 100/390: loss=0.391114
+  step 200/390: loss=0.275620
+  step 300/390: loss=0.419001
+Epoch 28/40: loss=0.386770 lr=0.001000
+  epoch 28: test_acc = 4643/10000 = 46.430000%  top5 = 8611/10000 = 86.110000%  [95% CI 45.45–47.41]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 6646659669399625752)
+  step 0/390: loss=0.424622
+  step 1/390: loss=0.453165
+  step 2/390: loss=0.333179
+  step 100/390: loss=0.352113
+  step 200/390: loss=0.426413
+  step 300/390: loss=0.337603
+Epoch 29/40: loss=0.372868 lr=0.001000
+  epoch 29: test_acc = 6464/10000 = 64.640000%  top5 = 9437/10000 = 94.370000%  [95% CI 63.70–65.57]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 10019755674653946289)
+  step 0/390: loss=0.269397
+  step 1/390: loss=0.508372
+  step 2/390: loss=0.495944
+  step 100/390: loss=0.343904
+  step 200/390: loss=0.339340
+  step 300/390: loss=0.349915
+Epoch 30/40: loss=0.362203 lr=0.001000
+  epoch 30: test_acc = 6612/10000 = 66.120000%  top5 = 9675/10000 = 96.750000%  [95% CI 65.19–67.04]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 6771965654963274684)
+  step 0/390: loss=0.305628
+  step 1/390: loss=0.366142
+  step 2/390: loss=0.285978
+  step 100/390: loss=0.468927
+  step 200/390: loss=0.407912
+  step 300/390: loss=0.354457
+Epoch 31/40: loss=0.349036 lr=0.001000
+  epoch 31: test_acc = 5568/10000 = 55.680000%  top5 = 9178/10000 = 91.780000%  [95% CI 54.70–56.65]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 17181502708099699960)
+  step 0/390: loss=0.335284
+  step 1/390: loss=0.335900
+  step 2/390: loss=0.292765
+  step 100/390: loss=0.350022
+  step 200/390: loss=0.410539
+  step 300/390: loss=0.396995
+Epoch 32/40: loss=0.348115 lr=0.001000
+  epoch 32: test_acc = 7168/10000 = 71.680000%  top5 = 9702/10000 = 97.020000%  [95% CI 70.79–72.55]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 6134513900618179867)
+  step 0/390: loss=0.283238
+  step 1/390: loss=0.335122
+  step 2/390: loss=0.335826
+  step 100/390: loss=0.435382
+  step 200/390: loss=0.295217
+  step 300/390: loss=0.462741
+Epoch 33/40: loss=0.324646 lr=0.001000
+  epoch 33: test_acc = 6414/10000 = 64.140000%  top5 = 9561/10000 = 95.610000%  [95% CI 63.19–65.07]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 6852989500114833471)
+  step 0/390: loss=0.290210
+  step 1/390: loss=0.292885
+  step 2/390: loss=0.249996
+  step 100/390: loss=0.380407
+  step 200/390: loss=0.414779
+  step 300/390: loss=0.355905
+Epoch 34/40: loss=0.323006 lr=0.001000
+  epoch 34: test_acc = 6487/10000 = 64.870000%  top5 = 9333/10000 = 93.330000%  [95% CI 63.93–65.80]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 2935526841684594580)
+  step 0/390: loss=0.341258
+  step 1/390: loss=0.339192
+  step 2/390: loss=0.203025
+  step 100/390: loss=0.327701
+  step 200/390: loss=0.257620
+  step 300/390: loss=0.358133
+Epoch 35/40: loss=0.312404 lr=0.001000
+  epoch 35: test_acc = 7163/10000 = 71.630000%  top5 = 9767/10000 = 97.670000%  [95% CI 70.74–72.51]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 5887158021154168582)
+  step 0/390: loss=0.242119
+  step 1/390: loss=0.339456
+  step 2/390: loss=0.278015
+  step 100/390: loss=0.279123
+  step 200/390: loss=0.263540
+  step 300/390: loss=0.309469
+Epoch 36/40: loss=0.304332 lr=0.001000
+  epoch 36: test_acc = 6248/10000 = 62.480000%  top5 = 9102/10000 = 91.020000%  [95% CI 61.53–63.42]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 1939968435532231206)
+  step 0/390: loss=0.236676
+  step 1/390: loss=0.239606
+  step 2/390: loss=0.269681
+  step 100/390: loss=0.290674
+  step 200/390: loss=0.259434
+  step 300/390: loss=0.278360
+Epoch 37/40: loss=0.295268 lr=0.001000
+  epoch 37: test_acc = 6201/10000 = 62.010000%  top5 = 9490/10000 = 94.900000%  [95% CI 61.05–62.96]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 13045486790349133881)
+  step 0/390: loss=0.214995
+  step 1/390: loss=0.280998
+  step 2/390: loss=0.326258
+  step 100/390: loss=0.222742
+  step 200/390: loss=0.290139
+  step 300/390: loss=0.340076
+Epoch 38/40: loss=0.285299 lr=0.001000
+  epoch 38: test_acc = 6315/10000 = 63.150000%  top5 = 9503/10000 = 95.030000%  [95% CI 62.20–64.09]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 9277866865988874282)
+  step 0/390: loss=0.217093
+  step 1/390: loss=0.424257
+  step 2/390: loss=0.271955
+  step 100/390: loss=0.300849
+  step 200/390: loss=0.259467
+  step 300/390: loss=0.324546
+Epoch 39/40: loss=0.275470 lr=0.001000
+  epoch 39: test_acc = 6664/10000 = 66.640000%  top5 = 9553/10000 = 95.530000%  [95% CI 65.71–67.56]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 3548721180931473878)
+  step 0/390: loss=0.168757
+  step 1/390: loss=0.169989
+  step 2/390: loss=0.214521
+  step 100/390: loss=0.189527
+  step 200/390: loss=0.287708
+  step 300/390: loss=0.305185
+Epoch 40/40: loss=0.267730 lr=0.001000
+  epoch 40: test_acc = 7076/10000 = 70.760000%  top5 = 9697/10000 = 96.970000%  [95% CI 69.86–71.64]
+    BN companion -> .lake/build/cifar8wb_bbn_bf16adam_ckpt_iree.bin.bn (384 floats x 2, hash 16641093848423806673)
+done (trained CIFAR-CNN8-wide-BN-batchstat bf16adam + constant lr via packed threading).
