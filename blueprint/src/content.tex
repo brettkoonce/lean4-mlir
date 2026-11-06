@@ -20053,16 +20053,19 @@ been tried.
 \textbf{IREE}, which compiles every kernel itself and so runs where no
 vendor library exists. \texttt{LEAN\_MLIR\_LOWERER=iree} selects it, and
 every rung of \emph{Getting started} has an \texttt{-iree} twin that does so
-(\texttt{lake run mnist-iree}, and so on); the Imagenette twin runs five of
-the seven nets, since ResNet-50 and MobileNetV4 have no IREE driver. It
-needs \texttt{iree-compile} on \texttt{\$PATH}, the runtime built per
-\texttt{historical/\allowbreak IREE\_BUILD.md}, and
-\texttt{ffi/\allowbreak libiree\_ffi.so}; having no plugin to load, it is
-admitted by its twins rather than by the suite. Collectives exist only on
-the PJRT path, so the ImageNet rung is XLA-only. On the CPU, IREE 3.11's
-\texttt{llvm-cpu} miscompiles the pooled train steps, and the CPU gradient
-gate runs on \texttt{vmvx} instead. What the second lowerer is for, which
-is not that you might train on it, is \S\ref{sec:jax_pipeline} in
+(\texttt{lake run mnist-iree}, and so on), the same binaries as the XLA
+rung, the Imagenette twin all seven nets. The row is pinned to IREE 3.12.0:
+\texttt{deploy/\allowbreak iree\_cpu\_setup.sh} installs that release's
+\texttt{iree-compile} and builds \texttt{ffi/\allowbreak libiree\_ffi.so}
+for the CPU or, with \texttt{IREE\_TARGET=cuda}, for the card. Having no
+plugin to load, it is admitted by its twins rather than by the suite. The
+MNIST and CIFAR twins have run over CUDA on the 4060 Ti at that pin, each
+MNIST net inside XLA's thirty-seed range and the six arms of the chapter's
+CIFAR pair inside XLA's five-seed ranges or within a quarter of a point of
+them; the Imagenette twin's seven nets lower and step there, and the row
+owes their 80-epoch finals. Collectives exist only on the PJRT path, so the
+ImageNet rung is XLA-only. What the second lowerer is for, which is not
+that you might train on it, is \S\ref{sec:jax_pipeline} in
 Appendix~\ref{app:verification}.
 
 \section*{Common troubleshooting}

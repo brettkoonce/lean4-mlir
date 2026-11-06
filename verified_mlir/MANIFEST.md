@@ -112,8 +112,8 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 |---|---|---|---|---|---|---|
 | `cifar8wb_bbn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 91 |
 | `cifar8wb_bbn_fwd_eval.mlir` | fwd_eval | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 91 |
-| `cifar8wb_bbn_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 84 |
-| `cifar8wb_bbn_bf16adam_train_step.mlir` | train_step | `bf16adam` | AdamW, bf16 | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 23 |
+| `cifar8wb_bbn_adam_train_step.mlir` | train_step | `adam` | AdamW | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 86 |
+| `cifar8wb_bbn_bf16adam_train_step.mlir` | train_step | `bf16adam` | AdamW, bf16 | 0.2 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 25 |
 | `cifar8wb_bbn_bf16mom_train_step.mlir` | train_step | `bf16mom` | momentum, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |
 | `cifar8wb_bbn_bf16sgd_train_step.mlir` | train_step | `bf16sgd` | SGD, bf16 | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 21 |
 | `cifar8wb_bbn_mom_train_step.mlir` | train_step | `mom` | momentum | 0.1 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 20 |

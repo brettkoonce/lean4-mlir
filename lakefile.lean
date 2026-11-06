@@ -2349,7 +2349,7 @@ script «cifar-iree» do
 
     On a box without a GPU this is the only way to run the tier at all:
     `IREE_BACKEND=llvm-cpu lake run imagenette-iree`, with `ffi/libiree_ffi.so` from
-    `deploy/iree_cpu_setup.sh` (IREE 3.13: 3.11's CPU task device crashes on the 224² nets). Slow —
+    `deploy/iree_cpu_setup.sh` (IREE 3.12.0, the row's pin). Slow —
     seconds per step at batch 32 on 88 cores, an 18-minute MobileNetV2 epoch — so a training run
     here is days, not hours. -/
 script «imagenette-iree» do
@@ -2386,12 +2386,10 @@ script mnist do
     × no-BN / per-image BN / batch-statistics BN, the last also in bf16 (twelve arms, three
     binaries).
 
-    `cifar8w-ablation` and `cifar8w-bn-ablation` are the pair `lake run cifar-iree` mirrors, the
-    SAME binaries differing only in the lowerer `runDemoGroup` selects. `cifar8wb-bbn-ablation` is
-    the chapter's headline net — BatchNorm at batch statistics with running-stat eval, the layer
-    Chapter 5 onward trains — and is XLA-only here: IREE 3.11's llvm-cpu miscompiles the pooled
-    batched steps (planning/cifar-batch-bn-rerender.md; 3.13's does not, per the gate), so it has
-    no `-iree` twin. All three run
+    All three are the binaries `lake run cifar-iree` mirrors, the SAME binaries differing only in
+    the lowerer `runDemoGroup` selects (`cifar8wb-bbn-ablation`, the chapter's headline net —
+    BatchNorm at batch statistics with running-stat eval, the layer Chapter 5 onward trains —
+    with the one compile flag its bf16 arms need, per that script's note). All three run
     the WIDE head so the demo trains the nets Chapter 4 reports on; wide costs more wall-clock per
     epoch than narrow and buys no accuracy — §4.3's head-width sweep is exactly that finding —
     but matching the chapter is worth the minutes. -/
