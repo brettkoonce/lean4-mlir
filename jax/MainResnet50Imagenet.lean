@@ -248,6 +248,15 @@ def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
       gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 on 4×16GB
       wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
 
+/-- **RSB-faithful A3, per-GPU Mixup/CutMix** — `rsb-faithful` with the step's 2048 drawn as eight
+    independent 256-row chunks (`mixChunks := 8`) instead of one draw for the whole step: timm draws
+    once per GPU batch. The A/B for the reference's gap to the paper at A3
+    (runs/2026-10-30-r50-a3-seeds/RESULTS.md): one draw per step makes every CutMix step whose
+    minor share clears the BCE threshold two-hot on every image at once; everything else is
+    `rsb-faithful` unchanged. -/
+def resnet50ImagenetConfigRSBFaithfulMix8 : TrainConfig :=
+  { resnet50ImagenetConfigRSBFaithful with mixChunks := 8 }
+
 /-- **True bs2048** — the `rsb-faithful` recipe with the gradient-accumulation
     crutch removed: one single-forward batch of 2048 (`gradAccumSteps := 1`), which
     needs a big-memory card (**~80 GB**; a 48 GB card is borderline/OOM). This eliminates the Ghost-BN approximation
@@ -345,6 +354,9 @@ def resnet50ImagenetRecipes : List Recipe := [
   { name := "rsb-faithful", cfg := resnet50ImagenetConfigRSBFaithful,
     out := "generated_resnet50_imagenet_rsbfaithful.py",
     desc := "RSB-A3 + gradient accumulation -> effective bs2048 (LAMB's design batch)" },
+  { name := "rsb-faithful-mix8", cfg := resnet50ImagenetConfigRSBFaithfulMix8,
+    out := "generated_resnet50_imagenet_rsbfaithful_mix8.py",
+    desc := "rsb-faithful with Mixup/CutMix drawn per 256-row chunk (timm's per-GPU draw), 8 a step" },
   { name := "true-2048",    cfg := resnet50ImagenetConfigTrue2048,
     out := "generated_resnet50_imagenet_true2048.py",
     desc := "RSB-A3 at a real single-forward bs2048 (no grad-accum; needs ~80GB)" },

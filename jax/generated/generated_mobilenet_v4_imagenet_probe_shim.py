@@ -513,6 +513,9 @@ def _main():
             b = x[B - e:B - s][::-1].copy()
             x[s:e] = f(a, b)
             x[B - e:B - s] = f(b, a)[::-1]
+    _MIX_CHUNK = int(os.environ.get('SHIM_MIX_CHUNK', '0'))
+    if _MIX_ON and _MIX_CHUNK > 0:
+        sys.stderr.write('shim: Mixup/CutMix drawn per %d rows (SHIM_MIX_CHUNK)\n' % _MIX_CHUNK)
     def _mix(x, t, step):
         # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests
         # are byte-for-byte what they were before mixing existed. Also the path the VALIDATION
@@ -524,7 +527,19 @@ def _main():
         B = t.shape[0]
         # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded
         # draw makes the run unreproducible and breaks every gate that replays a batch.
-        rng = np.random.default_rng([_SHIM_SEED, step])
+        if _MIX_CHUNK <= 0 or _MIX_CHUNK >= B:
+            return _mix1(x, t, np.random.default_rng([_SHIM_SEED, step]), step)
+        if B % _MIX_CHUNK:
+            raise SystemExit('SHIM_MIX_CHUNK=%d does not divide the %d-row batch' % (_MIX_CHUNK, B))
+        ts = []
+        for c in range(B // _MIX_CHUNK):
+            s = c * _MIX_CHUNK
+            rng = np.random.default_rng([_SHIM_SEED, step] + ([c] if c else []))
+            # the slices are views: `_mix1` mixes their pixels in place
+            ts.append(_mix1(x[s:s + _MIX_CHUNK], t[s:s + _MIX_CHUNK], rng, step)[1])
+        return x, np.ascontiguousarray(np.concatenate(ts), dtype=np.float32)
+    def _mix1(x, t, rng, step):
+        B = t.shape[0]
         # `both` alternates per step, matching the reference's `if _global_step % 2 == 0`.
         cut = (_MIX_MODE == 'cutmix') or (_MIX_MODE == 'both' and (step % 2) == 1)
         if not cut:

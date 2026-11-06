@@ -3281,6 +3281,25 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)\n" ++
     "    return x4m.reshape(B, -1), ym\n\n"
    else "") ++
+  -- `mixChunks > 1`: timm's per-GPU draw. Both mixes run on every chunk and the coin selects (an
+  --    elementwise `where` under `vmap`, cheaper to reason about than a batched `cond`); the chunk
+  --    axis keeps the batch sharding, and each chunk sits inside one accumulation micro-batch.
+  (if cfg.mixChunks > 1 && cfg.useMixup && cfg.useCutmix && cfg.mixSwitchProb > 0.0 then
+    "MIX_CHUNKS = " ++ toString cfg.mixChunks ++ "\n\n" ++
+    "@jit\n" ++
+    "def _mix_chunked(x, y, key, cut):\n" ++
+    "    # timm Mixup per GPU batch: MIX_CHUNKS contiguous chunks, each its own coin (cut[c]), lambda\n" ++
+    "    # and box, the partner flipped within the chunk\n" ++
+    "    B = x.shape[0]; n = B // MIX_CHUNKS\n" ++
+    "    xs = x.reshape(MIX_CHUNKS, n, x.shape[1]); ys = y.reshape(MIX_CHUNKS, n)\n" ++
+    "    ks = jax.vmap(lambda c: jax.random.fold_in(key, c))(jnp.arange(MIX_CHUNKS))\n" ++
+    "    def one(xc, yc, kc, cc):\n" ++
+    "        xa, ya = _mixup(xc, yc, kc)\n" ++
+    "        xb, yb = _cutmix(xc, yc, kc)\n" ++
+    "        return jnp.where(cc, xb, xa), jnp.where(cc, yb, ya)\n" ++
+    "    xm, ym = jax.vmap(one)(xs, ys, ks, cut)\n" ++
+    "    return xm.reshape(B, -1), ym.reshape(B, -1)\n\n"
+   else "") ++
   "@jit\n" ++
   (if cfg.runningBN then "def eval_batch(params, bn, x, y, take):\n" else "def eval_batch(params, x, y, take):\n") ++
   (if cfg.runningBN then "    logits, _ = forward(params, x, bn, False)\n" else "    logits = forward(params, x)\n") ++
@@ -3648,7 +3667,12 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    else "") ++
   (let mk := "jax.random.fold_in(jax.random.PRNGKey(" ++ toString cfg.seed ++ " + _SEED_OFF), _global_step)"
    if cfg.useMixup && cfg.useCutmix then
-     (if cfg.mixSwitchProb > 0.0 then
+     (if cfg.mixSwitchProb > 0.0 && cfg.mixChunks > 1 then
+       "            # timm Mixup(switch_prob) per GPU batch: one coin per chunk, seeded from (seed, step)\n" ++
+       "            _cut = jnp.asarray(np.random.default_rng([" ++ toString cfg.seed ++ " + _SEED_OFF, _global_step]).random(MIX_CHUNKS) < " ++
+         toString cfg.mixSwitchProb ++ ")\n" ++
+       "            x, y = _mix_chunked(x, y, " ++ mk ++ ", _cut)\n"
+      else if cfg.mixSwitchProb > 0.0 then
        "            # timm Mixup(switch_prob): CutMix with probability p per batch, seeded from (seed, step)\n" ++
        "            if np.random.default_rng([" ++ toString cfg.seed ++ " + _SEED_OFF, _global_step]).random() < " ++
          toString cfg.mixSwitchProb ++ ":\n" ++
@@ -4283,6 +4307,15 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "            b = x[B - e:B - s][::-1].copy()\n" ++
   "            x[s:e] = f(a, b)\n" ++
   "            x[B - e:B - s] = f(b, a)[::-1]\n" ++
+  -- ONE DRAW PER `SHIM_MIX_CHUNK` ROWS, not per batch, when it is set. The batch here is the
+  -- driver's whole invoke (replicas × per-replica rows), and timm draws once per GPU batch; at
+  -- R50 A3 one draw per step cost the JAX reference half a point
+  -- (runs/2026-11-06-r50-a3mix8-jax/RESULTS.md, the reference's `mixChunks`). Unset or 0 is one
+  -- draw per batch, byte for byte, so every existing SHIM_HASH digest stands. Chunk 0 draws from
+  -- the unchunked seed, chunk c > 0 from (SHIM_SEED, step, c); partners stay inside the chunk.
+  "    _MIX_CHUNK = int(os.environ.get('SHIM_MIX_CHUNK', '0'))\n" ++
+  "    if _MIX_ON and _MIX_CHUNK > 0:\n" ++
+  "        sys.stderr.write('shim: Mixup/CutMix drawn per %d rows (SHIM_MIX_CHUNK)\\n' % _MIX_CHUNK)\n" ++
   "    def _mix(x, t, step):\n" ++
   "        # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests\n" ++
   "        # are byte-for-byte what they were before mixing existed. Also the path the VALIDATION\n" ++
@@ -4294,7 +4327,19 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        B = t.shape[0]\n" ++
   "        # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
   "        # draw makes the run unreproducible and breaks every gate that replays a batch.\n" ++
-  "        rng = np.random.default_rng([_SHIM_SEED, step])\n" ++
+  "        if _MIX_CHUNK <= 0 or _MIX_CHUNK >= B:\n" ++
+  "            return _mix1(x, t, np.random.default_rng([_SHIM_SEED, step]), step)\n" ++
+  "        if B % _MIX_CHUNK:\n" ++
+  "            raise SystemExit('SHIM_MIX_CHUNK=%d does not divide the %d-row batch' % (_MIX_CHUNK, B))\n" ++
+  "        ts = []\n" ++
+  "        for c in range(B // _MIX_CHUNK):\n" ++
+  "            s = c * _MIX_CHUNK\n" ++
+  "            rng = np.random.default_rng([_SHIM_SEED, step] + ([c] if c else []))\n" ++
+  "            # the slices are views: `_mix1` mixes their pixels in place\n" ++
+  "            ts.append(_mix1(x[s:s + _MIX_CHUNK], t[s:s + _MIX_CHUNK], rng, step)[1])\n" ++
+  "        return x, np.ascontiguousarray(np.concatenate(ts), dtype=np.float32)\n" ++
+  "    def _mix1(x, t, rng, step):\n" ++
+  "        B = t.shape[0]\n" ++
   (if cfg.mixSwitchProb > 0.0 then
     "        # `both` draws CutMix with probability p per batch (timm Mixup switch_prob), as the reference.\n" ++
     "        cut = (_MIX_MODE == 'cutmix') or (_MIX_MODE == 'both' and rng.random() < " ++

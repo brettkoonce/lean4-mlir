@@ -1,0 +1,13 @@
+  n = 50000
+  JAX mix8 s1 39072/50000 = 78.14%   95% CI 77.78–78.50
+  verified s2 38911/50000 = 77.82%   95% CI 77.46–78.18
+  unpaired gap: -0.32 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 37020   both wrong 9037   only JAX mix8 s1 2052   only verified s2 1891
+  discordant: 3943 of 50000 (7.9%) — the only images the test looks at
+  McNemar exact two-sided p = 0.01082   (chi2 w/ continuity = 6.49)
+  ✓ SIGNIFICANT at p<0.05 — JAX mix8 s1 is better on this val set, and the finite-set
+    CI above is NOT the right reason to doubt it (the comparison is paired)
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.

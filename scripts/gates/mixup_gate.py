@@ -65,7 +65,7 @@ def run_env(**kw):
     return e
 
 
-def digest(mix, seed, n=None, split=None, nclasses=...):
+def digest(mix, seed, n=None, split=None, nclasses=..., **extra):
     """`SHIM_HASH` over n batches -> the hex digest the shim prints to stderr."""
     n = n or A.batches
     if nclasses is ...:
@@ -73,19 +73,19 @@ def digest(mix, seed, n=None, split=None, nclasses=...):
     p = subprocess.run([A.python, A.script], capture_output=True, env=run_env(
         SHIM_BATCH=A.batch, SHIM_HASH=n, SHIM_SEED=seed, SHIM_SPLIT=split,
         SHIM_NCLASSES=nclasses,
-        SHIM_MIX=(mix if mix != "v1" else None)))
+        SHIM_MIX=(mix if mix != "v1" else None), **extra))
     for line in p.stderr.decode().splitlines():
         if line.startswith("SHIM_HASH"):
             return line.rsplit(": ", 1)[1].strip()
     raise SystemExit(f"no SHIM_HASH line (rc={p.returncode}):\n{p.stderr.decode()[-2000:]}")
 
 
-def stream(mix, seed):
+def stream(mix, seed, **extra):
     """Read `A.batches` records off the shim's stdout. Returns [(t, x), ...] as float32."""
     p = subprocess.Popen([A.python, A.script], stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, env=run_env(
                              SHIM_BATCH=A.batch, SHIM_SEED=seed,
-                             SHIM_NCLASSES=A.nclasses, SHIM_MIX=mix))
+                             SHIM_NCLASSES=A.nclasses, SHIM_MIX=mix, **extra))
 
     def rd(n):
         buf = b""
@@ -214,6 +214,49 @@ for mode in ("mixup", "cutmix", "both"):
     # ignored the seed entirely — would pass the line above perfectly.
     check(f"{mode}: different seed => DIFFERENT digest", a != c, f"{a[:16]} vs {c[:16]}")
 
+def known_answer(mode, i, t, x, tm, xm, tag=""):
+    """Gate 3's checks on one record (or one chunk of one): the mixed (tm, xm) against the unmixed
+    (t, x) at the same seed. Returns (L, whether a CutMix box was pasted)."""
+    M = None
+    L = recover_lambda(t, tm)
+    if mode == "mixup":
+        want_x = L * x + (np.float32(1.0) - L) * np.flip(x, 0)
+        want_t = L * t + (np.float32(1.0) - L) * np.flip(t, 0)
+        check(f"{tag}mixup b{i}: t' = L*t + (1-L)*flip(t)  [L={L:.6f}]",
+              bool(np.array_equal(tm, want_t)), f"maxdiff {np.abs(tm - want_t).max():.3e}")
+        check(f"{tag}mixup b{i}: x' = L*x + (1-L)*flip(x)  — the IMAGES, not just the labels",
+              bool(np.array_equal(xm, want_x)), f"maxdiff {np.abs(xm - want_x).max():.3e}")
+    else:
+        H = W = A.img
+        x4, x4m = x.reshape(-1, 3, H, W), xm.reshape(-1, 3, H, W)
+        # Recover the box from the PIXELS: inside it every example took its partner's value.
+        inside = np.all(x4m == np.flip(x4, 0), axis=(0, 1))
+        outside = np.all(x4m == x4, axis=(0, 1))
+        M = (inside & ~outside).astype(np.float32)
+        rows, cols = np.where(M.any(1))[0], np.where(M.any(0))[0]
+        rect = (M.sum() == 0) or bool(
+            np.array_equal(M, np.outer((np.arange(H) >= rows[0]) & (np.arange(H) <= rows[-1]),
+                                       (np.arange(W) >= cols[0]) & (np.arange(W) <= cols[-1]))
+                           .astype(np.float32))
+            and len(rows) == rows[-1] - rows[0] + 1 and len(cols) == cols[-1] - cols[0] + 1)
+        check(f"{tag}cutmix b{i}: the pasted region is a RECTANGLE", rect,
+              f"{int(M.sum())} px" + (f", rows {rows[0]}-{rows[-1]} cols {cols[0]}-{cols[-1]}"
+                                      if M.sum() else ""))
+        # The label must follow the PIXELS, not the drawn lambda: the box is clipped at the
+        # border, so the drawn and the effective lambda genuinely differ.
+        area = float(M.sum()) / float(H * W)
+        check(f"{tag}cutmix b{i}: L is the ACTUAL pasted area  [L={float(L):.6f}, "
+              f"1-area={1.0-area:.6f}]", abs(float(L) - (1.0 - area)) < 1e-6)
+        La = np.float32(1.0 - area)
+        want_t = La * t + (np.float32(1.0) - La) * np.flip(t, 0)
+        want_x = (x4 * (np.float32(1.0) - M) + np.flip(x4, 0) * M).reshape(x.shape)
+        check(f"{tag}cutmix b{i}: t' = L*t + (1-L)*flip(t)",
+              bool(np.array_equal(tm, want_t)), f"maxdiff {np.abs(tm - want_t).max():.3e}")
+        check(f"{tag}cutmix b{i}: x' = x*(1-M) + flip(x)*M  — the IMAGES",
+              bool(np.array_equal(xm, want_x)), f"maxdiff {np.abs(xm - want_x).max():.3e}")
+    return L, (M is not None and M.sum() > 0)
+
+
 # ── gate 3: the known answer, against the unmixed stream at the same seed ──────────────────────
 print("── gate 3: KNOWN ANSWER (mixed stream vs the off stream, same seed)")
 ref = stream("off", A.seed)
@@ -226,48 +269,42 @@ for mode in ("mixup", "cutmix"):
         if i == 0 and not check(f"{mode}: the off stream is the same data (targets are one-hot)",
                                 bool(np.all(t.sum(1) == 1.0))):
             continue
-        L = recover_lambda(t, tm)
-        if mode == "mixup":
-            want_x = L * x + (np.float32(1.0) - L) * np.flip(x, 0)
-            want_t = L * t + (np.float32(1.0) - L) * np.flip(t, 0)
-            check(f"mixup b{i}: t' = L*t + (1-L)*flip(t)  [L={L:.6f}]",
-                  bool(np.array_equal(tm, want_t)), f"maxdiff {np.abs(tm - want_t).max():.3e}")
-            check(f"mixup b{i}: x' = L*x + (1-L)*flip(x)  — the IMAGES, not just the labels",
-                  bool(np.array_equal(xm, want_x)), f"maxdiff {np.abs(xm - want_x).max():.3e}")
-        else:
-            H = W = A.img
-            x4, x4m = x.reshape(-1, 3, H, W), xm.reshape(-1, 3, H, W)
-            # Recover the box from the PIXELS: inside it every example took its partner's value.
-            inside = np.all(x4m == np.flip(x4, 0), axis=(0, 1))
-            outside = np.all(x4m == x4, axis=(0, 1))
-            M = (inside & ~outside).astype(np.float32)
-            rows, cols = np.where(M.any(1))[0], np.where(M.any(0))[0]
-            rect = (M.sum() == 0) or bool(
-                np.array_equal(M, np.outer((np.arange(H) >= rows[0]) & (np.arange(H) <= rows[-1]),
-                                           (np.arange(W) >= cols[0]) & (np.arange(W) <= cols[-1]))
-                               .astype(np.float32))
-                and len(rows) == rows[-1] - rows[0] + 1 and len(cols) == cols[-1] - cols[0] + 1)
-            check(f"cutmix b{i}: the pasted region is a RECTANGLE", rect,
-                  f"{int(M.sum())} px" + (f", rows {rows[0]}-{rows[-1]} cols {cols[0]}-{cols[-1]}"
-                                          if M.sum() else ""))
-            # The label must follow the PIXELS, not the drawn lambda: the box is clipped at the
-            # border, so the drawn and the effective lambda genuinely differ.
-            area = float(M.sum()) / float(H * W)
-            pasted += int(M.sum() > 0)
-            check(f"cutmix b{i}: L is the ACTUAL pasted area  [L={float(L):.6f}, "
-                  f"1-area={1.0-area:.6f}]", abs(float(L) - (1.0 - area)) < 1e-6)
-            La = np.float32(1.0 - area)
-            want_t = La * t + (np.float32(1.0) - La) * np.flip(t, 0)
-            want_x = (x4 * (np.float32(1.0) - M) + np.flip(x4, 0) * M).reshape(x.shape)
-            check(f"cutmix b{i}: t' = L*t + (1-L)*flip(t)",
-                  bool(np.array_equal(tm, want_t)), f"maxdiff {np.abs(tm - want_t).max():.3e}")
-            check(f"cutmix b{i}: x' = x*(1-M) + flip(x)*M  — the IMAGES",
-                  bool(np.array_equal(xm, want_x)), f"maxdiff {np.abs(xm - want_x).max():.3e}")
+        pasted += int(known_answer(mode, i, t, x, tm, xm)[1])
 
 # An empty box satisfies every cutmix check above (L = 1, x' = x), so a producer that never pastes
 # would pass them all. A real Beta(1,1) draw gives a non-empty box in essentially every batch.
 check(f"cutmix: a box was pasted in at least one of {A.batches} batches", pasted > 0,
       f"{pasted} non-empty")
+
+# ── gate 4: SHIM_MIX_CHUNK — one draw per chunk of rows, not per record ─────────────────────────
+#
+# timm draws once per GPU batch and a shim record is the driver's whole invoke (all replicas), so
+# the R50 RSB confs set SHIM_MIX_CHUNK (runs/2026-11-06-r50-a3mix8-jax/RESULTS.md). Each chunk
+# must be gate 3's known answer ON ITS OWN ROWS (partners never cross a chunk), chunk 0 must draw
+# the unchunked record's own L, the chunks must not share one L, and 0 / ≥ batch must be the
+# unchunked shim byte for byte.
+CH = A.batch // 2
+print(f"── gate 4: SHIM_MIX_CHUNK={CH} (one draw per {CH} rows, {A.batch // CH} a record)")
+for mode in ("mixup", "both"):
+    d = digest(mode, A.seed)
+    check(f"{mode}: SHIM_MIX_CHUNK=0 is the unchunked shim", digest(mode, A.seed, SHIM_MIX_CHUNK=0) == d)
+    check(f"{mode}: SHIM_MIX_CHUNK={A.batch} (the whole record) is the unchunked shim",
+          digest(mode, A.seed, SHIM_MIX_CHUNK=A.batch) == d)
+    check(f"{mode}: SHIM_MIX_CHUNK={CH} streams something else", digest(mode, A.seed, SHIM_MIX_CHUNK=CH) != d)
+whole = stream("mixup", A.seed)
+for mode in ("mixup", "cutmix"):
+    got = stream(mode, A.seed, SHIM_MIX_CHUNK=CH)
+    Ls = []
+    for i, ((t, x), (tm, xm)) in enumerate(zip(ref, got)):
+        for c in range(A.batch // CH):
+            r = slice(c * CH, (c + 1) * CH)
+            L, _ = known_answer(mode, i, t[r], x[r], tm[r], xm[r], tag=f"chunk {c} ")
+            Ls.append(L)
+            if mode == "mixup" and c == 0:
+                check(f"chunk 0 mixup b{i}: draws the unchunked record's L",
+                      L == recover_lambda(ref[i][0], whole[i][0]))
+    check(f"{mode}: the chunks draw different L's", len(set(map(float, Ls))) > len(ref),
+          f"{len(set(map(float, Ls)))} distinct of {len(Ls)}")
 
 # ── the negative controls: prove each gate can go red, and for its own reason ───────────────────
 if A.do_break:

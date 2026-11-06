@@ -747,6 +747,12 @@ structure TrainConfig where
       with probability `p` (DeiT and the RSB tiers: 0.5), seeded from (seed, step). 0 keeps the
       strict step-parity alternation byte for byte, on the trainer and on the shim's `_mix` alike. -/
   mixSwitchProb  : Float := 0.0
+  /-- How many independent Mixup/CutMix draws one optimizer step takes. timm draws once per batch
+      PER GPU, so an n-GPU step carries n draws, each paired within its own GPU's batch. `k > 1`
+      splits the step's batch into `k` contiguous chunks, each with its own switch coin, λ and box,
+      the partner flipped within the chunk (needs `mixSwitchProb > 0`, Mixup and CutMix both on).
+      1 keeps one draw per step, byte for byte. -/
+  mixChunks      : Nat   := 1
   /-- KNN-Mixup: pair each sample with its nearest neighbor in the batch
       (pixel-space L2) rather than a random partner. Closer manifold
       mixing → harder, more realistic intermediate samples. Mutually
