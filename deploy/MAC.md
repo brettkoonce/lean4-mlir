@@ -48,6 +48,13 @@ Everything is teed to `runs/<date>-mac-setup/setup.log`, with the box's chip, me
 macOS and package versions in `manifest.txt` beside it. Each trainer's own log lands under
 `runs/<date>-mnist-*/`, as on the other platforms.
 
+## A second Mac
+
+[`MAC_HANDOFF.md`](MAC_HANDOFF.md) is the list for someone else's Mac: `mac_setup.sh` as the
+smoke test, `deploy/mac_bench.sh` for a time estimate (the eight train steps timed on synthetic
+data, ~15 minutes, then the ladder's and each Imagenette run's hours), the suite, the ladder,
+Imagenette, the platforms row, the PR. The M1 Air's own numbers are § Measured below.
+
 ## The ladder: suite through CIFAR
 
 Once `mac_setup.sh` is green, `deploy/mac_ladder.sh` runs the rest of the 7900 XTX's ladder at
