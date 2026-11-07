@@ -29,12 +29,15 @@ Re-score: `jax/scripts/eval_full50k.py`, f32 forward, PROTOCOL=train, BATCH=200,
 |---|---|---|
 | JAX s2 | 4,037 | **0.0002** |
 | JAX s3 | 4,057 | **0.00009** |
-| verified s1 | 3,929 | 0.069 |
+| verified 10-09 (77.91; see below) | 3,929 | 0.069 |
 | verified s2 | 3,943 | **0.011** |
 | verified s3 | 4,052 | **0.004** |
 
 Seed 1's JAX bitmap is not on mars (it was scored on atlas from the ares checkpoint), so the same-seed
-pair is not here; the seed-2 and seed-3 JAX pairs stand in for it.
+pair is not here; the seed-2 and seed-3 JAX pairs stand in for it. Nor is the verified seed-1 bitmap
+(78.08, `../2026-10-12-r50-a3-rsb-bf16/`, ares): the "10-09" row is `../2026-10-09-r50-a3-verified-bf16-100ep/`,
+the same verified A3 recipe (4 × 128, threshold 0.2) at 77.91 on mars — first written up here as "verified
+s1", which it is not.
 
 ## Reading
 

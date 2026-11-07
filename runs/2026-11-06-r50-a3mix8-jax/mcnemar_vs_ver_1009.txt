@@ -1,9 +1,9 @@
   n = 50000
   JAX mix8 s1 39072/50000 = 78.14%   95% CI 77.78–78.50
-  verified s1 38957/50000 = 77.91%   95% CI 77.55–78.28
+  verified 10-09 38957/50000 = 77.91%   95% CI 77.55–78.28
   unpaired gap: -0.23 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
 
-  paired table:  both right 37050   both wrong 9021   only JAX mix8 s1 2022   only verified s1 1907
+  paired table:  both right 37050   both wrong 9021   only JAX mix8 s1 2022   only verified 10-09 1907
   discordant: 3929 of 50000 (7.9%) — the only images the test looks at
   McNemar exact two-sided p = 0.06894   (chi2 w/ continuity = 3.31)
   ✗ NOT significant at p<0.05 — the 115 net flips do not separate these two

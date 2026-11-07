@@ -1,0 +1,8 @@
+[after] 2026-11-07 14:21:57 verified mix256 e100: bitmap 38996, log 38996
+[after] 2026-11-07 14:21:57 vs jax_mix8_s1: p = 0.2333
+[after] 2026-11-07 14:21:58 vs jax_s2: p = 0.01107
+[after] 2026-11-07 14:21:58 vs jax_s3: p = 0.006435
+[after] 2026-11-07 14:21:58 vs ver_1009: p = 0.5508
+[after] 2026-11-07 14:21:59 vs ver_s2: p = 0.184
+[after] 2026-11-07 14:21:59 vs ver_s3: p = 0.08332
+[after] 2026-11-07 14:22:29 ViT-S resumed (unit vits-jax)

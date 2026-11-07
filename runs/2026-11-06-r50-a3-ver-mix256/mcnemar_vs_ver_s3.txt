@@ -1,0 +1,13 @@
+  n = 50000
+  verified mix256 s1 38996/50000 = 77.99%   95% CI 77.63–78.35
+  ver_s3     38886/50000 = 77.77%   95% CI 77.41–78.13
+  unpaired gap: -0.22 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 36960   both wrong 9078   only verified mix256 s1 2036   only ver_s3 1926
+  discordant: 3962 of 50000 (7.9%) — the only images the test looks at
+  McNemar exact two-sided p = 0.08332   (chi2 w/ continuity = 3.00)
+  ✗ NOT significant at p<0.05 — the 110 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.
