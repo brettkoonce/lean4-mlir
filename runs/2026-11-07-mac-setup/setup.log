@@ -1,0 +1,382 @@
+════ mac_setup 2026-11-07 13:07:16 — stages: check venv jax smoke data lean mnist
+
+━━━ check: the box
+  ✓ Apple Silicon: Apple M5 Pro, 64 GB
+  ✓ macOS 27.2
+  ✓ C compiler: Apple clang version 21.0.0 (clang-2100.4.1.1)
+  ✓ python: /opt/homebrew/bin/python3 (Python 3.15.2, arm64)
+  ✓ elan: /Users/zz/.elan/bin/elan
+  ✓ disk: 584 GB free
+
+━━━ venv: .venv with jax-graft==0.0.5
+  ✓ created .venv (Python 3.15.2)
+  installed: jax 0.12.0.1, jaxlib 0.12.0.1, jax-graft 0.0.5, metal-pjrt-core 0.0.5
+  ✓ plugin: .venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib
+
+━━━ jax: JAX computes on the mtl device
+Platform 'mtl' is experimental and not all JAX functionality may be correctly supported!
+  ✓ mtl:0 (Apple M5 Pro): (x @ x.T).sum() = 1134.0, as numpy on the CPU
+
+━━━ smoke: our PJRT shim on the Metal plugin, before any Lean
+  PJRT_PLUGIN=.venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib
+  client options: platform_name=METAL allocator=platform preallocate=0 memory_fraction=1.0 stage_h2d=0
+  ✓ built ffi/libpjrt_ffi.so
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.060971 39004485 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 35282.7 MB reclaimable now
+I1107 13:07:44.062735 39004417 service.cc:154] XLA service 0x7752559ea0 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:07:44.062743 39004417 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:07:44.063819 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:07:44.065817 39004417 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 7 ms
+[pjrt_ffi] @linear_fwd ok (3 in, 1 out)
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.239442 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 10 ms
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.251299 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 3 ms
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.256347 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 15 ms
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.273698 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 19 ms
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:07:44.294468 39004417 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] platform: mtl
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 30 ms
+linear_fwd: max |device - host| = 8.94e-07 over 1280 outputs (y[0][0] = 2.329578)
+compiled verified_mlir/linear_train_step.mlir
+compiled verified_mlir/mlp_fwd.mlir
+compiled verified_mlir/mlp_train_step.mlir
+compiled verified_mlir/cnn_fwd.mlir
+compiled verified_mlir/cnn_train_step.mlir
+SMOKE OK
+
+━━━ data: MNIST
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  1 9680k    1  148k    0     0  83265      0  0:01:59  0:00:01  0:01:58 83227  5 9680k    5  568k    0     0   201k      0  0:00:48  0:00:02  0:00:46  201k 17 9680k   17 1679k    0     0   436k      0  0:00:22  0:00:03  0:00:19  436k 33 9680k   33 3279k    0     0   640k      0  0:00:15  0:00:05  0:00:10  640k 55 9680k   55 5376k    0     0   923k      0  0:00:10  0:00:05  0:00:05 1099k 66 9680k   66 6464k    0     0   947k      0  0:00:10  0:00:06  0:00:04 1263k 84 9680k   84 8207k    0     0  1049k      0  0:00:09  0:00:07  0:00:02 1527k100 9680k  100 9680k    0     0  1128k      0  0:00:08  0:00:08 --:--:-- 1694k
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 28881  100 28881    0     0  62159      0 --:--:-- --:--:-- --:--:-- 62109
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  2 1610k    2 34137    0     0  48611      0  0:00:33 --:--:--  0:00:33 48559100 1610k  100 1610k    0     0  1163k      0  0:00:01  0:00:01 --:--:-- 1164k
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0100  4542  100  4542    0     0   2732      0  0:00:01  0:00:01 --:--:--  2731
+  ✓ 4 MNIST files in data/mnist/
+
+━━━ lean: toolchain, Mathlib's prebuilt cache, the three MNIST trainers
+info: downloading https://releases.lean-lang.org/lean4/v4.35.0/lean-4.35.0-darwin_aarch64.tar.zst
+info: installing /Users/zz/.elan/toolchains/leanprover--lean4---v4.35.0
+Lake version 5.0.0-src+eb6cafb (Lean version 4.35.0)
+info: checkdecls: materializing new dependency
+info: checkdecls: fetching revision '3d425859e73fcfbef85b9638c2a91708ef4a22d4' from https://github.com/PatrickMassot/checkdecls.git
+info: checkdecls: checking out revision '3d425859e73fcfbef85b9638c2a91708ef4a22d4'
+info: mathlib: materializing new dependency
+info: mathlib: fetching revision '56a005855ea17e0b0958f73ec801ae140b0a1679' from https://github.com/leanprover-community/mathlib4
+info: mathlib: checking out revision '56a005855ea17e0b0958f73ec801ae140b0a1679'
+info: plausible: materializing new dependency
+info: plausible: fetching revision 'dfa4f38190d07c37e315953e08b90fe2d95b3c24' from https://github.com/leanprover-community/plausible
+info: plausible: checking out revision 'dfa4f38190d07c37e315953e08b90fe2d95b3c24'
+info: LeanSearchClient: materializing new dependency
+info: LeanSearchClient: fetching revision 'd6b4c7be5be75ec4917c873ac50c756dc1436372' from https://github.com/leanprover-community/LeanSearchClient
+info: LeanSearchClient: checking out revision 'd6b4c7be5be75ec4917c873ac50c756dc1436372'
+info: importGraph: materializing new dependency
+info: importGraph: fetching revision 'a41f0e9a4dea23188ea9cc1c41ac9f8bbafe0b93' from https://github.com/leanprover-community/import-graph
+info: importGraph: checking out revision 'a41f0e9a4dea23188ea9cc1c41ac9f8bbafe0b93'
+info: proofwidgets: materializing new dependency
+info: proofwidgets: fetching revision 'df72b022e558978a1c50264cfc4d7fec86fa8e04' from https://github.com/leanprover-community/ProofWidgets4
+info: proofwidgets: checking out revision 'df72b022e558978a1c50264cfc4d7fec86fa8e04'
+info: aesop: materializing new dependency
+info: aesop: fetching revision '4a174c490d8707121c4a9290800489f105d85e07' from https://github.com/leanprover-community/aesop
+info: aesop: checking out revision '4a174c490d8707121c4a9290800489f105d85e07'
+info: Qq: materializing new dependency
+info: Qq: fetching revision 'dce0ad79c486cb1fb504af04f953c3466b0c6db8' from https://github.com/leanprover-community/quote4
+info: Qq: checking out revision 'dce0ad79c486cb1fb504af04f953c3466b0c6db8'
+info: batteries: materializing new dependency
+info: batteries: fetching revision '66e469188fe07963e5cf666c7d4433f45b8131c5' from https://github.com/leanprover-community/batteries
+info: batteries: checking out revision '66e469188fe07963e5cf666c7d4433f45b8131c5'
+info: Cli: materializing new dependency
+info: Cli: fetching revision 'c24fe6078c630e89b489bffe59b3e20ac30d12c8' from https://github.com/leanprover/lean4-cli
+info: Cli: checking out revision 'c24fe6078c630e89b489bffe59b3e20ac30d12c8'
+✔ [1/5] Built Cache.Cli (327ms)
+✔ [2/5] Built Cache.Lean (348ms)
+✔ [6/42] Built Cache.Env (225ms)
+✔ [7/42] Built Batteries.Tactic.OpenPrivate (460ms)
+✔ [8/42] Built Cache.Infra (215ms)
+✔ [9/42] Built Cache.Location (253ms)
+✔ [10/42] Built Cache.IO (573ms)
+✔ [11/42] Built Cache.Cli:c.o (1.1s)
+✔ [12/42] Built Cache.Lean:c.o (1.1s)
+✔ [13/42] Built Cache.Env:c.o (843ms)
+✔ [14/42] Built Cache.Infra:c.o (627ms)
+✔ [15/42] Built Cache.Location:c.o (398ms)
+✔ [16/42] Built Cache.Hashing (344ms)
+✔ [17/42] Built Batteries.Tactic.OpenPrivate:c.o (908ms)
+✔ [18/42] Built Cache.IO:c.o (542ms)
+✔ [19/42] Built Cache.Hashing:c.o (209ms)
+✔ [20/42] Built Cache.Requests (667ms)
+✔ [21/42] Built Cache.Marker (227ms)
+✔ [22/42] Built Cache.Marker:c.o (75ms)
+✔ [23/42] Built Cache.Upload.Curl (292ms)
+✔ [24/42] Built Cache.Upload.Rclone (313ms)
+✔ [25/42] Built Cache.Query (326ms)
+✔ [26/42] Built Cache.Upload.Curl:c.o (100ms)
+✔ [27/42] Built Cache.Upload.Rclone:c.o (113ms)
+✔ [28/42] Built Cache.Query:c.o (121ms)
+✔ [29/42] Built Cache.Upload.Azure (310ms)
+✔ [30/42] Built Cache.Upload.S3 (348ms)
+✔ [31/42] Built Cache.Warning (333ms)
+✔ [32/42] Built Cache.Requests:c.o (875ms)
+✔ [33/42] Built Cache.Upload.Azure:c.o (84ms)
+✔ [34/42] Built Cache.Upload.S3:c.o (128ms)
+✔ [35/42] Built Cache.Warning:c.o (130ms)
+✔ [36/42] Built Cache.Upload.Defs (242ms)
+✔ [37/42] Built Cache.Upload.Defs:c.o (80ms)
+✔ [38/42] Built Cache.Upload (252ms)
+✔ [39/42] Built Cache.Upload:c.o (65ms)
+✔ [40/42] Built Cache.Main (430ms)
+✔ [41/42] Built Cache.Main:c.o (333ms)
+✔ [42/42] Built cache:exe (420ms)
+Current branch: HEAD
+Using cache from origin: (some leanprover-community/mathlib4)
+Attempting to download 9031 file(s) from leanprover-community/mathlib4 cache at https://cache.mathlib.org/mathlib4-master
+Downloaded: 1 file(s) [attempted 1/9031 = 0%, 84 KB/s][KDownloaded: 77 file(s) [attempted 77/9031 = 0%, 1191 KB/s][KDownloaded: 158 file(s) [attempted 158/9031 = 1%, 1644 KB/s][KDownloaded: 228 file(s) [attempted 228/9031 = 2%, 220 KB/s][KDownloaded: 327 file(s) [attempted 327/9031 = 3%, 1581 KB/s][KDownloaded: 400 file(s) [attempted 400/9031 = 4%, 302 KB/s][KDownloaded: 451 file(s) [attempted 451/9031 = 4%, 961 KB/s][KDownloaded: 492 file(s) [attempted 492/9031 = 5%, 1016 KB/s][KDownloaded: 552 file(s) [attempted 552/9031 = 6%, 243 KB/s][KDownloaded: 628 file(s) [attempted 628/9031 = 6%, 658 KB/s][KDownloaded: 719 file(s) [attempted 719/9031 = 7%, 133 KB/s][KDownloaded: 734 file(s) [attempted 734/9031 = 8%, 358 KB/s][KDownloaded: 795 file(s) [attempted 795/9031 = 8%, 98 KB/s][KDownloaded: 866 file(s) [attempted 866/9031 = 9%, 2165 KB/s][KDownloaded: 947 file(s) [attempted 947/9031 = 10%, 149 KB/s][KDownloaded: 1018 file(s) [attempted 1018/9031 = 11%, 576 KB/s][KDownloaded: 1114 file(s) [attempted 1114/9031 = 12%, 776 KB/s][KDownloaded: 1179 file(s) [attempted 1179/9031 = 13%, 267 KB/s][KDownloaded: 1280 file(s) [attempted 1280/9031 = 14%, 248 KB/s][KDownloaded: 1291 file(s) [attempted 1291/9031 = 14%, 2724 KB/s][KDownloaded: 1351 file(s) [attempted 1351/9031 = 14%, 307 KB/s][KDownloaded: 1437 file(s) [attempted 1437/9031 = 15%, 167 KB/s][KDownloaded: 1530 file(s) [attempted 1530/9031 = 16%, 2810 KB/s][KDownloaded: 1553 file(s) [attempted 1553/9031 = 17%, 496 KB/s][KDownloaded: 1624 file(s) [attempted 1624/9031 = 17%, 293 KB/s][KDownloaded: 1735 file(s) [attempted 1735/9031 = 19%, 1412 KB/s][KDownloaded: 1776 file(s) [attempted 1776/9031 = 19%, 882 KB/s][KDownloaded: 1826 file(s) [attempted 1826/9031 = 20%, 3190 KB/s][KDownloaded: 1867 file(s) [attempted 1867/9031 = 20%, 154 KB/s][KDownloaded: 1948 file(s) [attempted 1948/9031 = 21%, 1075 KB/s][KDownloaded: 1988 file(s) [attempted 1988/9031 = 22%, 243 KB/s][KDownloaded: 2069 file(s) [attempted 2069/9031 = 22%, 464 KB/s][KDownloaded: 2150 file(s) [attempted 2150/9031 = 23%, 442 KB/s][KDownloaded: 2241 file(s) [attempted 2241/9031 = 24%, 221 KB/s][KDownloaded: 2293 file(s) [attempted 2293/9031 = 25%, 514 KB/s][KDownloaded: 2352 file(s) [attempted 2352/9031 = 26%, 376 KB/s][KDownloaded: 2433 file(s) [attempted 2433/9031 = 26%, 92 KB/s][KDownloaded: 2493 file(s) [attempted 2493/9031 = 27%, 1568 KB/s][KDownloaded: 2554 file(s) [attempted 2554/9031 = 28%, 203 KB/s][KDownloaded: 2604 file(s) [attempted 2604/9031 = 28%, 399 KB/s][KDownloaded: 2665 file(s) [attempted 2665/9031 = 29%, 13 KB/s][KDownloaded: 2756 file(s) [attempted 2756/9031 = 30%, 380 KB/s][KDownloaded: 2830 file(s) [attempted 2830/9031 = 31%, 1107 KB/s][KDownloaded: 2877 file(s) [attempted 2877/9031 = 31%, 2255 KB/s][KDownloaded: 2938 file(s) [attempted 2938/9031 = 32%, 521 KB/s][KDownloaded: 3019 file(s) [attempted 3019/9031 = 33%, 159 KB/s][KDownloaded: 3130 file(s) [attempted 3130/9031 = 34%, 110 KB/s][KDownloaded: 3217 file(s) [attempted 3217/9031 = 35%, 722 KB/s][KDownloaded: 3272 file(s) [attempted 3272/9031 = 36%, 615 KB/s][KDownloaded: 3337 file(s) [attempted 3337/9031 = 36%, 141 KB/s][KDownloaded: 3373 file(s) [attempted 3373/9031 = 37%, 526 KB/s][KDownloaded: 3443 file(s) [attempted 3443/9031 = 38%, 953 KB/s][KDownloaded: 3565 file(s) [attempted 3565/9031 = 39%, 143 KB/s][KDownloaded: 3645 file(s) [attempted 3645/9031 = 40%, 1111 KB/s][KDownloaded: 3696 file(s) [attempted 3696/9031 = 40%, 7517 KB/s][KDownloaded: 3777 file(s) [attempted 3777/9031 = 41%, 151 KB/s][KDownloaded: 3868 file(s) [attempted 3868/9031 = 42%, 2753 KB/s][KDownloaded: 3947 file(s) [attempted 3947/9031 = 43%, 45 KB/s][KDownloaded: 4037 file(s) [attempted 4037/9031 = 44%, 143 KB/s][KDownloaded: 4049 file(s) [attempted 4049/9031 = 44%, 278 KB/s][KDownloaded: 4110 file(s) [attempted 4110/9031 = 45%, 184 KB/s][KDownloaded: 4181 file(s) [attempted 4181/9031 = 46%, 417 KB/s][KDownloaded: 4252 file(s) [attempted 4252/9031 = 47%, 965 KB/s][KDownloaded: 4323 file(s) [attempted 4323/9031 = 47%, 1282 KB/s][KDownloaded: 4363 file(s) [attempted 4363/9031 = 48%, 40 KB/s][KDownloaded: 4454 file(s) [attempted 4454/9031 = 49%, 191 KB/s][KDownloaded: 4531 file(s) [attempted 4531/9031 = 50%, 325 KB/s][KDownloaded: 4636 file(s) [attempted 4636/9031 = 51%, 349 KB/s][KDownloaded: 4707 file(s) [attempted 4707/9031 = 52%, 786 KB/s][KDownloaded: 4777 file(s) [attempted 4777/9031 = 52%, 521 KB/s][KDownloaded: 4868 file(s) [attempted 4868/9031 = 53%, 367 KB/s][KDownloaded: 4919 file(s) [attempted 4919/9031 = 54%, 5910 KB/s][KDownloaded: 5010 file(s) [attempted 5010/9031 = 55%, 5484 KB/s][KDownloaded: 5088 file(s) [attempted 5088/9031 = 56%, 54 KB/s][KDownloaded: 5151 file(s) [attempted 5151/9031 = 57%, 101 KB/s][KDownloaded: 5212 file(s) [attempted 5212/9031 = 57%, 2792 KB/s][KDownloaded: 5273 file(s) [attempted 5273/9031 = 58%, 1137 KB/s][KDownloaded: 5394 file(s) [attempted 5394/9031 = 59%, 2229 KB/s][KDownloaded: 5455 file(s) [attempted 5455/9031 = 60%, 2993 KB/s][KDownloaded: 5544 file(s) [attempted 5544/9031 = 61%, 255 KB/s][KDownloaded: 5624 file(s) [attempted 5624/9031 = 62%, 295 KB/s][KDownloaded: 5682 file(s) [attempted 5682/9031 = 62%, 480 KB/s][KDownloaded: 5748 file(s) [attempted 5748/9031 = 63%, 496 KB/s][KDownloaded: 5829 file(s) [attempted 5829/9031 = 64%, 3045 KB/s][KDownloaded: 5930 file(s) [attempted 5930/9031 = 65%, 1414 KB/s][KDownloaded: 6020 file(s) [attempted 6020/9031 = 66%, 226 KB/s][KDownloaded: 6061 file(s) [attempted 6061/9031 = 67%, 289 KB/s][KDownloaded: 6122 file(s) [attempted 6122/9031 = 67%, 487 KB/s][KDownloaded: 6182 file(s) [attempted 6182/9031 = 68%, 94 KB/s][KDownloaded: 6293 file(s) [attempted 6293/9031 = 69%, 1840 KB/s][KDownloaded: 6354 file(s) [attempted 6354/9031 = 70%, 2332 KB/s][KDownloaded: 6435 file(s) [attempted 6435/9031 = 71%, 4057 KB/s][KDownloaded: 6496 file(s) [attempted 6496/9031 = 71%, 2465 KB/s][KDownloaded: 6566 file(s) [attempted 6566/9031 = 72%, 1043 KB/s][KDownloaded: 6617 file(s) [attempted 6617/9031 = 73%, 904 KB/s][KDownloaded: 6710 file(s) [attempted 6710/9031 = 74%, 300 KB/s][KDownloaded: 6738 file(s) [attempted 6738/9031 = 74%, 135 KB/s][KDownloaded: 6809 file(s) [attempted 6809/9031 = 75%, 397 KB/s][KDownloaded: 6849 file(s) [attempted 6849/9031 = 75%, 785 KB/s][KDownloaded: 6930 file(s) [attempted 6930/9031 = 76%, 439 KB/s][KDownloaded: 7033 file(s) [attempted 7033/9031 = 77%, 965 KB/s][KDownloaded: 7132 file(s) [attempted 7132/9031 = 78%, 2935 KB/s][KDownloaded: 7153 file(s) [attempted 7153/9031 = 79%, 527 KB/s][KDownloaded: 7244 file(s) [attempted 7244/9031 = 80%, 518 KB/s][KDownloaded: 7324 file(s) [attempted 7324/9031 = 81%, 4207 KB/s][KDownloaded: 7425 file(s) [attempted 7425/9031 = 82%, 521 KB/s][KDownloaded: 7516 file(s) [attempted 7516/9031 = 83%, 1071 KB/s][KDownloaded: 7577 file(s) [attempted 7577/9031 = 83%, 2412 KB/s][KDownloaded: 7658 file(s) [attempted 7658/9031 = 84%, 518 KB/s][KDownloaded: 7719 file(s) [attempted 7719/9031 = 85%, 1982 KB/s][KDownloaded: 7749 file(s) [attempted 7749/9031 = 85%, 7184 KB/s][KDownloaded: 7809 file(s) [attempted 7809/9031 = 86%, 491 KB/s][KDownloaded: 7880 file(s) [attempted 7880/9031 = 87%, 1179 KB/s][KDownloaded: 7981 file(s) [attempted 7981/9031 = 88%, 185 KB/s][KDownloaded: 7991 file(s) [attempted 7991/9031 = 88%, 812 KB/s][KDownloaded: 8052 file(s) [attempted 8052/9031 = 89%, 215 KB/s][KDownloaded: 8103 file(s) [attempted 8103/9031 = 89%, 1466 KB/s][KDownloaded: 8153 file(s) [attempted 8153/9031 = 90%, 38 KB/s][KDownloaded: 8214 file(s) [attempted 8214/9031 = 90%, 2542 KB/s][KDownloaded: 8224 file(s) [attempted 8224/9031 = 91%, 650 KB/s][KDownloaded: 8275 file(s) [attempted 8275/9031 = 91%, 353 KB/s][KDownloaded: 8345 file(s) [attempted 8345/9031 = 92%, 105 KB/s][KDownloaded: 8416 file(s) [attempted 8416/9031 = 93%, 4771 KB/s][KDownloaded: 8436 file(s) [attempted 8436/9031 = 93%, 1258 KB/s][KDownloaded: 8507 file(s) [attempted 8507/9031 = 94%, 196 KB/s][KDownloaded: 8578 file(s) [attempted 8578/9031 = 94%, 1073 KB/s][KDownloaded: 8657 file(s) [attempted 8657/9031 = 95%, 1327 KB/s][KDownloaded: 8699 file(s) [attempted 8699/9031 = 96%, 283 KB/s][KDownloaded: 8760 file(s) [attempted 8760/9031 = 96%, 1278 KB/s][KDownloaded: 8830 file(s) [attempted 8830/9031 = 97%, 339 KB/s][KDownloaded: 8891 file(s) [attempted 8891/9031 = 98%, 2000 KB/s][KDownloaded: 8942 file(s) [attempted 8942/9031 = 99%, 1329 KB/s][KDownloaded: 9002 file(s) [attempted 9002/9031 = 99%, 543 KB/s][KDownloaded: 9031 file(s) [attempted 9031/9031 = 100%, 543 KB/s][K
+Still decompressing downloaded files...
+Decompressed 9031 file(s)
+Already decompressed 9031 file(s)
+  ▸ lake build mnist-linear-verified
+✔ [2/29] Built «lean4-mlir»/lowererO (48ms)
+✔ [3/29] Built «lean4-mlir»/ireeLeanFfiO (212ms)
+✔ [4/29] Built LeanMlir.LEBytes (367ms)
+✔ [5/29] Built LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec (343ms)
+✔ [6/29] Built LeanMlir.IreeRuntime (330ms)
+✔ [7/29] Built LeanMlir.LEBytes:c.o (104ms)
+✔ [8/29] Built LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec:c.o (85ms)
+✔ [9/29] Built LeanMlir.IreeRuntime:c.o (117ms)
+✔ [10/29] Built LeanMlir.Verified.Spec (669ms)
+✔ [11/29] Built LeanMlir.ParamLayouts (444ms)
+✔ [12/29] Built LeanMlir.F32Array (440ms)
+✔ [13/29] Built LeanMlir.Verified.Spec:c.o (374ms)
+✔ [14/29] Built LeanMlir.ParamLayouts:c.o (151ms)
+✔ [15/29] Built LeanMlir.E4M3Quant (293ms)
+✔ [16/29] Built LeanMlir.F32Array:c.o (238ms)
+✔ [17/29] Built LeanMlir.E4M3Quant:c.o (133ms)
+✔ [18/29] Built LeanMlir.Types (1.2s)
+✔ [19/29] Built LeanMlir.Verified.NetsCore (830ms)
+✔ [20/29] Built «lean4-mlir»/f32HelpersO (1.6s)
+✔ [21/29] Built LeanMlir.Verified.NetsCore:c.o (155ms)
+✔ [22/29] Built «lean4-mlir»/libireeffi.static (199ms)
+✔ [24/29] Built LeanMlir.Types:c.o (672ms)
+✔ [25/29] Built LeanMlir.Verified.Train (2.9s)
+✔ [26/29] Built apps.mnist.MainMnistLinearVerified (184ms)
+✔ [27/29] Built apps.mnist.MainMnistLinearVerified:c.o (57ms)
+✔ [28/29] Built LeanMlir.Verified.Train:c.o (9.3s)
+✔ [29/29] Built «mnist-linear-verified»:exe (102ms)
+Build completed successfully (29 jobs).
+  ▸ lake build mnist-mlp-verified
+✔ [27/29] Built apps.mnist.MainMnistMlpVerified (172ms)
+✔ [28/29] Built apps.mnist.MainMnistMlpVerified:c.o (56ms)
+✔ [29/29] Built «mnist-mlp-verified»:exe (85ms)
+Build completed successfully (29 jobs).
+  ▸ lake build mnist-cnn-verified
+✔ [27/29] Built apps.mnist.MainMnistCnnVerified (171ms)
+✔ [28/29] Built apps.mnist.MainMnistCnnVerified:c.o (57ms)
+✔ [29/29] Built «mnist-cnn-verified»:exe (87ms)
+Build completed successfully (29 jobs).
+  ✓ built the three MNIST trainers
+
+━━━ mnist: lake run mnist on the GPU
+━━━ XLA/PJRT backend ━━━
+  ✓ ffi/libpjrt_ffi.so up to date
+  ✓ PJRT_PLUGIN=.venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib
+
+━━━ mnist-linear-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-linear-verified: run (gpu 0, metal) ━━━
+grep: illegal byte sequence
+grep: illegal byte sequence
+→ mnist-linear-verified (GPU 0, metal) → runs/2026-11-07-mnist-linear-verified/mnist-linear-verified.log
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:09:58.822441 39020093 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 36667.8 MB reclaimable now
+I1107 13:09:58.832116 39020090 service.cc:154] XLA service 0x101668470 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:09:58.832122 39020090 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:09:58.835420 39020090 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:09:58.852970 39020090 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 82 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 3 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+[pjrt_ffi] RESIDENT: @linear_train_step holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (351ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 2: test_acc = 9082/10000 = 90.820000%  [95% CI 90.24–91.37] (132ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 3: test_acc = 9124/10000 = 91.240000%  [95% CI 90.67–91.78] (144ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 4: test_acc = 9156/10000 = 91.560000%  [95% CI 91.00–92.09] (134ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 5: test_acc = 9167/10000 = 91.670000%  [95% CI 91.11–92.20] (122ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 6: test_acc = 9176/10000 = 91.760000%  [95% CI 91.20–92.28] (119ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 7: test_acc = 9186/10000 = 91.860000%  [95% CI 91.31–92.38] (121ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 8: test_acc = 9194/10000 = 91.940000%  [95% CI 91.39–92.46] (120ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 9: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (126ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 10: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (160ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 11: test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (160ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 12: test_acc = 9210/10000 = 92.100000%  [95% CI 91.56–92.61] (156ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).
+
+━━━ mnist-mlp-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-mlp-verified: run (gpu 0, metal) ━━━
+grep: illegal byte sequence
+grep: illegal byte sequence
+→ mnist-mlp-verified (GPU 0, metal) → runs/2026-11-07-mnist-mlp-verified/mnist-mlp-verified.log
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:10:02.768371 39021617 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 42990.4 MB reclaimable now
+I1107 13:10:02.769975 39021614 service.cc:154] XLA service 0x7b4d3c8000 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:10:02.769982 39021614 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:10:02.771056 39021614 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:10:02.773804 39021614 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 22 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 4 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 1: loss = 0.413493, test_acc = 9200/10000 = 92.000000%  [95% CI 91.45–92.52] (700ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 2: loss = 0.191162, test_acc = 9521/10000 = 95.210000%  [95% CI 94.77–95.61] (253ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 3: loss = 0.139130, test_acc = 9635/10000 = 96.350000%  [95% CI 95.96–96.70] (258ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 4: loss = 0.109131, test_acc = 9690/10000 = 96.900000%  [95% CI 96.54–97.22] (257ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 5: loss = 0.088667, test_acc = 9717/10000 = 97.170000%  [95% CI 96.83–97.48] (249ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 6: loss = 0.073514, test_acc = 9736/10000 = 97.360000%  [95% CI 97.03–97.66] (254ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 7: loss = 0.061880, test_acc = 9744/10000 = 97.440000%  [95% CI 97.11–97.73] (249ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 8: loss = 0.052620, test_acc = 9764/10000 = 97.640000%  [95% CI 97.32–97.92] (283ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 9: loss = 0.045090, test_acc = 9768/10000 = 97.680000%  [95% CI 97.37–97.96] (274ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 10: loss = 0.038810, test_acc = 9774/10000 = 97.740000%  [95% CI 97.43–98.01] (248ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 11: loss = 0.033551, test_acc = 9776/10000 = 97.760000%  [95% CI 97.45–98.03] (251ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 12: loss = 0.029017, test_acc = 9782/10000 = 97.820000%  [95% CI 97.51–98.09] (248ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).
+
+━━━ mnist-cnn-verified: build ━━━
+Build completed successfully (29 jobs).
+━━━ mnist-cnn-verified: run (gpu 0, metal) ━━━
+grep: illegal byte sequence
+grep: illegal byte sequence
+→ mnist-cnn-verified (GPU 0, metal) → runs/2026-11-07-mnist-cnn-verified/mnist-cnn-verified.log
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:10:07.672442 39022228 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 42640.7 MB reclaimable now
+I1107 13:10:07.673987 39022225 service.cc:154] XLA service 0x770723ad80 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:10:07.673993 39022225 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:10:07.674976 39022225 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:10:07.678040 39022225 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 35 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 20 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 1: loss = 0.350156, test_acc = 9414/10000 = 94.140000%  [95% CI 93.66–94.58] (5325ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 2: loss = 0.094072, test_acc = 9749/10000 = 97.490000%  [95% CI 97.16–97.78] (4480ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 3: loss = 0.056336, test_acc = 9784/10000 = 97.840000%  [95% CI 97.54–98.11] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 4: loss = 0.037781, test_acc = 9816/10000 = 98.160000%  [95% CI 97.88–98.41] (4489ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 5: loss = 0.025773, test_acc = 9840/10000 = 98.400000%  [95% CI 98.13–98.63] (4480ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 6: loss = 0.017567, test_acc = 9851/10000 = 98.510000%  [95% CI 98.25–98.73] (4458ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 7: loss = 0.035655, test_acc = 9844/10000 = 98.440000%  [95% CI 98.18–98.66] (4453ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 8: loss = 0.015189, test_acc = 9867/10000 = 98.670000%  [95% CI 98.43–98.88] (4452ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 9: loss = 0.008103, test_acc = 9880/10000 = 98.800000%  [95% CI 98.57–99.00] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 10: loss = 0.004770, test_acc = 9870/10000 = 98.700000%  [95% CI 98.46–98.90] (4454ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 11: loss = 0.003565, test_acc = 9861/10000 = 98.610000%  [95% CI 98.36–98.82] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 12: loss = 0.002413, test_acc = 9856/10000 = 98.560000%  [95% CI 98.31–98.78] (4451ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).
+
+━━━ done: check venv jax smoke data lean mnist — log runs/2026-11-07-mac-setup/setup.log, box facts runs/2026-11-07-mac-setup/manifest.txt

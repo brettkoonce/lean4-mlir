@@ -1,0 +1,43 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:10:07.672442 39022228 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 42640.7 MB reclaimable now
+I1107 13:10:07.673987 39022225 service.cc:154] XLA service 0x770723ad80 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:10:07.673993 39022225 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:10:07.674976 39022225 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:10:07.678040 39022225 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 35 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 20 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @cnn_train_step holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 1: loss = 0.350156, test_acc = 9414/10000 = 94.140000%  [95% CI 93.66–94.58] (5325ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 2: loss = 0.094072, test_acc = 9749/10000 = 97.490000%  [95% CI 97.16–97.78] (4480ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 3: loss = 0.056336, test_acc = 9784/10000 = 97.840000%  [95% CI 97.54–98.11] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 4: loss = 0.037781, test_acc = 9816/10000 = 98.160000%  [95% CI 97.88–98.41] (4489ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 5: loss = 0.025773, test_acc = 9840/10000 = 98.400000%  [95% CI 98.13–98.63] (4480ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 6: loss = 0.017567, test_acc = 9851/10000 = 98.510000%  [95% CI 98.25–98.73] (4458ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 7: loss = 0.035655, test_acc = 9844/10000 = 98.440000%  [95% CI 98.18–98.66] (4453ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 8: loss = 0.015189, test_acc = 9867/10000 = 98.670000%  [95% CI 98.43–98.88] (4452ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 9: loss = 0.008103, test_acc = 9880/10000 = 98.800000%  [95% CI 98.57–99.00] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 10: loss = 0.004770, test_acc = 9870/10000 = 98.700000%  [95% CI 98.46–98.90] (4454ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 11: loss = 0.003565, test_acc = 9861/10000 = 98.610000%  [95% CI 98.36–98.82] (4455ms)
+[pjrt_ffi] RESIDENT: @cnn_fwd holds 10 parameter tensors (13.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 12: loss = 0.002413, test_acc = 9856/10000 = 98.560000%  [95% CI 98.31–98.78] (4451ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).

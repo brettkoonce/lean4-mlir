@@ -1,0 +1,43 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 13:10:02.768371 39021617 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 42990.4 MB reclaimable now
+I1107 13:10:02.769975 39021614 service.cc:154] XLA service 0x7b4d3c8000 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 13:10:02.769982 39021614 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 13:10:02.771056 39021614 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 13:10:02.773804 39021614 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 22 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 4 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD (lr baked into the render), He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 1: loss = 0.413493, test_acc = 9200/10000 = 92.000000%  [95% CI 91.45–92.52] (700ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 2: loss = 0.191162, test_acc = 9521/10000 = 95.210000%  [95% CI 94.77–95.61] (253ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 3: loss = 0.139130, test_acc = 9635/10000 = 96.350000%  [95% CI 95.96–96.70] (258ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 4: loss = 0.109131, test_acc = 9690/10000 = 96.900000%  [95% CI 96.54–97.22] (257ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 5: loss = 0.088667, test_acc = 9717/10000 = 97.170000%  [95% CI 96.83–97.48] (249ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 6: loss = 0.073514, test_acc = 9736/10000 = 97.360000%  [95% CI 97.03–97.66] (254ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 7: loss = 0.061880, test_acc = 9744/10000 = 97.440000%  [95% CI 97.11–97.73] (249ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 8: loss = 0.052620, test_acc = 9764/10000 = 97.640000%  [95% CI 97.32–97.92] (283ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 9: loss = 0.045090, test_acc = 9768/10000 = 97.680000%  [95% CI 97.37–97.96] (274ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 10: loss = 0.038810, test_acc = 9774/10000 = 97.740000%  [95% CI 97.43–98.01] (248ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 11: loss = 0.033551, test_acc = 9776/10000 = 97.760000%  [95% CI 97.45–98.03] (251ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  epoch 12: loss = 0.029017, test_acc = 9782/10000 = 97.820000%  [95% CI 97.51–98.09] (248ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).

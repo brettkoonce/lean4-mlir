@@ -1,0 +1,14 @@
+date         2026-11-07 13:11:02 PST
+repo         a42a6af1
+chip         Apple M5 Pro
+memory       64 GB
+gpu cores    20
+macOS        27.2 (26B123)
+lean         leanprover/lean4:v4.35.0
+python       3.15.2
+jax          0.12.0.1
+jaxlib       0.12.0.1
+jax-graft    0.0.5
+metal-pjrt-core 0.0.5
+plugin md5   5642b5d4ad0f517df9662d88174b4711
+stages run   check venv jax smoke data lean mnist
