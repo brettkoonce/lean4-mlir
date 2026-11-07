@@ -7722,9 +7722,9 @@ $160^2$. It lands on the paper's $78.1\%$, and $0.09$ over the $78.05\%$
 that \texttt{timm}'s own \texttt{resnet50.a3\_in1k} weights score under
 this protocol. One setting Table~\ref{tab:r50_a3_vs_2018} does not list
 is worth half a point: \texttt{timm} draws Mixup or CutMix once per GPU
-batch of $256$ images, and drawn once per accumulated step of $2{,}048$
-instead, the same recipe lands at $77.6$ over three seeds, so the draw is
-per $256$-row chunk, eight a step, on both paths. This A3 is
+batch of $256$ images, and one draw per accumulated step of $2{,}048$
+instead costs half a point, so the draw is per $256$-row chunk, eight a
+step, on both paths. This A3 is
 \texttt{timm}'s recipe as \texttt{timm} ran it, on both paths; the
 paragraph after the side-by-side table names the settings a bare
 transcription would miss, and the one not taken.
@@ -7751,12 +7751,13 @@ They run with:
 
 \begin{verbatim}
 lake run imagenet start r50      # the job r50-2018-bf16-4gpu
-lake run imagenet start a3       # the job r50-a3-wxclip4x128-bf16-4gpu
+MIX_CHUNK=256 lake run imagenet start a3   # r50-a3-wxclip4x128-bf16-4gpu
 \end{verbatim}
 
 \noindent On 2018 the run finished at $\mathbf{76.99\%}$ top-1 and
 $\mathbf{93.51\%}$ top-5, 90 epochs in about $30.1$ hours on the same four
-cards; A3 is the re-run the side-by-side section marks.
+cards; on A3 at $\mathbf{77.99\%}$ and $\mathbf{93.69\%}$, 100 epochs in
+about $21.0$ hours on the reference's four RTX 3060.
 
 \medskip\noindent Both renders all-reduce
 every BatchNorm's mean and variance across the four replicas
@@ -7786,7 +7787,7 @@ Table~\ref{tab:r50_paths} is the two paths, for both recipes.
 
 \begin{table}[H]
 \centering
-\caption{ResNet-50 on ImageNet-1k: the reference and the verified path, for both recipes. Both columns are bf16 convolutions under an fp32 classifier head, zero-$\gamma$ on each bottleneck's last BatchNorm, BatchNorm statistics decaying at $0.9$, a cosine with a 5-epoch warmup, the 2018 pair on four RTX 4060 Ti and the A3 reference on four RTX 3060, the final checkpoints scored over the same $50{,}000$ validation images through an fp32 forward. The 2018 recipe is SGD at a global batch of 256 with the BatchNorm group the global 256, weight decay $10^{-4}$ on the weights, the cosine stepped per step, train and eval at 224; A3 is LAMB at an effective 2048 as $4 \times 512$ with the BatchNorm group the 512-image micro-batch, the cosine stepped per epoch, train at 160 and eval at 224. The rows above each rule are everything that differs.}
+\caption{ResNet-50 on ImageNet-1k: the reference and the verified path, for both recipes. Both columns are bf16 convolutions under an fp32 classifier head, zero-$\gamma$ on each bottleneck's last BatchNorm, BatchNorm statistics decaying at $0.9$, a cosine with a 5-epoch warmup, the 2018 pair on four RTX 4060 Ti and the A3 pair on four RTX 3060, the final checkpoints scored over the same $50{,}000$ validation images through an fp32 forward. The 2018 recipe is SGD at a global batch of 256 with the BatchNorm group the global 256, weight decay $10^{-4}$ on the weights, the cosine stepped per step, train and eval at 224; A3 is LAMB at an effective 2048 as $4 \times 512$ with the BatchNorm group the 512-image micro-batch, the cosine stepped per epoch, train at 160 and eval at 224. The rows above each rule are everything that differs.}
 \label{tab:r50_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -7803,10 +7804,10 @@ total               & 22.2 hr                  & 30.1 hr \\
 \textbf{val top-5}  & $\mathbf{93.51\%}$       & $\mathbf{93.51\%}$ \\
 \hline
 \multicolumn{3}{@{}l}{\textbf{RSB-A3} (100 ep)} \\
-per epoch           & 8.4 min                  & --- \\
-total               & 14.0 hr                  & --- \\
-\textbf{val top-1}  & $\mathbf{78.14\%}$       & --- \\
-\textbf{val top-5}  & $\mathbf{93.70\%}$       & --- \\
+per epoch           & 8.4 min                  & 12.6 min \\
+total               & 14.0 hr                  & 21.0 hr \\
+\textbf{val top-1}  & $\mathbf{78.14\%}$       & $\mathbf{77.99\%}$ \\
+\textbf{val top-5}  & $\mathbf{93.70\%}$       & $\mathbf{93.69\%}$ \\
 \hline
 \end{tabular}
 \end{table}
@@ -7833,24 +7834,23 @@ seeds or the paired test cannot tell from zero: the gap is $0.02$ points
 on top-1 and none on top-5, at one seed per cell. Paired on the same
 images, the two checkpoints disagree on $4{,}641$, $2{,}326$ against
 $2{,}315$, and McNemar's exact test puts $p = 0.88$ on the eleven-image
-difference: the ResNet-34 reading again. On A3 the reference lands on the
-paper's number, and the pair's reading waits on its verified half.
-
-\noindent\textbf{[TODO: re-run verified net --- the A3 render with the per-256 draw;\\
-the job is \texttt{r50-a3-wxclip4x128-bf16-4gpu}\\
-at \texttt{SHIM\_MIX\_CHUNK=256}; then the paired test,\\
-the recipe delta on both paths, and the A3 curves.]}
+difference: the ResNet-34 reading again. \textbf{And on A3}: the
+reference lands on the paper's number and the verified path $0.15$ under
+it on top-1, $0.01$ on top-5; the two checkpoints disagree on $3{,}960$
+images, $1{,}942$ against $2{,}018$, and McNemar puts $p = 0.23$ on the
+$76$-image difference.
 
 \medskip\noindent One thing the table does not settle: the A3 column
 trains at $160$ and evaluates at $224$ while 2018 does both at $224$, so
-the recipe delta, $+1.13$ on the reference, confounds resolution with
-recipe, by A3's own design.
+the recipe delta, $+1.13$ on the reference and $+1.00$ on the verified
+path, confounds resolution with recipe, by A3's own design.
 
-\medskip\noindent\textbf{The 2018 curves travel together.} On 2018 the
-two paths swing both ways through the schedule, as ResNet-34's do, several
-points apart at the widest and equal at the end; the A3 curve is the
-reference's alone until the re-run. The swings are why these pairs are
-read at their endpoints and nowhere
+\medskip\noindent\textbf{The curves travel together.} On both recipes
+the two paths swing both ways through the schedule, as ResNet-34's do,
+several points apart at the widest and together at the end; on A3 the
+verified path runs ahead through the middle of the schedule and the
+reference draws level over the last ten epochs. The swings are why these
+pairs are read at their endpoints and nowhere
 else (the rows are the runs' own per-epoch evaluation, the reference's
 through its bf16 forward on 2018 and through fp32 on A3; the headline
 numbers are the final checkpoints scored through fp32, within $0.04$ of
@@ -7859,7 +7859,7 @@ Figure~\ref{fig:r50_paths_curves} every epoch.
 
 \begin{table}[H]
 \centering
-\caption{ResNet-50 validation top-1 at selected epochs, both recipes on both paths. These are the in-training reads, as are the curves below; the 2018 reference's headline $77.01$ is the fp32 rescore of the same epoch-90 checkpoint, read in training as $77.00$, and the A3 headlines $77.58$ / $78.05$ are the epoch-100 checkpoints rescored at \texttt{timm}'s $235$, read in training as $77.60$ / $78.08$.}
+\caption{ResNet-50 validation top-1 at selected epochs, both recipes on both paths. These are the in-training reads, as are the curves below; the 2018 reference's headline $77.01$ is the fp32 rescore of the same epoch-90 checkpoint, read in training as $77.00$, and the A3 reference's $78.14$ is the epoch-100 checkpoint rescored at \texttt{timm}'s $235$, one image from its in-training read; the verified path's headlines are its epoch-90 and epoch-100 reads.}
 \label{tab:r50_paths_epochs}
 \begin{tabular}{@{}l r r r r r r r r@{}}
 \hline
@@ -7872,7 +7872,8 @@ $\Delta$              & $-3.72$ & $-1.59$ & $+1.30$ & $+0.47$ & $+0.56$ & $-1.01
 \hline
 \multicolumn{9}{@{}l}{\textbf{RSB-A3} (100 ep)} \\
 reference (JAX)       & 16.70 & 44.30 & 49.64 & 60.86 & 66.06 & 73.76 & 77.59 & 78.14 \\
-verified path (PJRT)  & --- & --- & --- & --- & --- & --- & --- & --- \\
+verified path (PJRT)  & 20.67 & 42.65 & 52.28 & 62.05 & 66.89 & 74.60 & 77.42 & 77.99 \\
+$\Delta$              & $+3.97$ & $-1.65$ & $+2.64$ & $+1.19$ & $+0.83$ & $+0.84$ & $-0.17$ & $-0.15$ \\
 \hline
 \end{tabular}
 \end{table}
@@ -7927,9 +7928,13 @@ verified path (PJRT)  & --- & --- & --- & --- & --- & --- & --- & --- \\
 (1,0.10) (2,4.67) (3,9.67) (4,13.37) (5,16.70) (6,22.76) (7,30.27) (8,30.41) (9,34.90) (10,35.50) (11,37.55) (12,39.76) (13,39.48) (14,43.89) (15,44.30) (16,46.39) (17,46.88) (18,44.35) (19,45.28) (20,47.88) (21,48.20) (22,51.33) (23,49.69) (24,52.89) (25,50.41) (26,51.34) (27,50.54) (28,50.42) (29,54.14) (30,49.64) (31,56.32) (32,53.03) (33,53.54) (34,44.22) (35,58.65) (36,53.36) (37,55.55) (38,55.79) (39,58.83) (40,59.97) (41,55.08) (42,58.98) (43,56.29) (44,59.56) (45,60.86) (46,60.75) (47,60.87) (48,61.04) (49,60.95) (50,56.01) (51,63.32) (52,62.81) (53,63.52) (54,65.01) (55,66.25) (56,64.79) (57,67.71) (58,65.25) (59,66.06) (60,66.06) (61,68.90) (62,69.57) (63,68.65) (64,70.22) (65,69.50) (66,68.18) (67,70.93) (68,70.22) (69,71.51) (70,72.53) (71,71.78) (72,72.56) (73,72.61) (74,72.84) (75,73.76) (76,73.95) (77,74.59) (78,74.65) (79,75.04) (80,75.66) (81,75.11) (82,76.36) (83,76.29) (84,76.12) (85,75.97) (86,76.68) (87,77.18) (88,77.32) (89,77.35) (90,77.59) (91,77.70) (92,77.67) (93,77.89) (94,77.96) (95,77.97) (96,78.09) (97,78.07) (98,78.05) (99,78.14) (100,78.14)
 };
 \addlegendentry{reference (JAX)}
+\addplot[red, dashed] coordinates {
+(1,0.09) (2,3.98) (3,10.03) (4,14.60) (5,20.67) (6,22.40) (7,28.65) (8,34.08) (9,34.61) (10,38.88) (11,31.46) (12,36.20) (13,39.98) (14,44.56) (15,42.65) (16,47.82) (17,45.77) (18,46.40) (19,51.24) (20,47.43) (21,47.81) (22,50.96) (23,49.65) (24,50.84) (25,49.37) (26,51.61) (27,49.89) (28,52.11) (29,55.42) (30,52.28) (31,50.37) (32,56.39) (33,51.36) (34,52.22) (35,57.30) (36,55.75) (37,59.88) (38,58.02) (39,59.73) (40,57.37) (41,57.05) (42,48.37) (43,60.41) (44,60.92) (45,62.05) (46,58.55) (47,59.02) (48,64.09) (49,63.25) (50,63.07) (51,63.39) (52,64.90) (53,64.69) (54,64.81) (55,65.30) (56,62.19) (57,66.91) (58,63.53) (59,67.94) (60,66.89) (61,69.16) (62,68.53) (63,68.57) (64,69.97) (65,70.35) (66,70.96) (67,71.26) (68,69.86) (69,72.33) (70,72.42) (71,72.91) (72,73.47) (73,73.18) (74,73.97) (75,74.60) (76,74.27) (77,74.97) (78,75.31) (79,75.10) (80,75.62) (81,75.98) (82,76.12) (83,76.07) (84,76.64) (85,76.86) (86,76.54) (87,76.96) (88,77.17) (89,77.38) (90,77.42) (91,77.53) (92,77.63) (93,77.74) (94,77.82) (95,77.78) (96,77.79) (97,77.85) (98,77.90) (99,77.93) (100,77.99)
+};
+\addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
-\caption{ResNet-50 validation top-1 per epoch, both recipes on both paths (A3's verified curve is the re-run's), scored over all $50{,}000$ validation images at every epoch.}
+\caption{ResNet-50 validation top-1 per epoch, both recipes on both paths, scored over all $50{,}000$ validation images at every epoch.}
 \label{fig:r50_paths_curves}
 \end{figure}
 
@@ -7950,7 +7955,7 @@ three tiers.
 \hline
 tier & epochs & train res & verified render & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped; the per-256 re-run owed (\S\ref{sec:r50_pjrt}) & $78.1\%$ (paper) \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & run: $77.99\%$ (\S\ref{sec:r50_pjrt}) & $78.1\%$ (paper) \\
 A2 (\texttt{a2})           & 300 & $224$ & rendered, sd $0.05$, no EMA & $79.8\%$ (paper) \\
 A1 (\texttt{a1})           & 600 & $224$ & rendered, sd $0.05$, no EMA & $80.4\%$ (paper) \\
 \hline
@@ -8036,10 +8041,10 @@ the recipe measured one ingredient at a time rather than inherited, and
 every later recipe stated as a diff from this one.
 
 ResNet-50 runs the two ends of the recipe ladder. On 2018 the two paths
-tie as ResNet-34's do; on A3 the reference lands on the paper's number
-once Mixup or CutMix is drawn per $256$ rows as \texttt{timm} draws it,
-half a point that one draw per step had cost, and the verified half of
-that pair is owed. A2 and A1 are
+tie as ResNet-34's do, and on A3 too once Mixup or CutMix is drawn per
+$256$ rows on both, as \texttt{timm} draws it: the reference lands on the
+paper's number, half a point that one draw per step had cost, and the
+verified path within two tenths of it. A2 and A1 are
 rendered and timed, not run. What the network costs is
 parameters: a standard convolution does spatial mixing and channel mixing
 in one kernel and needs weights for both. The next chapter factors them, and the
@@ -20925,7 +20930,7 @@ pairs in one place, each row's chapter table the source.
 \hline \\[-6pt]
 ResNet-34       & 2018       &  90 & 73.98 & 91.70 & 74.14 & 91.85 & 12.7 / 23.5$^{\dagger}$ \\
 ResNet-50       & 2018       &  90 & 77.01 & 93.51 & 76.99 & 93.51 & 22.2 / 30.1$^{\dagger}$ \\
-ResNet-50       & RSB-A3     & 100 & 78.14 & 93.70 & ---   & ---   & 14.0 / ---$^{\ddagger}$ \\
+ResNet-50       & RSB-A3     & 100 & 78.14 & 93.70 & 77.99 & 93.69 & 14.0 / 21.0$^{\ddagger}$ \\
 MobileNetV2     & TF-slim    & 420 & 71.84 & 90.53 & 71.69 & 90.52 & 48.7 / 63.7$^{\dagger}$ \\
 EfficientNet-B0 & TensorFlow & 350 & 77.17 & 93.39 & 77.21 & 93.46 & 42.5 / 65.1$^{\ddagger}$ \\
 ConvNeXt-T      & official   & 300 & 81.99 & 95.87 & 82.15 & 95.91 & 74.1 / 102.7$^{\ddagger}$ \\
@@ -20933,9 +20938,8 @@ ViT-Tiny        & DeiT-Ti    & 300 & 71.64 & 90.98 & 71.61 & 90.95 & 48.3 / 62.6
 \end{tabular}
 \end{table}
 
-\noindent Six of the seven pairs tie, within two tenths of a point on top-1
-either way. ResNet-50 on A3 differs by half a point, the verified path
-higher, at one seed per arm (\S\ref{sec:r50_pjrt}).
+\noindent All seven pairs tie, within two tenths of a point on top-1
+either way.
 \texttt{scripts/jobs/} also carries siblings of these rows that differ in
 precision or accumulation shape and never in recipe, plus
 \texttt{selftest}, which exercises the supervisor without a GPU.
