@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-07T21:15:32Z",
+  "run": "2026-11-07-zs-mac-mini-metal",
+  "core": {
+    "repo_sha": "a42a6af19ac557234da403b06ea87cf892c10fc7",
+    "repo_dirty": false,
+    "lean_toolchain": "leanprover/lean4:v4.35.0",
+    "shim_source_sha": "d8d048279e12fa99",
+    "shim_binary_sha": "c57620f4a0431a8d",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "e16302dde21a9902",
+    "suite_sha": "a80e2d4155cccbba",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "metal",
+    "host": "zs-mac-mini",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "Apple M5 Pro",
+        "memory": null,
+        "driver": null
+      }
+    ],
+    "gpu_count_visible": 1,
+    "visible_devices": null,
+    "driver": null,
+    "runtime": {
+      "driver": "0.0.0",
+      "runtime": "1.3929198374.167101116",
+      "toolkit": "0.0.0",
+      "dnn": "0.0.0"
+    },
+    "plugin_path": ".venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib",
+    "plugin_package": "metal_pjrt_core==0.0.5",
+    "plugin_sha": "c268830cbd7b326c",
+    "pjrt_api_plugin": "0.115",
+    "platform_name": "mtl",
+    "platform_version": "oneapi 1.3929198374.167101116",
+    "kernel": "27.2.0",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)"
+  }
+}

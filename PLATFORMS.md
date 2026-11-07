@@ -36,6 +36,7 @@ this repo.
 
 | date | host | GPUs | driver | runtime | plugin | PJRT API | repo | tiers | pass | xfail | fail | skip | |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-07 | zs-mac-mini | 1× Apple M5 Pro |  | runtime 1.3929198374.167101116, dnn 0.0.0 | metal_pjrt_core==0.0.5 | 0.115 (hdr 0.90) | `a42a6af1` | 0–2 | 21 | 0 | 0 | 3 | [✅](runs/platform/2026-11-07-zs-mac-mini-metal/results.tsv) |
 | 2026-11-01 | ares | 1× AMD Radeon RX 7900 XTX |  | runtime 7.16.26385, dnn 1.3.0 | jax_rocm10_pjrt==0.11.1+rocm10.1.0 | 0.114 (hdr 0.90) | `824155aa+dirty` | 0–2 | 21 | 0 | 0 | 3 | [✅](runs/platform/2026-11-01-ares-rocm-2/results.tsv) |
 | 2026-10-26 | orin | 1× Orin (nvgpu) | 540.4.0 | runtime 12.6.0, dnn 9.12.0 | pjrt_c_api_gpu_plugin.so | 0.114 (hdr 0.90) | `e985c139+dirty` | 0–2 | 20 | 1 | 0 | 3 | [✅](runs/platform/2026-10-26-orin-cuda/results.tsv) |
 | 2026-10-26 | minerva | 1× AMD Radeon RX 7900 XTX |  | runtime 7.2.53211, dnn 0.0.0 | jax_rocm7_pjrt==0.11.0 | 0.114 (hdr 0.90) | `85d9b2a1+dirty` | 0–2 | 21 | 0 | 0 | 3 | [✅](runs/platform/2026-10-26-minerva-rocm-coldmiopen-nogemm/results.tsv) |
