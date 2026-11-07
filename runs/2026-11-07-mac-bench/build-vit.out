@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainViTVerifiedAdam (225ms)
+✔ [28/29] Built apps.imagenette.MainViTVerifiedAdam:c.o (90ms)
+✔ [29/29] Built «vit-verified-adam»:exe (108ms)
+Build completed successfully (29 jobs).

@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainMobilenetV2VerifiedAdam (178ms)
+✔ [28/29] Built apps.imagenette.MainMobilenetV2VerifiedAdam:c.o (68ms)
+✔ [29/29] Built «mobilenetv2-verified-adam»:exe (84ms)
+Build completed successfully (29 jobs).

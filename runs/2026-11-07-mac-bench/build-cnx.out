@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainConvNeXtVerifiedAdam (363ms)
+✔ [28/29] Built apps.imagenette.MainConvNeXtVerifiedAdam:c.o (119ms)
+✔ [29/29] Built «convnext-verified-adam»:exe (164ms)
+Build completed successfully (29 jobs).

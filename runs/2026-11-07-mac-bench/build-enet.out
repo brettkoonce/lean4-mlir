@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainEfficientNetVerifiedAdam (199ms)
+✔ [28/29] Built apps.imagenette.MainEfficientNetVerifiedAdam:c.o (105ms)
+✔ [29/29] Built «efficientnet-verified-adam»:exe (87ms)
+Build completed successfully (29 jobs).

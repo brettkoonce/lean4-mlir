@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.cifar.MainCifar8WideBbnAblation (224ms)
+✔ [28/29] Built apps.cifar.MainCifar8WideBbnAblation:c.o (239ms)
+✔ [29/29] Built «cifar8wb-bbn-ablation»:exe (205ms)
+Build completed successfully (29 jobs).

@@ -1,0 +1,9 @@
+net	exe	bs	steps_per_epoch	step_ms_med	step_ms_min	step_ms_p90	epoch_est_s	epochs	run_est_h	status
+bbn	cifar8wb-bbn-ablation	128	390	6	5	6	3	40	0.03	ok
+r34	resnet34-verified-adam	32	295	180	178	185	61	80	1.36	ok
+r50	resnet50-verified-adam	32	295	266	264	272	90	80	2.01	ok
+mnv2	mobilenetv2-verified-adam	32	295	169	168	170	57	80	1.27	ok
+mnv4	mobilenetv4-verified-adam	32	295	334	332	336	113	80	2.52	ok
+enet	efficientnet-verified-adam	32	295	354	315	388	120	80	2.67	ok
+cnx	convnext-verified-adam	32	295	575	560	592	195	80	4.33	ok
+vit	vit-verified-adam	32	295	72	69	85	24	80	0.54	ok

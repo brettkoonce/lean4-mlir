@@ -1,0 +1,32 @@
+mac_bench 2026-11-07 13:38:57 — Apple M5 Pro, 20 GPU cores, 64 GB, macOS 27.2, zs-mac-mini
+jax-graft 0.0.5, commit a42a6af1
+
+train step, median ms (synthetic data, steps 21..70):
+  bbn    cifar8wb-bbn-ablation        bs 128        6 ms/step  (min 5, p90 6)  
+  r34    resnet34-verified-adam       bs 32       180 ms/step  (min 178, p90 185)  
+  r50    resnet50-verified-adam       bs 32       266 ms/step  (min 264, p90 272)  
+  mnv2   mobilenetv2-verified-adam    bs 32       169 ms/step  (min 168, p90 170)  
+  mnv4   mobilenetv4-verified-adam    bs 32       334 ms/step  (min 332, p90 336)  
+  enet   efficientnet-verified-adam   bs 32       354 ms/step  (min 315, p90 388)  
+  cnx    convnext-verified-adam       bs 32       575 ms/step  (min 560, p90 592)  
+  vit    vit-verified-adam            bs 32        72 ms/step  (min 69, p90 85)  
+
+deploy/mac_ladder.sh (CIFAR and below), at 3 s per CIFAR epoch:
+  cifar  12 arms x 40 ep       0.4 h
+  seeds  5 x 6 arms x 40 ep    1.0 h
+  grid   10 widths x 25 ep     0.2 h
+  suite + mnist + gradcheck   ~0.3 h
+  total                        1.9 h
+
+Imagenette, 80 epochs each (lake run train <name>; +15 % per epoch for the val pass):
+  r34      1.4 h  (61 s/epoch)
+  r50      2.0 h  (90 s/epoch)
+  mnv2     1.3 h  (57 s/epoch)
+  mnv4     2.5 h  (113 s/epoch)
+  enet     2.7 h  (120 s/epoch)
+  cnx      4.3 h  (195 s/epoch)
+  vit      0.5 h  (24 s/epoch)
+  all seven: 14.7 h
+
+Reference points: a 7900 XTX runs the ladder in ~1.5 h and all seven Imagenette nets in ~6.7 h;
+an M1 Air (8 GPU cores) does ~12 s per CIFAR epoch (~7 h ladder) and ~5.7 min per ResNet-34 epoch.

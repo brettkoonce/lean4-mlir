@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainResnet50VerifiedAdam (168ms)
+✔ [28/29] Built apps.imagenette.MainResnet50VerifiedAdam:c.o (63ms)
+✔ [29/29] Built «resnet50-verified-adam»:exe (82ms)
+Build completed successfully (29 jobs).
