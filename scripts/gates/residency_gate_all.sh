@@ -130,9 +130,9 @@ for row in "${NETS[@]}"; do
   # written they reported PASS, because .lake/build/bin still held the binaries
   # built before the rename. A gate that silently drops a third of its table is
   # worse than no gate. `scripts/gates/check_target_names.sh` now lints this file too.
-  if ! grep -q "^lean_exe «$bin» where\$" lakefile.lean; then
+  if ! grep -q "^lean_exe «${bin}» where\$" lakefile.lean; then
     printf "  %-15s ✗ DEAD NAME — «%s» is not a lean_exe in lakefile.lean\n" "$name" "$bin"
-    NAMES+=("$name"); VERDICTS+=("FAIL  dead target name «$bin»"); FAILED=1; continue
+    NAMES+=("$name"); VERDICTS+=("FAIL  dead target name «${bin}»"); FAILED=1; continue
   fi
   if [ ! -x ".lake/build/bin/$bin" ]; then
     printf "  %-15s ⚠ SKIP — not built (lake build %s)\n" "$name" "$bin"

@@ -36,9 +36,9 @@ fi
 # Resolve the target: an exact lean_exe name first, then the "<name>" → "<name>-train"
 # convention (e.g. "unet-brats" → "unet-brats-train").
 trainer="$1"
-if grep -q "^lean_exe «$trainer»" lakefile.lean; then
+if grep -q "^lean_exe «${trainer}»" lakefile.lean; then
   bin="$trainer"
-elif grep -q "^lean_exe «$trainer-train»" lakefile.lean; then
+elif grep -q "^lean_exe «${trainer}-train»" lakefile.lean; then
   bin="$trainer-train"
 else
   bin="$trainer"   # not in the lakefile: a binary built elsewhere, run as found
@@ -46,7 +46,7 @@ fi
 
 # Build first, so an edited source or a fresh pull never runs a stale binary; a no-op build
 # is about a second. A box with only the binaries copied in (no `lake`) runs what it has.
-if command -v lake >/dev/null && grep -q "^lean_exe «$bin»" lakefile.lean; then
+if command -v lake >/dev/null && grep -q "^lean_exe «${bin}»" lakefile.lean; then
   lake -q build "$bin"   # quiet: no replay of cached warnings; errors still print
 fi
 
