@@ -1,0 +1,4 @@
+✔ [27/29] Built tests.TestCifar8BbnGradCheck (575ms)
+✔ [28/29] Built tests.TestCifar8BbnGradCheck:c.o (947ms)
+✔ [29/29] Built «cifar8-bbn-gradcheck»:exe (87ms)
+Build completed successfully (29 jobs).

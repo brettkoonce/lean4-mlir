@@ -1,0 +1,53 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 14:08:35.950347 39249699 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 40115.2 MB reclaimable now
+I1107 14:08:35.960865 39249693 service.cc:154] XLA service 0x100f44e10 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 14:08:35.960873 39249693 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 14:08:35.964222 39249693 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 14:08:35.988621 39249693 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/cifar8wb_bbn_adam_train_step.mlir (@cifar8wb_bbn_adam_train_step, 133 outputs, 1 replica) in 260 ms
+GRADCHECK — @cifar8wb_bbn_adam_train_step on the committed artifact
+  artifact verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  38 params (374010 floats), bs 128, 8 running-stat BN layers (384 stat floats), backend xla
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.020000
+  xla/pjrt verified_mlir/cifar8wb_bbn_adam_train_step.mlir
+  base loss 2.357593   ‖g‖ 2.885568   (ln 10 = 2.302585)
+  384 returned batch statistics finite, variances ≥ 0
+
+  TIER 1  A  ⟨g_W,W⟩+⟨g_b,b⟩ = 0   8 BN-followed convs   worst |cos∠| 0.000001 at L8.(W,b)
+          ⟂  control: 3 head weights with no BN after them, weakest violation 0.005203 at head.Wa
+             L1.(W,b)	0.000000
+             L2.(W,b)	0.000000
+             L3.(W,b)	0.000000
+             L4.(W,b)	0.000000
+             L5.(W,b)	0.000000
+             L6.(W,b)	0.000000
+             L7.(W,b)	0.000000
+             L8.(W,b)	0.000001
+             head.W9	0.010720
+             head.Wa	0.005203
+             head.Wb	0.035034
+
+  TIER 2  group   form                           <g,δ>          (L₊−L₋)/2        rel
+          L1	conv 3→16 @32² + BN + relu	0.000410	0.000410	0.000977
+          L2	conv 16→16 @32² + BN + relu	0.000462	0.000461	0.001542
+          L3	conv 16→16 @16² + BN + relu	0.000329	0.000329	0.000308
+          L4	conv 16→16 @16² + BN + relu	0.000287	0.000287	0.000001
+          L5	conv 16→32 @8² + BN + relu	0.000366	0.000366	0.000220
+          L6	conv 32→32 @8² + BN + relu	0.000362	0.000362	0.000471
+          L7	conv 32→32 @4² + BN + relu	0.000339	0.000339	0.000187
+          L8	conv 32→32 @4² + BN + relu	0.000266	0.000266	0.001019
+          head	dense 128→512→512→10	0.002555	0.002557	0.000505
+          whole	all 38 tensors	0.006162	0.006131	0.005046
+  worst rel 0.005046 at whole;  L1's fp32 NOISE FLOOR at the same ‖δ‖ is 0.000000
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 0.999495 at head
+  25 invokes of @m.cifar8wb_bbn_adam_train_step
+
+  ✅ GRADCHECK PASSES.
+     TIER 1: the 8 BN-followed convs satisfy ⟨g_W,W⟩+⟨g_b,b⟩ = 0 to |cos∠| ≤ 0.000001, against 3 head weights that violate it by ≥ 0.005203 (7526.781954×).
+     TIER 2: all 9 groups and the whole net agree in magnitude to rel ≤ 0.005046, against a doubled-gradient control that misses by 0.999495 (198.065633× the tie).
+     The backward of verified_mlir/cifar8wb_bbn_adam_train_step.mlir is the gradient of its forward.
