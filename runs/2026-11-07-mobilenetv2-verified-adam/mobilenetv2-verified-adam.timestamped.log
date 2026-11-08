@@ -1,0 +1,754 @@
+2026-11-07 19:49:54 ━━━ XLA/PJRT backend ━━━
+2026-11-07 19:49:54   ✓ ffi/libpjrt_ffi.so up to date
+2026-11-07 19:49:54   ▸ PJRT_PLUGIN unset — falling back to the path compiled into ffi/pjrt_ffi.c (a jax rocm/cuda plugin .so). If the run dies in dlopen, set PJRT_PLUGIN to your plugin.
+2026-11-07 19:49:54 
+2026-11-07 19:49:54 ━━━ mobilenetv2-verified-adam: build ━━━
+2026-11-07 19:49:55 Build completed successfully (29 jobs).
+2026-11-07 19:49:55 ━━━ mobilenetv2-verified-adam: run (gpu 0, metal) ━━━
+2026-11-07 19:49:55 grep: illegal byte sequence
+2026-11-07 19:49:55 grep: illegal byte sequence
+2026-11-07 19:49:55 → mobilenetv2-verified-adam (GPU 0, metal) → runs/2026-11-07-mobilenetv2-verified-adam/mobilenetv2-verified-adam.log
+2026-11-07 19:49:55 [pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+2026-11-07 19:49:55 I1107 19:49:55.528358 39751286 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 48351.2 MB reclaimable now
+2026-11-07 19:49:55 I1107 19:49:55.529697 39751265 service.cc:154] XLA service 0x103235b40 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+2026-11-07 19:49:55 I1107 19:49:55.529702 39751265 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+2026-11-07 19:49:55 I1107 19:49:55.530633 39751265 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+2026-11-07 19:49:55 [pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+2026-11-07 19:49:55 [pjrt_ffi] command buffers: enabled (default)
+2026-11-07 19:49:55 [pjrt_ffi] h2d: batched (default)
+2026-11-07 19:49:55 [pjrt_ffi] d2h: batched (default)
+2026-11-07 19:49:55 [pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+2026-11-07 19:49:55 I1107 19:49:55.554558 39751265 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+2026-11-07 19:49:56 [pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 813 ms
+2026-11-07 19:49:56 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir (@mobilenetv2_fwd, 1 outputs, 1 replica) in 141 ms
+2026-11-07 19:49:56 [pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 83 ms
+2026-11-07 19:49:56 MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+2026-11-07 19:49:56   xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
+2026-11-07 19:49:56   xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
+2026-11-07 19:49:56   xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
+2026-11-07 19:49:56   imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+2026-11-07 19:49:56   train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+2026-11-07 19:49:56   running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+2026-11-07 19:49:56      decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+2026-11-07 19:49:56 [pjrt_ffi] RESIDENT: @mobilenetv2_adam_train_step holds 474 parameter tensors (25.6 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:49:56   step 0/295: loss=2.512637
+2026-11-07 19:49:57   step 1/295: loss=2.584509
+2026-11-07 19:49:57   step 2/295: loss=2.786781
+2026-11-07 19:50:13   step 100/295: loss=2.213234
+2026-11-07 19:50:30   step 200/295: loss=2.041945
+2026-11-07 19:50:46 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:50:48 Epoch 1/80: loss=2.119518 lr=0.000333
+2026-11-07 19:50:48   epoch 1: val_acc = 675/3925 = 17.197452%  top5 = 2627/3925 = 66.929936%  [95% CI 16.05–18.41]
+2026-11-07 19:50:48     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 2952038519450035745)
+2026-11-07 19:50:48   step 0/295: loss=2.018021
+2026-11-07 19:50:48   step 1/295: loss=1.596843
+2026-11-07 19:50:48   step 2/295: loss=1.650563
+2026-11-07 19:51:05   step 100/295: loss=1.598642
+2026-11-07 19:51:21   step 200/295: loss=1.480495
+2026-11-07 19:51:37 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:51:39 Epoch 2/80: loss=1.781715 lr=0.000667
+2026-11-07 19:51:39   epoch 2: val_acc = 1200/3925 = 30.573248%  top5 = 2818/3925 = 71.796178%  [95% CI 29.15–32.03]
+2026-11-07 19:51:39     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 14149356870413198155)
+2026-11-07 19:51:39   step 0/295: loss=1.856764
+2026-11-07 19:51:40   step 1/295: loss=2.133538
+2026-11-07 19:51:40   step 2/295: loss=1.712164
+2026-11-07 19:51:56   step 100/295: loss=1.501251
+2026-11-07 19:52:13   step 200/295: loss=1.253774
+2026-11-07 19:52:29 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:52:31 Epoch 3/80: loss=1.586928 lr=0.001000
+2026-11-07 19:52:31   epoch 3: val_acc = 1205/3925 = 30.700637%  top5 = 3008/3925 = 76.636943%  [95% CI 29.28–32.16]
+2026-11-07 19:52:31     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 6882296236763931130)
+2026-11-07 19:52:31   step 0/295: loss=1.526589
+2026-11-07 19:52:31   step 1/295: loss=1.167720
+2026-11-07 19:52:31   step 2/295: loss=1.404959
+2026-11-07 19:52:48   step 100/295: loss=1.388186
+2026-11-07 19:53:05   step 200/295: loss=1.320833
+2026-11-07 19:53:21 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:53:23 Epoch 4/80: loss=1.442456 lr=0.001000
+2026-11-07 19:53:23   epoch 4: val_acc = 2159/3925 = 55.006369%  top5 = 3596/3925 = 91.617834%  [95% CI 53.45–56.56]
+2026-11-07 19:53:23     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 11500026249651357728)
+2026-11-07 19:53:23   step 0/295: loss=1.400579
+2026-11-07 19:53:23   step 1/295: loss=1.729142
+2026-11-07 19:53:23   step 2/295: loss=1.279421
+2026-11-07 19:53:40   step 100/295: loss=1.519470
+2026-11-07 19:53:57   step 200/295: loss=1.397076
+2026-11-07 19:54:12 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:54:14 Epoch 5/80: loss=1.335829 lr=0.000998
+2026-11-07 19:54:14   epoch 5: val_acc = 2014/3925 = 51.312102%  top5 = 3590/3925 = 91.464968%  [95% CI 49.75–52.87]
+2026-11-07 19:54:14     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 9815275811466629974)
+2026-11-07 19:54:15   step 0/295: loss=1.458426
+2026-11-07 19:54:15   step 1/295: loss=1.142896
+2026-11-07 19:54:15   step 2/295: loss=1.296596
+2026-11-07 19:54:31   step 100/295: loss=1.316643
+2026-11-07 19:54:48   step 200/295: loss=1.414526
+2026-11-07 19:55:04 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:55:06 Epoch 6/80: loss=1.236632 lr=0.000996
+2026-11-07 19:55:06   epoch 6: val_acc = 2068/3925 = 52.687898%  top5 = 3539/3925 = 90.165605%  [95% CI 51.12–54.25]
+2026-11-07 19:55:06     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 4958943788882793981)
+2026-11-07 19:55:06   step 0/295: loss=1.253822
+2026-11-07 19:55:06   step 1/295: loss=1.240371
+2026-11-07 19:55:07   step 2/295: loss=1.272506
+2026-11-07 19:55:23   step 100/295: loss=1.363612
+2026-11-07 19:55:40   step 200/295: loss=1.300518
+2026-11-07 19:55:56 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:55:58 Epoch 7/80: loss=1.201449 lr=0.000993
+2026-11-07 19:55:58   epoch 7: val_acc = 2472/3925 = 62.980892%  top5 = 3615/3925 = 92.101911%  [95% CI 61.46–64.48]
+2026-11-07 19:55:58     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 3400729065475650924)
+2026-11-07 19:55:58   step 0/295: loss=1.044837
+2026-11-07 19:55:58   step 1/295: loss=1.211394
+2026-11-07 19:55:58   step 2/295: loss=1.569696
+2026-11-07 19:56:15   step 100/295: loss=1.370436
+2026-11-07 19:56:32   step 200/295: loss=1.211493
+2026-11-07 19:56:48 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:56:50 Epoch 8/80: loss=1.160733 lr=0.000990
+2026-11-07 19:56:50   epoch 8: val_acc = 2517/3925 = 64.127389%  top5 = 3714/3925 = 94.624204%  [95% CI 62.61–65.61]
+2026-11-07 19:56:50     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7632914727002039799)
+2026-11-07 19:56:50   step 0/295: loss=1.039317
+2026-11-07 19:56:50   step 1/295: loss=0.949678
+2026-11-07 19:56:50   step 2/295: loss=1.214529
+2026-11-07 19:57:07   step 100/295: loss=0.978922
+2026-11-07 19:57:24   step 200/295: loss=1.169971
+2026-11-07 19:57:39 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:57:41 Epoch 9/80: loss=1.118749 lr=0.000985
+2026-11-07 19:57:41   epoch 9: val_acc = 2770/3925 = 70.573248%  top5 = 3748/3925 = 95.490446%  [95% CI 69.13–71.98]
+2026-11-07 19:57:41     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 11581088158753520983)
+2026-11-07 19:57:42   step 0/295: loss=1.070933
+2026-11-07 19:57:42   step 1/295: loss=0.946027
+2026-11-07 19:57:42   step 2/295: loss=0.874474
+2026-11-07 19:57:58   step 100/295: loss=1.244516
+2026-11-07 19:58:15   step 200/295: loss=1.013547
+2026-11-07 19:58:31 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:58:33 Epoch 10/80: loss=1.092167 lr=0.000980
+2026-11-07 19:58:33   epoch 10: val_acc = 2728/3925 = 69.503185%  top5 = 3764/3925 = 95.898089%  [95% CI 68.04–70.92]
+2026-11-07 19:58:33     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7265667189477111772)
+2026-11-07 19:58:33   step 0/295: loss=1.059309
+2026-11-07 19:58:33   step 1/295: loss=0.870699
+2026-11-07 19:58:34   step 2/295: loss=1.021018
+2026-11-07 19:58:50   step 100/295: loss=1.262204
+2026-11-07 19:59:07   step 200/295: loss=0.929957
+2026-11-07 19:59:23 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 19:59:25 Epoch 11/80: loss=1.064454 lr=0.000974
+2026-11-07 19:59:25   epoch 11: val_acc = 2542/3925 = 64.764331%  top5 = 3668/3925 = 93.452229%  [95% CI 63.26–66.24]
+2026-11-07 19:59:25     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5714069733265420142)
+2026-11-07 19:59:25   step 0/295: loss=1.006205
+2026-11-07 19:59:25   step 1/295: loss=0.901554
+2026-11-07 19:59:25   step 2/295: loss=1.029712
+2026-11-07 19:59:42   step 100/295: loss=1.016406
+2026-11-07 19:59:59   step 200/295: loss=0.999334
+2026-11-07 20:00:15 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:00:17 Epoch 12/80: loss=1.018333 lr=0.000967
+2026-11-07 20:00:17   epoch 12: val_acc = 2695/3925 = 68.662420%  top5 = 3690/3925 = 94.012739%  [95% CI 67.19–70.09]
+2026-11-07 20:00:17     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 14625447011253452682)
+2026-11-07 20:00:17   step 0/295: loss=1.388887
+2026-11-07 20:00:17   step 1/295: loss=1.079063
+2026-11-07 20:00:17   step 2/295: loss=1.094130
+2026-11-07 20:00:34   step 100/295: loss=1.117365
+2026-11-07 20:00:51   step 200/295: loss=1.026028
+2026-11-07 20:01:06 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:01:08 Epoch 13/80: loss=0.997857 lr=0.000959
+2026-11-07 20:01:08   epoch 13: val_acc = 2951/3925 = 75.184713%  top5 = 3791/3925 = 96.585987%  [95% CI 73.81–76.51]
+2026-11-07 20:01:08     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 17460965748137652730)
+2026-11-07 20:01:09   step 0/295: loss=0.846690
+2026-11-07 20:01:09   step 1/295: loss=0.814437
+2026-11-07 20:01:09   step 2/295: loss=0.947050
+2026-11-07 20:01:25   step 100/295: loss=1.041595
+2026-11-07 20:01:42   step 200/295: loss=0.976895
+2026-11-07 20:01:58 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:02:00 Epoch 14/80: loss=0.985652 lr=0.000951
+2026-11-07 20:02:00   epoch 14: val_acc = 2896/3925 = 73.783439%  top5 = 3786/3925 = 96.458599%  [95% CI 72.38–75.14]
+2026-11-07 20:02:00     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 13327613101457754216)
+2026-11-07 20:02:00   step 0/295: loss=1.212100
+2026-11-07 20:02:01   step 1/295: loss=1.104193
+2026-11-07 20:02:01   step 2/295: loss=0.901861
+2026-11-07 20:02:17   step 100/295: loss=0.975110
+2026-11-07 20:02:34   step 200/295: loss=0.795099
+2026-11-07 20:02:50 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:02:52 Epoch 15/80: loss=0.959194 lr=0.000941
+2026-11-07 20:02:52   epoch 15: val_acc = 3032/3925 = 77.248408%  top5 = 3822/3925 = 97.375796%  [95% CI 75.91–78.53]
+2026-11-07 20:02:52     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 2476930536774721174)
+2026-11-07 20:02:52   step 0/295: loss=1.216123
+2026-11-07 20:02:52   step 1/295: loss=0.853720
+2026-11-07 20:02:52   step 2/295: loss=0.769254
+2026-11-07 20:03:09   step 100/295: loss=0.906950
+2026-11-07 20:03:26   step 200/295: loss=0.724360
+2026-11-07 20:03:42 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:03:44 Epoch 16/80: loss=0.931979 lr=0.000931
+2026-11-07 20:03:44   epoch 16: val_acc = 2906/3925 = 74.038217%  top5 = 3808/3925 = 97.019108%  [95% CI 72.64–75.39]
+2026-11-07 20:03:44     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 11982774697136153163)
+2026-11-07 20:03:44   step 0/295: loss=0.830129
+2026-11-07 20:03:44   step 1/295: loss=1.001789
+2026-11-07 20:03:44   step 2/295: loss=0.878581
+2026-11-07 20:04:01   step 100/295: loss=0.753668
+2026-11-07 20:04:18   step 200/295: loss=0.908806
+2026-11-07 20:04:34 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:04:36 Epoch 17/80: loss=0.922451 lr=0.000921
+2026-11-07 20:04:36   epoch 17: val_acc = 3129/3925 = 79.719745%  top5 = 3830/3925 = 97.579618%  [95% CI 78.43–80.95]
+2026-11-07 20:04:36     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 6975418173023220642)
+2026-11-07 20:04:36   step 0/295: loss=0.852706
+2026-11-07 20:04:36   step 1/295: loss=0.768113
+2026-11-07 20:04:36   step 2/295: loss=0.825263
+2026-11-07 20:04:53   step 100/295: loss=0.936562
+2026-11-07 20:05:09   step 200/295: loss=0.810159
+2026-11-07 20:05:25 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:05:27 Epoch 18/80: loss=0.886442 lr=0.000909
+2026-11-07 20:05:27   epoch 18: val_acc = 2887/3925 = 73.554140%  top5 = 3778/3925 = 96.254777%  [95% CI 72.15–74.91]
+2026-11-07 20:05:27     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7127037401445477853)
+2026-11-07 20:05:28   step 0/295: loss=0.812129
+2026-11-07 20:05:28   step 1/295: loss=0.709847
+2026-11-07 20:05:28   step 2/295: loss=0.905136
+2026-11-07 20:05:44   step 100/295: loss=0.680859
+2026-11-07 20:06:01   step 200/295: loss=0.882876
+2026-11-07 20:06:17 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:06:19 Epoch 19/80: loss=0.879120 lr=0.000897
+2026-11-07 20:06:19   epoch 19: val_acc = 3076/3925 = 78.369427%  top5 = 3815/3925 = 97.197452%  [95% CI 77.05–79.63]
+2026-11-07 20:06:19     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 18347694187331285785)
+2026-11-07 20:06:19   step 0/295: loss=0.875899
+2026-11-07 20:06:19   step 1/295: loss=0.910695
+2026-11-07 20:06:20   step 2/295: loss=1.048821
+2026-11-07 20:06:36   step 100/295: loss=0.849061
+2026-11-07 20:06:53   step 200/295: loss=0.729689
+2026-11-07 20:07:09 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:07:11 Epoch 20/80: loss=0.860557 lr=0.000885
+2026-11-07 20:07:11   epoch 20: val_acc = 2991/3925 = 76.203822%  top5 = 3807/3925 = 96.993631%  [95% CI 74.85–77.51]
+2026-11-07 20:07:11     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 10101988133976346463)
+2026-11-07 20:07:11   step 0/295: loss=0.847756
+2026-11-07 20:07:11   step 1/295: loss=0.751243
+2026-11-07 20:07:11   step 2/295: loss=0.753401
+2026-11-07 20:07:28   step 100/295: loss=0.713328
+2026-11-07 20:07:45   step 200/295: loss=0.713555
+2026-11-07 20:08:01 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:08:03 Epoch 21/80: loss=0.844352 lr=0.000871
+2026-11-07 20:08:03   epoch 21: val_acc = 3095/3925 = 78.853503%  top5 = 3795/3925 = 96.687898%  [95% CI 77.55–80.10]
+2026-11-07 20:08:03     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 13200760792859774619)
+2026-11-07 20:08:03   step 0/295: loss=0.794799
+2026-11-07 20:08:03   step 1/295: loss=0.851257
+2026-11-07 20:08:03   step 2/295: loss=0.844554
+2026-11-07 20:08:20   step 100/295: loss=0.913956
+2026-11-07 20:08:37   step 200/295: loss=0.789005
+2026-11-07 20:08:52 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:08:54 Epoch 22/80: loss=0.826329 lr=0.000857
+2026-11-07 20:08:54   epoch 22: val_acc = 3083/3925 = 78.547771%  top5 = 3808/3925 = 97.019108%  [95% CI 77.24–79.80]
+2026-11-07 20:08:54     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8911125003194254672)
+2026-11-07 20:08:55   step 0/295: loss=0.881878
+2026-11-07 20:08:55   step 1/295: loss=0.785683
+2026-11-07 20:08:55   step 2/295: loss=0.728184
+2026-11-07 20:09:11   step 100/295: loss=0.986846
+2026-11-07 20:09:28   step 200/295: loss=0.890427
+2026-11-07 20:09:44 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:09:46 Epoch 23/80: loss=0.814948 lr=0.000843
+2026-11-07 20:09:46   epoch 23: val_acc = 3075/3925 = 78.343949%  top5 = 3813/3925 = 97.146497%  [95% CI 77.03–79.60]
+2026-11-07 20:09:46     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 15225022192609137306)
+2026-11-07 20:09:46   step 0/295: loss=0.895836
+2026-11-07 20:09:46   step 1/295: loss=0.856264
+2026-11-07 20:09:47   step 2/295: loss=0.747617
+2026-11-07 20:10:03   step 100/295: loss=0.844519
+2026-11-07 20:10:20   step 200/295: loss=0.808077
+2026-11-07 20:10:36 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:10:38 Epoch 24/80: loss=0.794864 lr=0.000827
+2026-11-07 20:10:38   epoch 24: val_acc = 3012/3925 = 76.738854%  top5 = 3830/3925 = 97.579618%  [95% CI 75.39–78.03]
+2026-11-07 20:10:38     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5106925002842754729)
+2026-11-07 20:10:38   step 0/295: loss=0.707281
+2026-11-07 20:10:38   step 1/295: loss=0.883450
+2026-11-07 20:10:38   step 2/295: loss=0.810627
+2026-11-07 20:10:55   step 100/295: loss=0.694471
+2026-11-07 20:11:12   step 200/295: loss=0.755480
+2026-11-07 20:11:28 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:11:30 Epoch 25/80: loss=0.782746 lr=0.000812
+2026-11-07 20:11:30   epoch 25: val_acc = 2950/3925 = 75.159236%  top5 = 3797/3925 = 96.738854%  [95% CI 73.78–76.49]
+2026-11-07 20:11:30     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7719968989591466243)
+2026-11-07 20:11:30   step 0/295: loss=0.772600
+2026-11-07 20:11:30   step 1/295: loss=0.718589
+2026-11-07 20:11:30   step 2/295: loss=0.749250
+2026-11-07 20:11:47   step 100/295: loss=0.703033
+2026-11-07 20:12:04   step 200/295: loss=0.903257
+2026-11-07 20:12:19 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:12:21 Epoch 26/80: loss=0.759125 lr=0.000796
+2026-11-07 20:12:21   epoch 26: val_acc = 3288/3925 = 83.770701%  top5 = 3840/3925 = 97.834395%  [95% CI 82.58–84.89]
+2026-11-07 20:12:21     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7755110283080007313)
+2026-11-07 20:12:22   step 0/295: loss=0.743516
+2026-11-07 20:12:22   step 1/295: loss=0.765351
+2026-11-07 20:12:22   step 2/295: loss=0.683329
+2026-11-07 20:12:38   step 100/295: loss=0.704908
+2026-11-07 20:12:55   step 200/295: loss=0.796933
+2026-11-07 20:13:11 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:13:13 Epoch 27/80: loss=0.758535 lr=0.000779
+2026-11-07 20:13:13   epoch 27: val_acc = 3050/3925 = 77.707006%  top5 = 3828/3925 = 97.528662%  [95% CI 76.38–78.98]
+2026-11-07 20:13:13     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5289267118070412447)
+2026-11-07 20:13:13   step 0/295: loss=0.606083
+2026-11-07 20:13:13   step 1/295: loss=0.690005
+2026-11-07 20:13:14   step 2/295: loss=0.774298
+2026-11-07 20:13:30   step 100/295: loss=0.767383
+2026-11-07 20:13:47   step 200/295: loss=0.850135
+2026-11-07 20:14:03 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:14:05 Epoch 28/80: loss=0.723386 lr=0.000762
+2026-11-07 20:14:05   epoch 28: val_acc = 3266/3925 = 83.210191%  top5 = 3833/3925 = 97.656051%  [95% CI 82.01–84.35]
+2026-11-07 20:14:05     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 1648341373243245018)
+2026-11-07 20:14:05   step 0/295: loss=0.702301
+2026-11-07 20:14:05   step 1/295: loss=0.629364
+2026-11-07 20:14:05   step 2/295: loss=0.715423
+2026-11-07 20:14:22   step 100/295: loss=0.667214
+2026-11-07 20:14:39   step 200/295: loss=0.632574
+2026-11-07 20:14:55 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:14:57 Epoch 29/80: loss=0.722799 lr=0.000744
+2026-11-07 20:14:57   epoch 29: val_acc = 3223/3925 = 82.114650%  top5 = 3851/3925 = 98.114650%  [95% CI 80.88–83.28]
+2026-11-07 20:14:57     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 15071290699433650183)
+2026-11-07 20:14:57   step 0/295: loss=0.663432
+2026-11-07 20:14:57   step 1/295: loss=0.735460
+2026-11-07 20:14:57   step 2/295: loss=0.774165
+2026-11-07 20:15:14   step 100/295: loss=0.627546
+2026-11-07 20:15:30   step 200/295: loss=0.767292
+2026-11-07 20:15:46 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:15:48 Epoch 30/80: loss=0.716570 lr=0.000726
+2026-11-07 20:15:48   epoch 30: val_acc = 3196/3925 = 81.426752%  top5 = 3841/3925 = 97.859873%  [95% CI 80.18–82.61]
+2026-11-07 20:15:48     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 17655163789699263235)
+2026-11-07 20:15:48   step 0/295: loss=0.628556
+2026-11-07 20:15:49   step 1/295: loss=0.859188
+2026-11-07 20:15:49   step 2/295: loss=0.760779
+2026-11-07 20:16:05   step 100/295: loss=0.995548
+2026-11-07 20:16:22   step 200/295: loss=0.775931
+2026-11-07 20:16:38 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:16:40 Epoch 31/80: loss=0.698681 lr=0.000708
+2026-11-07 20:16:40   epoch 31: val_acc = 3302/3925 = 84.127389%  top5 = 3845/3925 = 97.961783%  [95% CI 82.95–85.24]
+2026-11-07 20:16:40     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 17594874338093984024)
+2026-11-07 20:16:40   step 0/295: loss=0.626461
+2026-11-07 20:16:40   step 1/295: loss=0.723963
+2026-11-07 20:16:41   step 2/295: loss=0.717666
+2026-11-07 20:16:57   step 100/295: loss=0.589660
+2026-11-07 20:17:14   step 200/295: loss=0.604048
+2026-11-07 20:17:30 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:17:32 Epoch 32/80: loss=0.672711 lr=0.000689
+2026-11-07 20:17:32   epoch 32: val_acc = 3218/3925 = 81.987261%  top5 = 3831/3925 = 97.605096%  [95% CI 80.75–83.16]
+2026-11-07 20:17:32     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 9678649311755053826)
+2026-11-07 20:17:32   step 0/295: loss=0.667680
+2026-11-07 20:17:32   step 1/295: loss=0.681209
+2026-11-07 20:17:32   step 2/295: loss=0.682599
+2026-11-07 20:17:49   step 100/295: loss=0.768356
+2026-11-07 20:18:06   step 200/295: loss=0.753712
+2026-11-07 20:18:22 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:18:24 Epoch 33/80: loss=0.675632 lr=0.000670
+2026-11-07 20:18:24   epoch 33: val_acc = 2993/3925 = 76.254777%  top5 = 3797/3925 = 96.738854%  [95% CI 74.90–77.56]
+2026-11-07 20:18:24     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7244380818348466773)
+2026-11-07 20:18:24   step 0/295: loss=0.597605
+2026-11-07 20:18:24   step 1/295: loss=0.712714
+2026-11-07 20:18:24   step 2/295: loss=0.559752
+2026-11-07 20:18:41   step 100/295: loss=0.643356
+2026-11-07 20:18:57   step 200/295: loss=0.611541
+2026-11-07 20:19:13 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:19:15 Epoch 34/80: loss=0.660218 lr=0.000651
+2026-11-07 20:19:15   epoch 34: val_acc = 3308/3925 = 84.280255%  top5 = 3855/3925 = 98.216561%  [95% CI 83.11–85.39]
+2026-11-07 20:19:15     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 14887483432563441900)
+2026-11-07 20:19:15   step 0/295: loss=0.599941
+2026-11-07 20:19:16   step 1/295: loss=0.651534
+2026-11-07 20:19:16   step 2/295: loss=0.583560
+2026-11-07 20:19:32   step 100/295: loss=0.641856
+2026-11-07 20:19:49   step 200/295: loss=0.568838
+2026-11-07 20:20:05 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:20:07 Epoch 35/80: loss=0.654126 lr=0.000631
+2026-11-07 20:20:07   epoch 35: val_acc = 3289/3925 = 83.796178%  top5 = 3833/3925 = 97.656051%  [95% CI 82.61–84.92]
+2026-11-07 20:20:07     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 3624386594330321171)
+2026-11-07 20:20:07   step 0/295: loss=0.594922
+2026-11-07 20:20:07   step 1/295: loss=0.624136
+2026-11-07 20:20:08   step 2/295: loss=0.591439
+2026-11-07 20:20:24   step 100/295: loss=0.628789
+2026-11-07 20:20:41   step 200/295: loss=0.618596
+2026-11-07 20:20:57 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:20:59 Epoch 36/80: loss=0.635743 lr=0.000611
+2026-11-07 20:20:59   epoch 36: val_acc = 3351/3925 = 85.375796%  top5 = 3850/3925 = 98.089172%  [95% CI 84.24–86.45]
+2026-11-07 20:20:59     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 14266115821791067356)
+2026-11-07 20:20:59   step 0/295: loss=0.566603
+2026-11-07 20:20:59   step 1/295: loss=0.587780
+2026-11-07 20:20:59   step 2/295: loss=0.614145
+2026-11-07 20:21:16   step 100/295: loss=0.596434
+2026-11-07 20:21:33   step 200/295: loss=0.622305
+2026-11-07 20:21:49 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:21:51 Epoch 37/80: loss=0.629945 lr=0.000591
+2026-11-07 20:21:51   epoch 37: val_acc = 3386/3925 = 86.267516%  top5 = 3852/3925 = 98.140127%  [95% CI 85.16–87.31]
+2026-11-07 20:21:51     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 695244466772506797)
+2026-11-07 20:21:51   step 0/295: loss=0.584630
+2026-11-07 20:21:51   step 1/295: loss=0.595981
+2026-11-07 20:21:51   step 2/295: loss=0.553869
+2026-11-07 20:22:08   step 100/295: loss=0.572958
+2026-11-07 20:22:25   step 200/295: loss=0.553664
+2026-11-07 20:22:40 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:22:42 Epoch 38/80: loss=0.622930 lr=0.000571
+2026-11-07 20:22:42   epoch 38: val_acc = 3317/3925 = 84.509554%  top5 = 3856/3925 = 98.242038%  [95% CI 83.34–85.61]
+2026-11-07 20:22:42     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 17560263227361114350)
+2026-11-07 20:22:43   step 0/295: loss=0.640783
+2026-11-07 20:22:43   step 1/295: loss=0.613613
+2026-11-07 20:22:43   step 2/295: loss=0.595207
+2026-11-07 20:22:59   step 100/295: loss=0.578860
+2026-11-07 20:23:16   step 200/295: loss=0.650664
+2026-11-07 20:23:32 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:23:34 Epoch 39/80: loss=0.613761 lr=0.000551
+2026-11-07 20:23:34   epoch 39: val_acc = 3322/3925 = 84.636943%  top5 = 3844/3925 = 97.936306%  [95% CI 83.48–85.73]
+2026-11-07 20:23:34     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8479530183858675140)
+2026-11-07 20:23:34   step 0/295: loss=0.577977
+2026-11-07 20:23:35   step 1/295: loss=0.625126
+2026-11-07 20:23:35   step 2/295: loss=0.572878
+2026-11-07 20:23:51   step 100/295: loss=0.611989
+2026-11-07 20:24:08   step 200/295: loss=0.569012
+2026-11-07 20:24:24 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:24:26 Epoch 40/80: loss=0.604002 lr=0.000531
+2026-11-07 20:24:26   epoch 40: val_acc = 3275/3925 = 83.439490%  top5 = 3837/3925 = 97.757962%  [95% CI 82.24–84.57]
+2026-11-07 20:24:26     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 2443095887111606925)
+2026-11-07 20:24:26   step 0/295: loss=0.571763
+2026-11-07 20:24:26   step 1/295: loss=0.580802
+2026-11-07 20:24:27   step 2/295: loss=0.575311
+2026-11-07 20:24:43   step 100/295: loss=0.545760
+2026-11-07 20:25:00   step 200/295: loss=0.588781
+2026-11-07 20:25:16 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:25:18 Epoch 41/80: loss=0.592320 lr=0.000510
+2026-11-07 20:25:18   epoch 41: val_acc = 3391/3925 = 86.394904%  top5 = 3856/3925 = 98.242038%  [95% CI 85.29–87.43]
+2026-11-07 20:25:18     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 6206501660941924855)
+2026-11-07 20:25:18   step 0/295: loss=0.625954
+2026-11-07 20:25:18   step 1/295: loss=0.551495
+2026-11-07 20:25:18   step 2/295: loss=0.565923
+2026-11-07 20:25:35   step 100/295: loss=0.625513
+2026-11-07 20:25:52   step 200/295: loss=0.616918
+2026-11-07 20:26:08 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:26:10 Epoch 42/80: loss=0.592719 lr=0.000490
+2026-11-07 20:26:10   epoch 42: val_acc = 3371/3925 = 85.885350%  top5 = 3825/3925 = 97.452229%  [95% CI 84.76–86.94]
+2026-11-07 20:26:10     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 16376299382542452278)
+2026-11-07 20:26:10   step 0/295: loss=0.645037
+2026-11-07 20:26:10   step 1/295: loss=0.584402
+2026-11-07 20:26:10   step 2/295: loss=0.570028
+2026-11-07 20:26:27   step 100/295: loss=0.564653
+2026-11-07 20:26:44   step 200/295: loss=0.563548
+2026-11-07 20:27:00 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:27:02 Epoch 43/80: loss=0.584744 lr=0.000469
+2026-11-07 20:27:02   epoch 43: val_acc = 3365/3925 = 85.732484%  top5 = 3851/3925 = 98.114650%  [95% CI 84.60–86.79]
+2026-11-07 20:27:02     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5837747612414839902)
+2026-11-07 20:27:02   step 0/295: loss=0.612652
+2026-11-07 20:27:02   step 1/295: loss=0.547505
+2026-11-07 20:27:02   step 2/295: loss=0.599883
+2026-11-07 20:27:19   step 100/295: loss=0.542827
+2026-11-07 20:27:36   step 200/295: loss=0.575972
+2026-11-07 20:27:52 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:27:54 Epoch 44/80: loss=0.574398 lr=0.000449
+2026-11-07 20:27:54   epoch 44: val_acc = 3407/3925 = 86.802548%  top5 = 3858/3925 = 98.292994%  [95% CI 85.71–87.83]
+2026-11-07 20:27:54     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 2860547019389985813)
+2026-11-07 20:27:54   step 0/295: loss=0.550685
+2026-11-07 20:27:54   step 1/295: loss=0.539572
+2026-11-07 20:27:54   step 2/295: loss=0.596254
+2026-11-07 20:28:11   step 100/295: loss=0.639452
+2026-11-07 20:28:28   step 200/295: loss=0.548026
+2026-11-07 20:28:44 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:28:46 Epoch 45/80: loss=0.575498 lr=0.000429
+2026-11-07 20:28:46   epoch 45: val_acc = 3426/3925 = 87.286624%  top5 = 3860/3925 = 98.343949%  [95% CI 86.21–88.29]
+2026-11-07 20:28:46     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 7403753547255834877)
+2026-11-07 20:28:46   step 0/295: loss=0.557019
+2026-11-07 20:28:46   step 1/295: loss=0.583021
+2026-11-07 20:28:46   step 2/295: loss=0.542863
+2026-11-07 20:29:03   step 100/295: loss=0.584630
+2026-11-07 20:29:20   step 200/295: loss=0.583869
+2026-11-07 20:29:36 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:29:37 Epoch 46/80: loss=0.569355 lr=0.000409
+2026-11-07 20:29:37   epoch 46: val_acc = 3411/3925 = 86.904459%  top5 = 3858/3925 = 98.292994%  [95% CI 85.81–87.92]
+2026-11-07 20:29:37     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5290633448098058941)
+2026-11-07 20:29:38   step 0/295: loss=0.595461
+2026-11-07 20:29:38   step 1/295: loss=0.560713
+2026-11-07 20:29:38   step 2/295: loss=0.558582
+2026-11-07 20:29:55   step 100/295: loss=0.570650
+2026-11-07 20:30:12   step 200/295: loss=0.532343
+2026-11-07 20:30:27 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:30:29 Epoch 47/80: loss=0.559533 lr=0.000389
+2026-11-07 20:30:29   epoch 47: val_acc = 3438/3925 = 87.592357%  top5 = 3854/3925 = 98.191083%  [95% CI 86.52–88.59]
+2026-11-07 20:30:29     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 10190730479753038401)
+2026-11-07 20:30:30   step 0/295: loss=0.560350
+2026-11-07 20:30:30   step 1/295: loss=0.535658
+2026-11-07 20:30:30   step 2/295: loss=0.548700
+2026-11-07 20:30:47   step 100/295: loss=0.566859
+2026-11-07 20:31:03   step 200/295: loss=0.663280
+2026-11-07 20:31:19 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:31:21 Epoch 48/80: loss=0.555585 lr=0.000369
+2026-11-07 20:31:21   epoch 48: val_acc = 3431/3925 = 87.414013%  top5 = 3855/3925 = 98.216561%  [95% CI 86.34–88.42]
+2026-11-07 20:31:21     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 3308164216114071325)
+2026-11-07 20:31:22   step 0/295: loss=0.569017
+2026-11-07 20:31:22   step 1/295: loss=0.545499
+2026-11-07 20:31:22   step 2/295: loss=0.534151
+2026-11-07 20:31:38   step 100/295: loss=0.577000
+2026-11-07 20:31:55   step 200/295: loss=0.540999
+2026-11-07 20:32:11 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:32:13 Epoch 49/80: loss=0.555639 lr=0.000349
+2026-11-07 20:32:13   epoch 49: val_acc = 3451/3925 = 87.923567%  top5 = 3858/3925 = 98.292994%  [95% CI 86.87–88.91]
+2026-11-07 20:32:13     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 13913471677928265249)
+2026-11-07 20:32:13   step 0/295: loss=0.542459
+2026-11-07 20:32:14   step 1/295: loss=0.534872
+2026-11-07 20:32:14   step 2/295: loss=0.607796
+2026-11-07 20:32:30   step 100/295: loss=0.556361
+2026-11-07 20:32:47   step 200/295: loss=0.571970
+2026-11-07 20:33:03 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:33:05 Epoch 50/80: loss=0.553955 lr=0.000330
+2026-11-07 20:33:05   epoch 50: val_acc = 3426/3925 = 87.286624%  top5 = 3858/3925 = 98.292994%  [95% CI 86.21–88.29]
+2026-11-07 20:33:05     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 61916871709699938)
+2026-11-07 20:33:05   step 0/295: loss=0.539315
+2026-11-07 20:33:06   step 1/295: loss=0.531357
+2026-11-07 20:33:06   step 2/295: loss=0.540098
+2026-11-07 20:33:22   step 100/295: loss=0.535172
+2026-11-07 20:33:39   step 200/295: loss=0.590445
+2026-11-07 20:33:55 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:33:57 Epoch 51/80: loss=0.547889 lr=0.000311
+2026-11-07 20:33:57   epoch 51: val_acc = 3428/3925 = 87.337580%  top5 = 3856/3925 = 98.242038%  [95% CI 86.26–88.34]
+2026-11-07 20:33:57     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 12317430820556369613)
+2026-11-07 20:33:57   step 0/295: loss=0.535520
+2026-11-07 20:33:58   step 1/295: loss=0.566212
+2026-11-07 20:33:58   step 2/295: loss=0.561746
+2026-11-07 20:34:14   step 100/295: loss=0.547810
+2026-11-07 20:34:31   step 200/295: loss=0.533233
+2026-11-07 20:34:47 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:34:49 Epoch 52/80: loss=0.548657 lr=0.000292
+2026-11-07 20:34:49   epoch 52: val_acc = 3457/3925 = 88.076433%  top5 = 3864/3925 = 98.445860%  [95% CI 87.03–89.05]
+2026-11-07 20:34:49     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8968887203961876798)
+2026-11-07 20:34:49   step 0/295: loss=0.538284
+2026-11-07 20:34:49   step 1/295: loss=0.577193
+2026-11-07 20:34:50   step 2/295: loss=0.536043
+2026-11-07 20:35:06   step 100/295: loss=0.549279
+2026-11-07 20:35:23   step 200/295: loss=0.527186
+2026-11-07 20:35:39 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:35:41 Epoch 53/80: loss=0.546307 lr=0.000274
+2026-11-07 20:35:41   epoch 53: val_acc = 3444/3925 = 87.745223%  top5 = 3858/3925 = 98.292994%  [95% CI 86.68–88.73]
+2026-11-07 20:35:41     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 13081784964503692535)
+2026-11-07 20:35:41   step 0/295: loss=0.530726
+2026-11-07 20:35:41   step 1/295: loss=0.564121
+2026-11-07 20:35:42   step 2/295: loss=0.567043
+2026-11-07 20:35:58   step 100/295: loss=0.524832
+2026-11-07 20:36:15   step 200/295: loss=0.538542
+2026-11-07 20:36:31 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:36:33 Epoch 54/80: loss=0.538453 lr=0.000256
+2026-11-07 20:36:33   epoch 54: val_acc = 3478/3925 = 88.611465%  top5 = 3851/3925 = 98.114650%  [95% CI 87.58–89.57]
+2026-11-07 20:36:33     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8547698735659406624)
+2026-11-07 20:36:33   step 0/295: loss=0.529927
+2026-11-07 20:36:33   step 1/295: loss=0.560027
+2026-11-07 20:36:34   step 2/295: loss=0.530493
+2026-11-07 20:36:50   step 100/295: loss=0.527476
+2026-11-07 20:37:07   step 200/295: loss=0.532613
+2026-11-07 20:37:23 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:37:25 Epoch 55/80: loss=0.536189 lr=0.000238
+2026-11-07 20:37:25   epoch 55: val_acc = 3456/3925 = 88.050955%  top5 = 3860/3925 = 98.343949%  [95% CI 87.00–89.03]
+2026-11-07 20:37:25     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 15489963725907721668)
+2026-11-07 20:37:25   step 0/295: loss=0.534099
+2026-11-07 20:37:25   step 1/295: loss=0.559914
+2026-11-07 20:37:26   step 2/295: loss=0.520710
+2026-11-07 20:37:42   step 100/295: loss=0.551132
+2026-11-07 20:37:59   step 200/295: loss=0.528621
+2026-11-07 20:38:15 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:38:17 Epoch 56/80: loss=0.534345 lr=0.000221
+2026-11-07 20:38:17   epoch 56: val_acc = 3471/3925 = 88.433121%  top5 = 3863/3925 = 98.420382%  [95% CI 87.39–89.40]
+2026-11-07 20:38:17     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 15556566046349270261)
+2026-11-07 20:38:17   step 0/295: loss=0.530084
+2026-11-07 20:38:17   step 1/295: loss=0.536637
+2026-11-07 20:38:17   step 2/295: loss=0.528065
+2026-11-07 20:38:34   step 100/295: loss=0.577769
+2026-11-07 20:38:51   step 200/295: loss=0.541319
+2026-11-07 20:39:07 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:39:09 Epoch 57/80: loss=0.533888 lr=0.000205
+2026-11-07 20:39:09   epoch 57: val_acc = 3471/3925 = 88.433121%  top5 = 3867/3925 = 98.522293%  [95% CI 87.39–89.40]
+2026-11-07 20:39:09     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 12629535131794547818)
+2026-11-07 20:39:09   step 0/295: loss=0.557149
+2026-11-07 20:39:09   step 1/295: loss=0.525755
+2026-11-07 20:39:09   step 2/295: loss=0.524893
+2026-11-07 20:39:26   step 100/295: loss=0.528431
+2026-11-07 20:39:43   step 200/295: loss=0.519174
+2026-11-07 20:39:59 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:40:01 Epoch 58/80: loss=0.533941 lr=0.000188
+2026-11-07 20:40:01   epoch 58: val_acc = 3469/3925 = 88.382166%  top5 = 3860/3925 = 98.343949%  [95% CI 87.34–89.35]
+2026-11-07 20:40:01     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 11615366919152242570)
+2026-11-07 20:40:01   step 0/295: loss=0.524832
+2026-11-07 20:40:01   step 1/295: loss=0.538792
+2026-11-07 20:40:01   step 2/295: loss=0.558431
+2026-11-07 20:40:18   step 100/295: loss=0.527976
+2026-11-07 20:40:35   step 200/295: loss=0.521833
+2026-11-07 20:40:51 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:40:53 Epoch 59/80: loss=0.530309 lr=0.000173
+2026-11-07 20:40:53   epoch 59: val_acc = 3480/3925 = 88.662420%  top5 = 3871/3925 = 98.624204%  [95% CI 87.63–89.62]
+2026-11-07 20:40:53     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 18364526417816277406)
+2026-11-07 20:40:53   step 0/295: loss=0.518585
+2026-11-07 20:40:53   step 1/295: loss=0.533853
+2026-11-07 20:40:53   step 2/295: loss=0.548771
+2026-11-07 20:41:10   step 100/295: loss=0.525235
+2026-11-07 20:41:27   step 200/295: loss=0.526462
+2026-11-07 20:41:43 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:41:45 Epoch 60/80: loss=0.527807 lr=0.000157
+2026-11-07 20:41:45   epoch 60: val_acc = 3472/3925 = 88.458599%  top5 = 3864/3925 = 98.445860%  [95% CI 87.42–89.42]
+2026-11-07 20:41:45     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5474391327795365626)
+2026-11-07 20:41:45   step 0/295: loss=0.539410
+2026-11-07 20:41:45   step 1/295: loss=0.535082
+2026-11-07 20:41:45   step 2/295: loss=0.523094
+2026-11-07 20:42:02   step 100/295: loss=0.530290
+2026-11-07 20:42:19   step 200/295: loss=0.529561
+2026-11-07 20:42:35 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:42:37 Epoch 61/80: loss=0.527562 lr=0.000143
+2026-11-07 20:42:37   epoch 61: val_acc = 3478/3925 = 88.611465%  top5 = 3863/3925 = 98.420382%  [95% CI 87.58–89.57]
+2026-11-07 20:42:37     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 13602085555626014773)
+2026-11-07 20:42:37   step 0/295: loss=0.523980
+2026-11-07 20:42:37   step 1/295: loss=0.525713
+2026-11-07 20:42:37   step 2/295: loss=0.521876
+2026-11-07 20:42:54   step 100/295: loss=0.520982
+2026-11-07 20:43:11   step 200/295: loss=0.546508
+2026-11-07 20:43:27 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:43:28 Epoch 62/80: loss=0.524246 lr=0.000129
+2026-11-07 20:43:28   epoch 62: val_acc = 3496/3925 = 89.070064%  top5 = 3864/3925 = 98.445860%  [95% CI 88.06–90.01]
+2026-11-07 20:43:28     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8203428372495771598)
+2026-11-07 20:43:29   step 0/295: loss=0.523750
+2026-11-07 20:43:29   step 1/295: loss=0.518923
+2026-11-07 20:43:29   step 2/295: loss=0.516678
+2026-11-07 20:43:46   step 100/295: loss=0.527480
+2026-11-07 20:44:03   step 200/295: loss=0.521684
+2026-11-07 20:44:19 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:44:20 Epoch 63/80: loss=0.523875 lr=0.000116
+2026-11-07 20:44:20   epoch 63: val_acc = 3490/3925 = 88.917197%  top5 = 3862/3925 = 98.394904%  [95% CI 87.90–89.86]
+2026-11-07 20:44:20     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 4652414417785033987)
+2026-11-07 20:44:21   step 0/295: loss=0.517565
+2026-11-07 20:44:21   step 1/295: loss=0.515989
+2026-11-07 20:44:21   step 2/295: loss=0.525709
+2026-11-07 20:44:38   step 100/295: loss=0.514768
+2026-11-07 20:44:55   step 200/295: loss=0.527791
+2026-11-07 20:45:10 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:45:12 Epoch 64/80: loss=0.521955 lr=0.000103
+2026-11-07 20:45:12   epoch 64: val_acc = 3496/3925 = 89.070064%  top5 = 3869/3925 = 98.573248%  [95% CI 88.06–90.01]
+2026-11-07 20:45:12     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 9677646368890290984)
+2026-11-07 20:45:13   step 0/295: loss=0.515108
+2026-11-07 20:45:13   step 1/295: loss=0.522517
+2026-11-07 20:45:13   step 2/295: loss=0.516696
+2026-11-07 20:45:30   step 100/295: loss=0.517427
+2026-11-07 20:45:47   step 200/295: loss=0.511746
+2026-11-07 20:46:03 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:46:04 Epoch 65/80: loss=0.520962 lr=0.000091
+2026-11-07 20:46:04   epoch 65: val_acc = 3489/3925 = 88.891720%  top5 = 3866/3925 = 98.496815%  [95% CI 87.87–89.84]
+2026-11-07 20:46:04     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 11149140566713879148)
+2026-11-07 20:46:05   step 0/295: loss=0.515601
+2026-11-07 20:46:05   step 1/295: loss=0.516239
+2026-11-07 20:46:05   step 2/295: loss=0.515391
+2026-11-07 20:46:22   step 100/295: loss=0.521604
+2026-11-07 20:46:39   step 200/295: loss=0.511217
+2026-11-07 20:46:55 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:46:56 Epoch 66/80: loss=0.520698 lr=0.000079
+2026-11-07 20:46:56   epoch 66: val_acc = 3496/3925 = 89.070064%  top5 = 3873/3925 = 98.675159%  [95% CI 88.06–90.01]
+2026-11-07 20:46:56     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 1811884166477963646)
+2026-11-07 20:46:57   step 0/295: loss=0.515528
+2026-11-07 20:46:57   step 1/295: loss=0.518361
+2026-11-07 20:46:57   step 2/295: loss=0.521794
+2026-11-07 20:47:14   step 100/295: loss=0.520314
+2026-11-07 20:47:31   step 200/295: loss=0.515976
+2026-11-07 20:47:46 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:47:48 Epoch 67/80: loss=0.519251 lr=0.000069
+2026-11-07 20:47:48   epoch 67: val_acc = 3490/3925 = 88.917197%  top5 = 3865/3925 = 98.471338%  [95% CI 87.90–89.86]
+2026-11-07 20:47:48     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 1715590208677855396)
+2026-11-07 20:47:49   step 0/295: loss=0.520700
+2026-11-07 20:47:49   step 1/295: loss=0.520768
+2026-11-07 20:47:49   step 2/295: loss=0.521700
+2026-11-07 20:48:06   step 100/295: loss=0.537866
+2026-11-07 20:48:23   step 200/295: loss=0.534419
+2026-11-07 20:48:38 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:48:40 Epoch 68/80: loss=0.520415 lr=0.000059
+2026-11-07 20:48:40   epoch 68: val_acc = 3493/3925 = 88.993631%  top5 = 3868/3925 = 98.547771%  [95% CI 87.98–89.93]
+2026-11-07 20:48:40     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 8404198664135223743)
+2026-11-07 20:48:41   step 0/295: loss=0.519788
+2026-11-07 20:48:41   step 1/295: loss=0.518264
+2026-11-07 20:48:41   step 2/295: loss=0.520812
+2026-11-07 20:48:58   step 100/295: loss=0.511917
+2026-11-07 20:49:15   step 200/295: loss=0.513535
+2026-11-07 20:49:30 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:49:32 Epoch 69/80: loss=0.518341 lr=0.000050
+2026-11-07 20:49:32   epoch 69: val_acc = 3500/3925 = 89.171975%  top5 = 3869/3925 = 98.573248%  [95% CI 88.16–90.11]
+2026-11-07 20:49:32     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 1083948649910352702)
+2026-11-07 20:49:33   step 0/295: loss=0.517472
+2026-11-07 20:49:33   step 1/295: loss=0.513663
+2026-11-07 20:49:33   step 2/295: loss=0.519842
+2026-11-07 20:49:50   step 100/295: loss=0.534332
+2026-11-07 20:50:07   step 200/295: loss=0.520178
+2026-11-07 20:50:22 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:50:24 Epoch 70/80: loss=0.518080 lr=0.000041
+2026-11-07 20:50:24   epoch 70: val_acc = 3493/3925 = 88.993631%  top5 = 3868/3925 = 98.547771%  [95% CI 87.98–89.93]
+2026-11-07 20:50:24     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 16374642493315330439)
+2026-11-07 20:50:25   step 0/295: loss=0.509585
+2026-11-07 20:50:25   step 1/295: loss=0.511541
+2026-11-07 20:50:25   step 2/295: loss=0.524193
+2026-11-07 20:50:42   step 100/295: loss=0.526032
+2026-11-07 20:50:59   step 200/295: loss=0.512867
+2026-11-07 20:51:14 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:51:16 Epoch 71/80: loss=0.517667 lr=0.000033
+2026-11-07 20:51:16   epoch 71: val_acc = 3487/3925 = 88.840764%  top5 = 3870/3925 = 98.598726%  [95% CI 87.82–89.79]
+2026-11-07 20:51:16     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 3893963839305822367)
+2026-11-07 20:51:17   step 0/295: loss=0.512259
+2026-11-07 20:51:17   step 1/295: loss=0.521820
+2026-11-07 20:51:17   step 2/295: loss=0.530828
+2026-11-07 20:51:34   step 100/295: loss=0.522793
+2026-11-07 20:51:51   step 200/295: loss=0.519851
+2026-11-07 20:52:06 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:52:08 Epoch 72/80: loss=0.517656 lr=0.000026
+2026-11-07 20:52:08   epoch 72: val_acc = 3499/3925 = 89.146497%  top5 = 3868/3925 = 98.547771%  [95% CI 88.13–90.08]
+2026-11-07 20:52:08     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 14229499560168414640)
+2026-11-07 20:52:09   step 0/295: loss=0.535513
+2026-11-07 20:52:09   step 1/295: loss=0.515501
+2026-11-07 20:52:09   step 2/295: loss=0.535632
+2026-11-07 20:52:26   step 100/295: loss=0.516149
+2026-11-07 20:52:43   step 200/295: loss=0.510868
+2026-11-07 20:52:58 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:53:00 Epoch 73/80: loss=0.517916 lr=0.000020
+2026-11-07 20:53:00   epoch 73: val_acc = 3501/3925 = 89.197452%  top5 = 3867/3925 = 98.522293%  [95% CI 88.19–90.13]
+2026-11-07 20:53:00     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 17561648416559974122)
+2026-11-07 20:53:01   step 0/295: loss=0.517701
+2026-11-07 20:53:01   step 1/295: loss=0.509925
+2026-11-07 20:53:01   step 2/295: loss=0.507931
+2026-11-07 20:53:18   step 100/295: loss=0.515618
+2026-11-07 20:53:35   step 200/295: loss=0.512499
+2026-11-07 20:53:50 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:53:52 Epoch 74/80: loss=0.517193 lr=0.000015
+2026-11-07 20:53:52   epoch 74: val_acc = 3501/3925 = 89.197452%  top5 = 3869/3925 = 98.573248%  [95% CI 88.19–90.13]
+2026-11-07 20:53:52     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 505217292060963424)
+2026-11-07 20:53:53   step 0/295: loss=0.510337
+2026-11-07 20:53:53   step 1/295: loss=0.511457
+2026-11-07 20:53:53   step 2/295: loss=0.511453
+2026-11-07 20:54:10   step 100/295: loss=0.511549
+2026-11-07 20:54:26   step 200/295: loss=0.517828
+2026-11-07 20:54:42 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:54:44 Epoch 75/80: loss=0.516475 lr=0.000010
+2026-11-07 20:54:44   epoch 75: val_acc = 3504/3925 = 89.273885%  top5 = 3865/3925 = 98.471338%  [95% CI 88.27–90.20]
+2026-11-07 20:54:44     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 16046636783894393374)
+2026-11-07 20:54:45   step 0/295: loss=0.510487
+2026-11-07 20:54:45   step 1/295: loss=0.524401
+2026-11-07 20:54:45   step 2/295: loss=0.511592
+2026-11-07 20:55:02   step 100/295: loss=0.547240
+2026-11-07 20:55:18   step 200/295: loss=0.510009
+2026-11-07 20:55:34 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:55:36 Epoch 76/80: loss=0.516115 lr=0.000007
+2026-11-07 20:55:36   epoch 76: val_acc = 3501/3925 = 89.197452%  top5 = 3867/3925 = 98.522293%  [95% CI 88.19–90.13]
+2026-11-07 20:55:36     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 6626784216601747243)
+2026-11-07 20:55:37   step 0/295: loss=0.510550
+2026-11-07 20:55:37   step 1/295: loss=0.510938
+2026-11-07 20:55:37   step 2/295: loss=0.513381
+2026-11-07 20:55:54   step 100/295: loss=0.515832
+2026-11-07 20:56:10   step 200/295: loss=0.515869
+2026-11-07 20:56:26 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:56:28 Epoch 77/80: loss=0.515978 lr=0.000004
+2026-11-07 20:56:28   epoch 77: val_acc = 3505/3925 = 89.299363%  top5 = 3866/3925 = 98.496815%  [95% CI 88.29–90.23]
+2026-11-07 20:56:28     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 6305888783457737623)
+2026-11-07 20:56:29   step 0/295: loss=0.511148
+2026-11-07 20:56:29   step 1/295: loss=0.523046
+2026-11-07 20:56:29   step 2/295: loss=0.521361
+2026-11-07 20:56:46   step 100/295: loss=0.509064
+2026-11-07 20:57:02   step 200/295: loss=0.516679
+2026-11-07 20:57:18 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:57:20 Epoch 78/80: loss=0.516238 lr=0.000002
+2026-11-07 20:57:20   epoch 78: val_acc = 3500/3925 = 89.171975%  top5 = 3868/3925 = 98.547771%  [95% CI 88.16–90.11]
+2026-11-07 20:57:20     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 4983402816441554515)
+2026-11-07 20:57:21   step 0/295: loss=0.507945
+2026-11-07 20:57:21   step 1/295: loss=0.521814
+2026-11-07 20:57:21   step 2/295: loss=0.514040
+2026-11-07 20:57:38   step 100/295: loss=0.508165
+2026-11-07 20:57:54   step 200/295: loss=0.513403
+2026-11-07 20:58:10 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:58:12 Epoch 79/80: loss=0.515736 lr=0.000000
+2026-11-07 20:58:12   epoch 79: val_acc = 3501/3925 = 89.197452%  top5 = 3867/3925 = 98.522293%  [95% CI 88.19–90.13]
+2026-11-07 20:58:12     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 5806427219129867407)
+2026-11-07 20:58:13   step 0/295: loss=0.526023
+2026-11-07 20:58:13   step 1/295: loss=0.508517
+2026-11-07 20:58:13   step 2/295: loss=0.522894
+2026-11-07 20:58:30   step 100/295: loss=0.523289
+2026-11-07 20:58:47   step 200/295: loss=0.520488
+2026-11-07 20:59:02 [pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 20:59:04 Epoch 80/80: loss=0.515803 lr=0.000000
+2026-11-07 20:59:04   epoch 80: val_acc = 3501/3925 = 89.197452%  top5 = 3866/3925 = 98.496815%  [95% CI 88.19–90.13]
+2026-11-07 20:59:04     BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_m5pro80.bin.bn (34112 floats x 2, hash 12047891697315860087)
+2026-11-07 20:59:04 done (trained MobileNetV2 adam + cosine/warmup via packed threading).
