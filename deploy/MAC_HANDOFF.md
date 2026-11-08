@@ -134,7 +134,10 @@ the result, in the row's existing style. Then:
 
 ## 7. The PR
 
-Against `main`, from your branch. Title it `runs(mac <chip>): …` and say in the body which
+First `python3 scripts/gates/gen_mlir_manifest.py` and commit `verified_mlir/MANIFEST.md`: its
+runs column counts the run directories that used each artifact, yours included, and CI fails
+when it is stale. Then open the PR against `main`, from your branch. Title it
+`runs(mac <chip>): …` and say in the body which
 steps ran, which did not and why, and anything that had to be fixed to get there — a fix to a
 script is welcome in the same PR. Do not commit `data/`, `.venv/`, `.lake/`, the
 `runs/platform/*/logs/` directories, or checkpoints (`.lake/build/*_ckpt*`); `.gitignore`
