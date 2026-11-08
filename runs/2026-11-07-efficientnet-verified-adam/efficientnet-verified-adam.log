@@ -1,0 +1,744 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 23:50:04.543887 39975654 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 36984.0 MB reclaimable now
+I1107 23:50:04.545218 39975651 service.cc:154] XLA service 0x788ae2ff00 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 23:50:04.545223 39975651 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 23:50:04.546095 39975651 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 23:50:04.574522 39975651 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 1027 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 194 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 137 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/295: loss=2.442922
+  step 1/295: loss=2.256872
+  step 2/295: loss=2.507811
+  step 100/295: loss=2.221242
+  step 200/295: loss=1.846024
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/80: loss=2.057088 lr=0.000333
+  epoch 1: val_acc = 753/3925 = 19.184713%  top5 = 2679/3925 = 68.254777%  [95% CI 17.98–20.45]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8752352921410618354)
+  step 0/295: loss=1.837141
+  step 1/295: loss=1.569229
+  step 2/295: loss=1.439048
+  step 100/295: loss=1.405842
+  step 200/295: loss=1.526037
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/80: loss=1.633699 lr=0.000667
+  epoch 2: val_acc = 1126/3925 = 28.687898%  top5 = 3104/3925 = 79.082803%  [95% CI 27.29–30.12]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16512949248042758213)
+  step 0/295: loss=1.630250
+  step 1/295: loss=1.948276
+  step 2/295: loss=1.470971
+  step 100/295: loss=1.360730
+  step 200/295: loss=1.091485
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/80: loss=1.420054 lr=0.001000
+  epoch 3: val_acc = 1966/3925 = 50.089172%  top5 = 3391/3925 = 86.394904%  [95% CI 48.53–51.65]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 7535513411998970019)
+  step 0/295: loss=1.380866
+  step 1/295: loss=0.940504
+  step 2/295: loss=1.123695
+  step 100/295: loss=1.322269
+  step 200/295: loss=1.374357
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/80: loss=1.288518 lr=0.001000
+  epoch 4: val_acc = 2030/3925 = 51.719745%  top5 = 3527/3925 = 89.859873%  [95% CI 50.16–53.28]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 969484113957810888)
+  step 0/295: loss=1.208273
+  step 1/295: loss=1.416884
+  step 2/295: loss=1.203960
+  step 100/295: loss=1.507259
+  step 200/295: loss=1.260900
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/80: loss=1.178537 lr=0.000998
+  epoch 5: val_acc = 2594/3925 = 66.089172%  top5 = 3741/3925 = 95.312102%  [95% CI 64.59–67.55]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10417118819045740343)
+  step 0/295: loss=1.050288
+  step 1/295: loss=0.999202
+  step 2/295: loss=1.107089
+  step 100/295: loss=1.282635
+  step 200/295: loss=1.174393
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/80: loss=1.095433 lr=0.000996
+  epoch 6: val_acc = 2660/3925 = 67.770701%  top5 = 3747/3925 = 95.464968%  [95% CI 66.29–69.21]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 4847106470419226504)
+  step 0/295: loss=1.049964
+  step 1/295: loss=1.131257
+  step 2/295: loss=1.034694
+  step 100/295: loss=1.312261
+  step 200/295: loss=1.072530
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/80: loss=1.057348 lr=0.000993
+  epoch 7: val_acc = 2693/3925 = 68.611465%  top5 = 3718/3925 = 94.726115%  [95% CI 67.14–70.04]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10095517089471938170)
+  step 0/295: loss=1.085686
+  step 1/295: loss=1.109711
+  step 2/295: loss=1.304392
+  step 100/295: loss=0.967071
+  step 200/295: loss=1.010829
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/80: loss=1.013819 lr=0.000990
+  epoch 8: val_acc = 2531/3925 = 64.484076%  top5 = 3684/3925 = 93.859873%  [95% CI 62.97–65.97]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11372612983317137568)
+  step 0/295: loss=0.983732
+  step 1/295: loss=0.917892
+  step 2/295: loss=1.020772
+  step 100/295: loss=0.944724
+  step 200/295: loss=1.085465
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/80: loss=0.986536 lr=0.000985
+  epoch 9: val_acc = 3009/3925 = 76.662420%  top5 = 3793/3925 = 96.636943%  [95% CI 75.31–77.96]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 9445353160712648219)
+  step 0/295: loss=0.830990
+  step 1/295: loss=0.940166
+  step 2/295: loss=0.637039
+  step 100/295: loss=0.979361
+  step 200/295: loss=0.787707
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/80: loss=0.952150 lr=0.000980
+  epoch 10: val_acc = 3044/3925 = 77.554140%  top5 = 3802/3925 = 96.866242%  [95% CI 76.22–78.83]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 18004359826243128119)
+  step 0/295: loss=0.989798
+  step 1/295: loss=0.803150
+  step 2/295: loss=0.808927
+  step 100/295: loss=1.198269
+  step 200/295: loss=0.901464
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/80: loss=0.920063 lr=0.000974
+  epoch 11: val_acc = 3139/3925 = 79.974522%  top5 = 3814/3925 = 97.171975%  [95% CI 78.69–81.20]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16294349014735541142)
+  step 0/295: loss=0.904567
+  step 1/295: loss=0.699471
+  step 2/295: loss=0.716272
+  step 100/295: loss=0.835702
+  step 200/295: loss=0.742591
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/80: loss=0.881948 lr=0.000967
+  epoch 12: val_acc = 3074/3925 = 78.318471%  top5 = 3795/3925 = 96.687898%  [95% CI 77.00–79.58]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8568328054040171714)
+  step 0/295: loss=1.151892
+  step 1/295: loss=1.009059
+  step 2/295: loss=1.000705
+  step 100/295: loss=0.776295
+  step 200/295: loss=0.868543
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/80: loss=0.866947 lr=0.000959
+  epoch 13: val_acc = 2889/3925 = 73.605096%  top5 = 3776/3925 = 96.203822%  [95% CI 72.20–74.96]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 5755991076173217238)
+  step 0/295: loss=0.718798
+  step 1/295: loss=0.844230
+  step 2/295: loss=0.741228
+  step 100/295: loss=0.741698
+  step 200/295: loss=0.902758
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/80: loss=0.844188 lr=0.000951
+  epoch 14: val_acc = 3117/3925 = 79.414013%  top5 = 3812/3925 = 97.121019%  [95% CI 78.12–80.65]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 9090135651609251030)
+  step 0/295: loss=1.024699
+  step 1/295: loss=0.850965
+  step 2/295: loss=0.741987
+  step 100/295: loss=0.783335
+  step 200/295: loss=0.739169
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/80: loss=0.825438 lr=0.000941
+  epoch 15: val_acc = 3209/3925 = 81.757962%  top5 = 3832/3925 = 97.630573%  [95% CI 80.52–82.93]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11757592787513772620)
+  step 0/295: loss=1.011103
+  step 1/295: loss=0.690040
+  step 2/295: loss=0.595919
+  step 100/295: loss=0.836352
+  step 200/295: loss=0.645680
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/80: loss=0.797217 lr=0.000931
+  epoch 16: val_acc = 3053/3925 = 77.783439%  top5 = 3798/3925 = 96.764331%  [95% CI 76.46–79.06]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10564081148302272067)
+  step 0/295: loss=0.813344
+  step 1/295: loss=0.737113
+  step 2/295: loss=0.750546
+  step 100/295: loss=0.609684
+  step 200/295: loss=0.903684
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/80: loss=0.785669 lr=0.000921
+  epoch 17: val_acc = 3032/3925 = 77.248408%  top5 = 3777/3925 = 96.229299%  [95% CI 75.91–78.53]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 5898485584381827623)
+  step 0/295: loss=0.708113
+  step 1/295: loss=0.610009
+  step 2/295: loss=0.770460
+  step 100/295: loss=0.839940
+  step 200/295: loss=0.662740
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/80: loss=0.749546 lr=0.000909
+  epoch 18: val_acc = 3197/3925 = 81.452229%  top5 = 3844/3925 = 97.936306%  [95% CI 80.21–82.64]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 12134782986782861197)
+  step 0/295: loss=0.663908
+  step 1/295: loss=0.623869
+  step 2/295: loss=0.661279
+  step 100/295: loss=0.637755
+  step 200/295: loss=0.745751
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/80: loss=0.750066 lr=0.000897
+  epoch 19: val_acc = 3163/3925 = 80.585987%  top5 = 3822/3925 = 97.375796%  [95% CI 79.32–81.79]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10894223575741328901)
+  step 0/295: loss=0.665850
+  step 1/295: loss=0.791854
+  step 2/295: loss=0.796966
+  step 100/295: loss=0.692458
+  step 200/295: loss=0.689918
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/80: loss=0.732783 lr=0.000885
+  epoch 20: val_acc = 3240/3925 = 82.547771%  top5 = 3834/3925 = 97.681529%  [95% CI 81.33–83.70]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1318633601802566701)
+  step 0/295: loss=0.735995
+  step 1/295: loss=0.602834
+  step 2/295: loss=0.605064
+  step 100/295: loss=0.626159
+  step 200/295: loss=0.631606
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/80: loss=0.713665 lr=0.000871
+  epoch 21: val_acc = 3201/3925 = 81.554140%  top5 = 3832/3925 = 97.630573%  [95% CI 80.31–82.74]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 3258353939059325461)
+  step 0/295: loss=0.762752
+  step 1/295: loss=0.667983
+  step 2/295: loss=0.806633
+  step 100/295: loss=0.786028
+  step 200/295: loss=0.702855
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/80: loss=0.705071 lr=0.000857
+  epoch 22: val_acc = 3235/3925 = 82.420382%  top5 = 3816/3925 = 97.222930%  [95% CI 81.20–83.58]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 686895664612791282)
+  step 0/295: loss=0.761330
+  step 1/295: loss=0.572819
+  step 2/295: loss=0.582787
+  step 100/295: loss=0.757772
+  step 200/295: loss=0.776590
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/80: loss=0.684026 lr=0.000843
+  epoch 23: val_acc = 3334/3925 = 84.942675%  top5 = 3835/3925 = 97.707006%  [95% CI 83.79–86.03]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 4827858369305780428)
+  step 0/295: loss=0.859686
+  step 1/295: loss=0.704151
+  step 2/295: loss=0.731037
+  step 100/295: loss=0.751741
+  step 200/295: loss=0.823733
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/80: loss=0.676008 lr=0.000827
+  epoch 24: val_acc = 3320/3925 = 84.585987%  top5 = 3840/3925 = 97.834395%  [95% CI 83.42–85.68]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 18124598807116762530)
+  step 0/295: loss=0.621761
+  step 1/295: loss=0.635799
+  step 2/295: loss=0.551816
+  step 100/295: loss=0.666161
+  step 200/295: loss=0.681059
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/80: loss=0.662002 lr=0.000812
+  epoch 25: val_acc = 3254/3925 = 82.904459%  top5 = 3835/3925 = 97.707006%  [95% CI 81.69–84.05]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 2032445305896835102)
+  step 0/295: loss=0.747513
+  step 1/295: loss=0.698150
+  step 2/295: loss=0.631712
+  step 100/295: loss=0.624135
+  step 200/295: loss=0.617065
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 26/80: loss=0.641601 lr=0.000796
+  epoch 26: val_acc = 3375/3925 = 85.987261%  top5 = 3845/3925 = 97.961783%  [95% CI 84.87–87.04]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 17076679217129278397)
+  step 0/295: loss=0.595363
+  step 1/295: loss=0.569218
+  step 2/295: loss=0.658577
+  step 100/295: loss=0.564980
+  step 200/295: loss=0.649564
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 27/80: loss=0.644554 lr=0.000779
+  epoch 27: val_acc = 3357/3925 = 85.528662%  top5 = 3836/3925 = 97.732484%  [95% CI 84.39–86.59]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 9082555778814541493)
+  step 0/295: loss=0.568623
+  step 1/295: loss=0.661599
+  step 2/295: loss=0.552138
+  step 100/295: loss=0.564297
+  step 200/295: loss=0.625144
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 28/80: loss=0.624891 lr=0.000762
+  epoch 28: val_acc = 3336/3925 = 84.993631%  top5 = 3850/3925 = 98.089172%  [95% CI 83.84–86.08]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 2412635874984484309)
+  step 0/295: loss=0.565929
+  step 1/295: loss=0.687182
+  step 2/295: loss=0.620964
+  step 100/295: loss=0.696711
+  step 200/295: loss=0.596093
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 29/80: loss=0.626718 lr=0.000744
+  epoch 29: val_acc = 3251/3925 = 82.828025%  top5 = 3819/3925 = 97.299363%  [95% CI 81.62–83.98]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1025148662123462041)
+  step 0/295: loss=0.637475
+  step 1/295: loss=0.657274
+  step 2/295: loss=0.569977
+  step 100/295: loss=0.589371
+  step 200/295: loss=0.644204
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 30/80: loss=0.619050 lr=0.000726
+  epoch 30: val_acc = 3424/3925 = 87.235669%  top5 = 3842/3925 = 97.885350%  [95% CI 86.16–88.24]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16188101470485299811)
+  step 0/295: loss=0.636112
+  step 1/295: loss=0.705794
+  step 2/295: loss=0.632201
+  step 100/295: loss=0.708207
+  step 200/295: loss=0.580373
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 31/80: loss=0.608648 lr=0.000708
+  epoch 31: val_acc = 3347/3925 = 85.273885%  top5 = 3820/3925 = 97.324841%  [95% CI 84.13–86.35]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8308556593237855253)
+  step 0/295: loss=0.554169
+  step 1/295: loss=0.671533
+  step 2/295: loss=0.596097
+  step 100/295: loss=0.519335
+  step 200/295: loss=0.528752
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 32/80: loss=0.596363 lr=0.000689
+  epoch 32: val_acc = 3345/3925 = 85.222930%  top5 = 3860/3925 = 98.343949%  [95% CI 84.08–86.30]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16270803576806264914)
+  step 0/295: loss=0.552783
+  step 1/295: loss=0.739671
+  step 2/295: loss=0.534100
+  step 100/295: loss=0.556125
+  step 200/295: loss=0.696272
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 33/80: loss=0.582923 lr=0.000670
+  epoch 33: val_acc = 3367/3925 = 85.783439%  top5 = 3830/3925 = 97.579618%  [95% CI 84.66–86.84]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 4219848756480253493)
+  step 0/295: loss=0.530824
+  step 1/295: loss=0.598964
+  step 2/295: loss=0.515916
+  step 100/295: loss=0.529961
+  step 200/295: loss=0.547946
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 34/80: loss=0.582038 lr=0.000651
+  epoch 34: val_acc = 3351/3925 = 85.375796%  top5 = 3833/3925 = 97.656051%  [95% CI 84.24–86.45]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 6254446090334070677)
+  step 0/295: loss=0.532357
+  step 1/295: loss=0.572872
+  step 2/295: loss=0.523692
+  step 100/295: loss=0.567042
+  step 200/295: loss=0.559843
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 35/80: loss=0.580629 lr=0.000631
+  epoch 35: val_acc = 3337/3925 = 85.019108%  top5 = 3841/3925 = 97.859873%  [95% CI 83.87–86.10]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 2320631963480474955)
+  step 0/295: loss=0.535280
+  step 1/295: loss=0.550552
+  step 2/295: loss=0.535639
+  step 100/295: loss=0.599391
+  step 200/295: loss=0.525467
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 36/80: loss=0.565990 lr=0.000611
+  epoch 36: val_acc = 3397/3925 = 86.547771%  top5 = 3856/3925 = 98.242038%  [95% CI 85.44–87.58]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1456497881271749379)
+  step 0/295: loss=0.519402
+  step 1/295: loss=0.515583
+  step 2/295: loss=0.538983
+  step 100/295: loss=0.560567
+  step 200/295: loss=0.533635
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 37/80: loss=0.564196 lr=0.000591
+  epoch 37: val_acc = 3352/3925 = 85.401274%  top5 = 3829/3925 = 97.554140%  [95% CI 84.26–86.47]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 14658053603300761005)
+  step 0/295: loss=0.527596
+  step 1/295: loss=0.516964
+  step 2/295: loss=0.519738
+  step 100/295: loss=0.535494
+  step 200/295: loss=0.565286
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 38/80: loss=0.569419 lr=0.000571
+  epoch 38: val_acc = 3397/3925 = 86.547771%  top5 = 3845/3925 = 97.961783%  [95% CI 85.44–87.58]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 12976703551081667807)
+  step 0/295: loss=0.519504
+  step 1/295: loss=0.563597
+  step 2/295: loss=0.515315
+  step 100/295: loss=0.519258
+  step 200/295: loss=0.586251
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 39/80: loss=0.563403 lr=0.000551
+  epoch 39: val_acc = 3414/3925 = 86.980892%  top5 = 3849/3925 = 98.063694%  [95% CI 85.89–88.00]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 12067015808009923575)
+  step 0/295: loss=0.536878
+  step 1/295: loss=0.520814
+  step 2/295: loss=0.537974
+  step 100/295: loss=0.526358
+  step 200/295: loss=0.517323
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 40/80: loss=0.546762 lr=0.000531
+  epoch 40: val_acc = 3461/3925 = 88.178344%  top5 = 3837/3925 = 97.757962%  [95% CI 87.13–89.15]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 3534482957216612703)
+  step 0/295: loss=0.523570
+  step 1/295: loss=0.507819
+  step 2/295: loss=0.547324
+  step 100/295: loss=0.545671
+  step 200/295: loss=0.545202
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 41/80: loss=0.542788 lr=0.000510
+  epoch 41: val_acc = 3432/3925 = 87.439490%  top5 = 3853/3925 = 98.165605%  [95% CI 86.37–88.44]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16644723245738025274)
+  step 0/295: loss=0.513733
+  step 1/295: loss=0.525757
+  step 2/295: loss=0.511599
+  step 100/295: loss=0.527862
+  step 200/295: loss=0.519619
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 42/80: loss=0.551864 lr=0.000490
+  epoch 42: val_acc = 3400/3925 = 86.624204%  top5 = 3840/3925 = 97.834395%  [95% CI 85.52–87.65]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 6338154294869129296)
+  step 0/295: loss=0.567002
+  step 1/295: loss=0.514719
+  step 2/295: loss=0.514550
+  step 100/295: loss=0.516760
+  step 200/295: loss=0.514628
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 43/80: loss=0.539382 lr=0.000469
+  epoch 43: val_acc = 3355/3925 = 85.477707%  top5 = 3830/3925 = 97.579618%  [95% CI 84.34–86.55]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10264222255339591816)
+  step 0/295: loss=0.550961
+  step 1/295: loss=0.509373
+  step 2/295: loss=0.551407
+  step 100/295: loss=0.513430
+  step 200/295: loss=0.505456
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 44/80: loss=0.538598 lr=0.000449
+  epoch 44: val_acc = 3435/3925 = 87.515924%  top5 = 3847/3925 = 98.012739%  [95% CI 86.45–88.51]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16212035861310398782)
+  step 0/295: loss=0.510128
+  step 1/295: loss=0.509106
+  step 2/295: loss=0.620524
+  step 100/295: loss=0.527875
+  step 200/295: loss=0.511041
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 45/80: loss=0.532542 lr=0.000429
+  epoch 45: val_acc = 3435/3925 = 87.515924%  top5 = 3839/3925 = 97.808917%  [95% CI 86.45–88.51]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 6454515502738350544)
+  step 0/295: loss=0.526895
+  step 1/295: loss=0.513665
+  step 2/295: loss=0.509050
+  step 100/295: loss=0.529007
+  step 200/295: loss=0.611089
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 46/80: loss=0.533703 lr=0.000409
+  epoch 46: val_acc = 3446/3925 = 87.796178%  top5 = 3850/3925 = 98.089172%  [95% CI 86.74–88.78]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 15208600640010963862)
+  step 0/295: loss=0.517436
+  step 1/295: loss=0.525691
+  step 2/295: loss=0.510562
+  step 100/295: loss=0.512079
+  step 200/295: loss=0.516187
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 47/80: loss=0.527174 lr=0.000389
+  epoch 47: val_acc = 3449/3925 = 87.872611%  top5 = 3843/3925 = 97.910828%  [95% CI 86.81–88.86]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10097854340308730347)
+  step 0/295: loss=0.528836
+  step 1/295: loss=0.512113
+  step 2/295: loss=0.506589
+  step 100/295: loss=0.524735
+  step 200/295: loss=0.557803
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 48/80: loss=0.529026 lr=0.000369
+  epoch 48: val_acc = 3415/3925 = 87.006369%  top5 = 3838/3925 = 97.783439%  [95% CI 85.92–88.02]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 5231784511433054528)
+  step 0/295: loss=0.523764
+  step 1/295: loss=0.511223
+  step 2/295: loss=0.506460
+  step 100/295: loss=0.522344
+  step 200/295: loss=0.507244
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 49/80: loss=0.526058 lr=0.000349
+  epoch 49: val_acc = 3442/3925 = 87.694268%  top5 = 3837/3925 = 97.757962%  [95% CI 86.63–88.69]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10656565890686555856)
+  step 0/295: loss=0.556275
+  step 1/295: loss=0.509528
+  step 2/295: loss=0.513925
+  step 100/295: loss=0.520784
+  step 200/295: loss=0.511337
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 50/80: loss=0.524989 lr=0.000330
+  epoch 50: val_acc = 3477/3925 = 88.585987%  top5 = 3839/3925 = 97.808917%  [95% CI 87.55–89.54]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11659848476996794853)
+  step 0/295: loss=0.505426
+  step 1/295: loss=0.511042
+  step 2/295: loss=0.510608
+  step 100/295: loss=0.507543
+  step 200/295: loss=0.560100
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 51/80: loss=0.521123 lr=0.000311
+  epoch 51: val_acc = 3440/3925 = 87.643312%  top5 = 3843/3925 = 97.910828%  [95% CI 86.58–88.64]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8379085041132622969)
+  step 0/295: loss=0.509821
+  step 1/295: loss=0.530398
+  step 2/295: loss=0.507781
+  step 100/295: loss=0.509062
+  step 200/295: loss=0.507479
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 52/80: loss=0.516888 lr=0.000292
+  epoch 52: val_acc = 3495/3925 = 89.044586%  top5 = 3853/3925 = 98.165605%  [95% CI 88.03–89.98]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 10451586538560684468)
+  step 0/295: loss=0.507751
+  step 1/295: loss=0.508805
+  step 2/295: loss=0.504502
+  step 100/295: loss=0.513665
+  step 200/295: loss=0.509932
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 53/80: loss=0.516496 lr=0.000274
+  epoch 53: val_acc = 3489/3925 = 88.891720%  top5 = 3847/3925 = 98.012739%  [95% CI 87.87–89.84]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11908412515260360603)
+  step 0/295: loss=0.526613
+  step 1/295: loss=0.523743
+  step 2/295: loss=0.512316
+  step 100/295: loss=0.506282
+  step 200/295: loss=0.571080
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 54/80: loss=0.517750 lr=0.000256
+  epoch 54: val_acc = 3480/3925 = 88.662420%  top5 = 3845/3925 = 97.961783%  [95% CI 87.63–89.62]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 5337618697114973025)
+  step 0/295: loss=0.507791
+  step 1/295: loss=0.581884
+  step 2/295: loss=0.506505
+  step 100/295: loss=0.506070
+  step 200/295: loss=0.503802
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 55/80: loss=0.515563 lr=0.000238
+  epoch 55: val_acc = 3457/3925 = 88.076433%  top5 = 3846/3925 = 97.987261%  [95% CI 87.03–89.05]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 6687351947329080634)
+  step 0/295: loss=0.505282
+  step 1/295: loss=0.509189
+  step 2/295: loss=0.504419
+  step 100/295: loss=0.505310
+  step 200/295: loss=0.574538
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 56/80: loss=0.515209 lr=0.000221
+  epoch 56: val_acc = 3482/3925 = 88.713376%  top5 = 3847/3925 = 98.012739%  [95% CI 87.69–89.67]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8136434804167719028)
+  step 0/295: loss=0.503999
+  step 1/295: loss=0.520464
+  step 2/295: loss=0.503937
+  step 100/295: loss=0.515391
+  step 200/295: loss=0.516331
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 57/80: loss=0.513278 lr=0.000205
+  epoch 57: val_acc = 3505/3925 = 89.299363%  top5 = 3854/3925 = 98.191083%  [95% CI 88.29–90.23]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 16483041777847423882)
+  step 0/295: loss=0.507294
+  step 1/295: loss=0.504583
+  step 2/295: loss=0.508025
+  step 100/295: loss=0.505925
+  step 200/295: loss=0.504068
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 58/80: loss=0.511107 lr=0.000188
+  epoch 58: val_acc = 3481/3925 = 88.687898%  top5 = 3843/3925 = 97.910828%  [95% CI 87.66–89.64]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 4120976784138559792)
+  step 0/295: loss=0.504952
+  step 1/295: loss=0.519275
+  step 2/295: loss=0.506952
+  step 100/295: loss=0.533923
+  step 200/295: loss=0.506568
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 59/80: loss=0.510074 lr=0.000173
+  epoch 59: val_acc = 3496/3925 = 89.070064%  top5 = 3857/3925 = 98.267516%  [95% CI 88.06–90.01]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 7494598871523009026)
+  step 0/295: loss=0.504655
+  step 1/295: loss=0.568212
+  step 2/295: loss=0.513718
+  step 100/295: loss=0.504277
+  step 200/295: loss=0.505548
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 60/80: loss=0.510033 lr=0.000157
+  epoch 60: val_acc = 3496/3925 = 89.070064%  top5 = 3852/3925 = 98.140127%  [95% CI 88.06–90.01]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 17994411518187659155)
+  step 0/295: loss=0.528993
+  step 1/295: loss=0.506258
+  step 2/295: loss=0.505399
+  step 100/295: loss=0.505610
+  step 200/295: loss=0.505612
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 61/80: loss=0.508517 lr=0.000143
+  epoch 61: val_acc = 3513/3925 = 89.503185%  top5 = 3857/3925 = 98.267516%  [95% CI 88.51–90.42]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 7978838686654871961)
+  step 0/295: loss=0.505629
+  step 1/295: loss=0.503396
+  step 2/295: loss=0.504262
+  step 100/295: loss=0.505065
+  step 200/295: loss=0.506452
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 62/80: loss=0.508681 lr=0.000129
+  epoch 62: val_acc = 3505/3925 = 89.299363%  top5 = 3852/3925 = 98.140127%  [95% CI 88.29–90.23]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 13461122159619897205)
+  step 0/295: loss=0.504484
+  step 1/295: loss=0.506030
+  step 2/295: loss=0.503870
+  step 100/295: loss=0.513829
+  step 200/295: loss=0.505024
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 63/80: loss=0.507628 lr=0.000116
+  epoch 63: val_acc = 3506/3925 = 89.324841%  top5 = 3853/3925 = 98.165605%  [95% CI 88.32–90.25]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8824667916529195217)
+  step 0/295: loss=0.503500
+  step 1/295: loss=0.512135
+  step 2/295: loss=0.505118
+  step 100/295: loss=0.549252
+  step 200/295: loss=0.503799
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 64/80: loss=0.507060 lr=0.000103
+  epoch 64: val_acc = 3497/3925 = 89.095541%  top5 = 3850/3925 = 98.089172%  [95% CI 88.08–90.03]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 13650465608299797857)
+  step 0/295: loss=0.511123
+  step 1/295: loss=0.504260
+  step 2/295: loss=0.502769
+  step 100/295: loss=0.505426
+  step 200/295: loss=0.502829
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 65/80: loss=0.506861 lr=0.000091
+  epoch 65: val_acc = 3511/3925 = 89.452229%  top5 = 3854/3925 = 98.191083%  [95% CI 88.45–90.37]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1509797387724119033)
+  step 0/295: loss=0.502545
+  step 1/295: loss=0.503467
+  step 2/295: loss=0.501753
+  step 100/295: loss=0.505299
+  step 200/295: loss=0.507199
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 66/80: loss=0.505773 lr=0.000079
+  epoch 66: val_acc = 3516/3925 = 89.579618%  top5 = 3861/3925 = 98.369427%  [95% CI 88.58–90.50]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 14407258595318605530)
+  step 0/295: loss=0.504461
+  step 1/295: loss=0.504044
+  step 2/295: loss=0.504025
+  step 100/295: loss=0.505470
+  step 200/295: loss=0.508223
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 67/80: loss=0.506593 lr=0.000069
+  epoch 67: val_acc = 3504/3925 = 89.273885%  top5 = 3857/3925 = 98.267516%  [95% CI 88.27–90.20]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11944279414169624465)
+  step 0/295: loss=0.503723
+  step 1/295: loss=0.503039
+  step 2/295: loss=0.503673
+  step 100/295: loss=0.506045
+  step 200/295: loss=0.507376
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 68/80: loss=0.506039 lr=0.000059
+  epoch 68: val_acc = 3515/3925 = 89.554140%  top5 = 3859/3925 = 98.318471%  [95% CI 88.56–90.47]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 11380192823679411818)
+  step 0/295: loss=0.503949
+  step 1/295: loss=0.511640
+  step 2/295: loss=0.503568
+  step 100/295: loss=0.503062
+  step 200/295: loss=0.502600
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 69/80: loss=0.505007 lr=0.000050
+  epoch 69: val_acc = 3522/3925 = 89.732484%  top5 = 3858/3925 = 98.292994%  [95% CI 88.74–90.64]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 3737367767600312631)
+  step 0/295: loss=0.504809
+  step 1/295: loss=0.502695
+  step 2/295: loss=0.508674
+  step 100/295: loss=0.504209
+  step 200/295: loss=0.504100
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 70/80: loss=0.505340 lr=0.000041
+  epoch 70: val_acc = 3516/3925 = 89.579618%  top5 = 3853/3925 = 98.165605%  [95% CI 88.58–90.50]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 18216285205337188330)
+  step 0/295: loss=0.503789
+  step 1/295: loss=0.503312
+  step 2/295: loss=0.503473
+  step 100/295: loss=0.505908
+  step 200/295: loss=0.502649
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 71/80: loss=0.504754 lr=0.000033
+  epoch 71: val_acc = 3527/3925 = 89.859873%  top5 = 3856/3925 = 98.242038%  [95% CI 88.88–90.77]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 15402187742623060267)
+  step 0/295: loss=0.502930
+  step 1/295: loss=0.504347
+  step 2/295: loss=0.504730
+  step 100/295: loss=0.504124
+  step 200/295: loss=0.504862
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 72/80: loss=0.504823 lr=0.000026
+  epoch 72: val_acc = 3527/3925 = 89.859873%  top5 = 3860/3925 = 98.343949%  [95% CI 88.88–90.77]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 15081100615022584877)
+  step 0/295: loss=0.504865
+  step 1/295: loss=0.502938
+  step 2/295: loss=0.504250
+  step 100/295: loss=0.511028
+  step 200/295: loss=0.501899
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 73/80: loss=0.504840 lr=0.000020
+  epoch 73: val_acc = 3521/3925 = 89.707006%  top5 = 3858/3925 = 98.292994%  [95% CI 88.72–90.62]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 8316728878942411604)
+  step 0/295: loss=0.503482
+  step 1/295: loss=0.503161
+  step 2/295: loss=0.502086
+  step 100/295: loss=0.503709
+  step 200/295: loss=0.503443
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 74/80: loss=0.505615 lr=0.000015
+  epoch 74: val_acc = 3524/3925 = 89.783439%  top5 = 3859/3925 = 98.318471%  [95% CI 88.80–90.69]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1878253189573522105)
+  step 0/295: loss=0.502875
+  step 1/295: loss=0.501944
+  step 2/295: loss=0.502057
+  step 100/295: loss=0.502620
+  step 200/295: loss=0.503853
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 75/80: loss=0.504114 lr=0.000010
+  epoch 75: val_acc = 3520/3925 = 89.681529%  top5 = 3861/3925 = 98.369427%  [95% CI 88.69–90.59]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 1678375447200918781)
+  step 0/295: loss=0.502114
+  step 1/295: loss=0.503453
+  step 2/295: loss=0.502464
+  step 100/295: loss=0.519110
+  step 200/295: loss=0.501336
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 76/80: loss=0.504019 lr=0.000007
+  epoch 76: val_acc = 3525/3925 = 89.808917%  top5 = 3860/3925 = 98.343949%  [95% CI 88.82–90.72]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 15914702178201293011)
+  step 0/295: loss=0.502164
+  step 1/295: loss=0.502808
+  step 2/295: loss=0.503471
+  step 100/295: loss=0.505035
+  step 200/295: loss=0.508980
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 77/80: loss=0.503947 lr=0.000004
+  epoch 77: val_acc = 3519/3925 = 89.656051%  top5 = 3861/3925 = 98.369427%  [95% CI 88.66–90.57]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 3347923182730096206)
+  step 0/295: loss=0.502798
+  step 1/295: loss=0.503682
+  step 2/295: loss=0.503893
+  step 100/295: loss=0.503470
+  step 200/295: loss=0.502536
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 78/80: loss=0.504330 lr=0.000002
+  epoch 78: val_acc = 3522/3925 = 89.732484%  top5 = 3859/3925 = 98.318471%  [95% CI 88.74–90.64]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 2409720357182133206)
+  step 0/295: loss=0.502272
+  step 1/295: loss=0.505418
+  step 2/295: loss=0.503455
+  step 100/295: loss=0.501835
+  step 200/295: loss=0.502577
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 79/80: loss=0.504043 lr=0.000000
+  epoch 79: val_acc = 3521/3925 = 89.707006%  top5 = 3862/3925 = 98.394904%  [95% CI 88.72–90.62]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 702974944648400954)
+  step 0/295: loss=0.504203
+  step 1/295: loss=0.502722
+  step 2/295: loss=0.507526
+  step 100/295: loss=0.503078
+  step 200/295: loss=0.504137
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 80/80: loss=0.504279 lr=0.000000
+  epoch 80: val_acc = 3521/3925 = 89.707006%  top5 = 3861/3925 = 98.369427%  [95% CI 88.72–90.62]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_xla_m5pro80.bin.bn (42016 floats x 2, hash 18179994044515666539)
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).
