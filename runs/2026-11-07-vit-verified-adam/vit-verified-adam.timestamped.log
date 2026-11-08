@@ -1,0 +1,670 @@
+2026-11-07 16:58:32 ━━━ XLA/PJRT backend ━━━
+2026-11-07 16:58:32   ✓ ffi/libpjrt_ffi.so up to date
+2026-11-07 16:58:32   ▸ PJRT_PLUGIN unset — falling back to the path compiled into ffi/pjrt_ffi.c (a jax rocm/cuda plugin .so). If the run dies in dlopen, set PJRT_PLUGIN to your plugin.
+2026-11-07 16:58:32 
+2026-11-07 16:58:32 ━━━ vit-verified-adam: build ━━━
+2026-11-07 16:58:33 Build completed successfully (29 jobs).
+2026-11-07 16:58:33 ━━━ vit-verified-adam: run (gpu 0, metal) ━━━
+2026-11-07 16:58:33 grep: illegal byte sequence
+2026-11-07 16:58:33 grep: illegal byte sequence
+2026-11-07 16:58:33 → vit-verified-adam (GPU 0, metal) → runs/2026-11-07-vit-verified-adam/vit-verified-adam.log
+2026-11-07 16:58:33 [pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+2026-11-07 16:58:33 I1107 16:58:33.471341 39603035 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 49641.0 MB reclaimable now
+2026-11-07 16:58:33 I1107 16:58:33.480668 39603032 service.cc:154] XLA service 0x10248ad90 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+2026-11-07 16:58:33 I1107 16:58:33.480673 39603032 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+2026-11-07 16:58:33 I1107 16:58:33.483882 39603032 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+2026-11-07 16:58:33 [pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+2026-11-07 16:58:33 [pjrt_ffi] command buffers: enabled (default)
+2026-11-07 16:58:33 [pjrt_ffi] h2d: batched (default)
+2026-11-07 16:58:33 [pjrt_ffi] d2h: batched (default)
+2026-11-07 16:58:33 [pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+2026-11-07 16:58:33 I1107 16:58:33.528454 39603032 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+2026-11-07 16:58:34 [pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 907 ms
+2026-11-07 16:58:34 [pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 115 ms
+2026-11-07 16:58:35 ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+2026-11-07 16:58:35   xla/pjrt verified_mlir/vit_adam_train_step.mlir
+2026-11-07 16:58:35   xla/pjrt verified_mlir/vit_fwd.mlir
+2026-11-07 16:58:35   imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+2026-11-07 16:58:35   train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+2026-11-07 16:58:35 [pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 16:58:35   step 0/295: loss=3.351294
+2026-11-07 16:58:35   step 1/295: loss=3.004289
+2026-11-07 16:58:35   step 2/295: loss=2.554941
+2026-11-07 16:58:43   step 100/295: loss=2.180585
+2026-11-07 16:58:51   step 200/295: loss=1.955433
+2026-11-07 16:58:58 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 16:59:01 Epoch 1/80: loss=2.127515 lr=0.000060
+2026-11-07 16:59:01   epoch 1: val_acc = 1380/3925 = 35.159236%  top5 = 3119/3925 = 79.464968%  [95% CI 33.68–36.67]
+2026-11-07 16:59:01   step 0/295: loss=2.029662
+2026-11-07 16:59:01   step 1/295: loss=1.860000
+2026-11-07 16:59:01   step 2/295: loss=1.928165
+2026-11-07 16:59:08   step 100/295: loss=1.838707
+2026-11-07 16:59:16   step 200/295: loss=1.595363
+2026-11-07 16:59:23 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 16:59:26 Epoch 2/80: loss=1.869664 lr=0.000120
+2026-11-07 16:59:26   epoch 2: val_acc = 1623/3925 = 41.350318%  top5 = 3349/3925 = 85.324841%  [95% CI 39.82–42.90]
+2026-11-07 16:59:26   step 0/295: loss=2.085870
+2026-11-07 16:59:26   step 1/295: loss=2.033276
+2026-11-07 16:59:26   step 2/295: loss=1.823621
+2026-11-07 16:59:33   step 100/295: loss=1.824277
+2026-11-07 16:59:40   step 200/295: loss=1.639377
+2026-11-07 16:59:47 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 16:59:50 Epoch 3/80: loss=1.750527 lr=0.000180
+2026-11-07 16:59:50   epoch 3: val_acc = 1588/3925 = 40.458599%  top5 = 3359/3925 = 85.579618%  [95% CI 38.93–42.00]
+2026-11-07 16:59:50   step 0/295: loss=1.889373
+2026-11-07 16:59:50   step 1/295: loss=1.719925
+2026-11-07 16:59:50   step 2/295: loss=1.871778
+2026-11-07 16:59:57   step 100/295: loss=1.476438
+2026-11-07 17:00:05   step 200/295: loss=1.527495
+2026-11-07 17:00:11 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:00:14 Epoch 4/80: loss=1.678286 lr=0.000240
+2026-11-07 17:00:14   epoch 4: val_acc = 1831/3925 = 46.649682%  top5 = 3511/3925 = 89.452229%  [95% CI 45.09–48.21]
+2026-11-07 17:00:15   step 0/295: loss=1.259307
+2026-11-07 17:00:15   step 1/295: loss=1.800318
+2026-11-07 17:00:15   step 2/295: loss=1.651308
+2026-11-07 17:00:21   step 100/295: loss=1.755313
+2026-11-07 17:00:29   step 200/295: loss=1.614966
+2026-11-07 17:00:35 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:00:38 Epoch 5/80: loss=1.618511 lr=0.000300
+2026-11-07 17:00:38   epoch 5: val_acc = 1992/3925 = 50.751592%  top5 = 3564/3925 = 90.802548%  [95% CI 49.19–52.31]
+2026-11-07 17:00:38   step 0/295: loss=1.589714
+2026-11-07 17:00:39   step 1/295: loss=1.371107
+2026-11-07 17:00:39   step 2/295: loss=1.570464
+2026-11-07 17:00:46   step 100/295: loss=1.386251
+2026-11-07 17:00:53   step 200/295: loss=1.815905
+2026-11-07 17:01:00 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:01:03 Epoch 6/80: loss=1.537374 lr=0.000300
+2026-11-07 17:01:03   epoch 6: val_acc = 2172/3925 = 55.337580%  top5 = 3610/3925 = 91.974522%  [95% CI 53.78–56.89]
+2026-11-07 17:01:03   step 0/295: loss=1.439342
+2026-11-07 17:01:03   step 1/295: loss=1.708102
+2026-11-07 17:01:03   step 2/295: loss=1.511668
+2026-11-07 17:01:10   step 100/295: loss=1.430052
+2026-11-07 17:01:17   step 200/295: loss=1.717932
+2026-11-07 17:01:24 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:01:27 Epoch 7/80: loss=1.515413 lr=0.000299
+2026-11-07 17:01:27   epoch 7: val_acc = 2135/3925 = 54.394904%  top5 = 3606/3925 = 91.872611%  [95% CI 52.83–55.95]
+2026-11-07 17:01:27   step 0/295: loss=1.416553
+2026-11-07 17:01:27   step 1/295: loss=1.603838
+2026-11-07 17:01:27   step 2/295: loss=1.653697
+2026-11-07 17:01:34   step 100/295: loss=1.586338
+2026-11-07 17:01:42   step 200/295: loss=1.331412
+2026-11-07 17:01:49 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:01:52 Epoch 8/80: loss=1.467415 lr=0.000299
+2026-11-07 17:01:52   epoch 8: val_acc = 2046/3925 = 52.127389%  top5 = 3497/3925 = 89.095541%  [95% CI 50.56–53.69]
+2026-11-07 17:01:52   step 0/295: loss=1.414610
+2026-11-07 17:01:52   step 1/295: loss=1.534215
+2026-11-07 17:01:52   step 2/295: loss=1.578274
+2026-11-07 17:01:59   step 100/295: loss=1.363725
+2026-11-07 17:02:06   step 200/295: loss=1.292511
+2026-11-07 17:02:13 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:02:16 Epoch 9/80: loss=1.434712 lr=0.000298
+2026-11-07 17:02:16   epoch 9: val_acc = 2328/3925 = 59.312102%  top5 = 3641/3925 = 92.764331%  [95% CI 57.77–60.84]
+2026-11-07 17:02:16   step 0/295: loss=1.245547
+2026-11-07 17:02:16   step 1/295: loss=1.344435
+2026-11-07 17:02:16   step 2/295: loss=1.473747
+2026-11-07 17:02:23   step 100/295: loss=1.619105
+2026-11-07 17:02:30   step 200/295: loss=1.583574
+2026-11-07 17:02:37 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:02:40 Epoch 10/80: loss=1.402288 lr=0.000297
+2026-11-07 17:02:40   epoch 10: val_acc = 2225/3925 = 56.687898%  top5 = 3615/3925 = 92.101911%  [95% CI 55.13–58.23]
+2026-11-07 17:02:40   step 0/295: loss=1.438428
+2026-11-07 17:02:41   step 1/295: loss=1.153414
+2026-11-07 17:02:41   step 2/295: loss=1.312966
+2026-11-07 17:02:48   step 100/295: loss=1.660357
+2026-11-07 17:02:55   step 200/295: loss=1.255819
+2026-11-07 17:03:02 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:03:05 Epoch 11/80: loss=1.386240 lr=0.000295
+2026-11-07 17:03:05   epoch 11: val_acc = 2316/3925 = 59.006369%  top5 = 3643/3925 = 92.815287%  [95% CI 57.46–60.54]
+2026-11-07 17:03:05   step 0/295: loss=1.415955
+2026-11-07 17:03:05   step 1/295: loss=1.413414
+2026-11-07 17:03:05   step 2/295: loss=1.291843
+2026-11-07 17:03:12   step 100/295: loss=1.329481
+2026-11-07 17:03:19   step 200/295: loss=1.287004
+2026-11-07 17:03:26 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:03:29 Epoch 12/80: loss=1.355152 lr=0.000294
+2026-11-07 17:03:29   epoch 12: val_acc = 2436/3925 = 62.063694%  top5 = 3673/3925 = 93.579618%  [95% CI 60.53–63.57]
+2026-11-07 17:03:29   step 0/295: loss=1.545882
+2026-11-07 17:03:30   step 1/295: loss=1.320075
+2026-11-07 17:03:30   step 2/295: loss=1.229794
+2026-11-07 17:03:36   step 100/295: loss=1.311466
+2026-11-07 17:03:44   step 200/295: loss=1.522358
+2026-11-07 17:03:50 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:03:53 Epoch 13/80: loss=1.337209 lr=0.000292
+2026-11-07 17:03:53   epoch 13: val_acc = 2390/3925 = 60.891720%  top5 = 3654/3925 = 93.095541%  [95% CI 59.36–62.41]
+2026-11-07 17:03:54   step 0/295: loss=1.209980
+2026-11-07 17:03:54   step 1/295: loss=1.373211
+2026-11-07 17:03:54   step 2/295: loss=1.123460
+2026-11-07 17:04:00   step 100/295: loss=1.367356
+2026-11-07 17:04:07   step 200/295: loss=1.425810
+2026-11-07 17:04:14 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:04:17 Epoch 14/80: loss=1.309352 lr=0.000289
+2026-11-07 17:04:17   epoch 14: val_acc = 2423/3925 = 61.732484%  top5 = 3648/3925 = 92.942675%  [95% CI 60.20–63.24]
+2026-11-07 17:04:17   step 0/295: loss=1.322661
+2026-11-07 17:04:17   step 1/295: loss=1.587068
+2026-11-07 17:04:17   step 2/295: loss=1.160388
+2026-11-07 17:04:24   step 100/295: loss=1.379467
+2026-11-07 17:04:32   step 200/295: loss=1.494032
+2026-11-07 17:04:39 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:04:42 Epoch 15/80: loss=1.291816 lr=0.000287
+2026-11-07 17:04:42   epoch 15: val_acc = 2421/3925 = 61.681529%  top5 = 3664/3925 = 93.350318%  [95% CI 60.15–63.19]
+2026-11-07 17:04:42   step 0/295: loss=1.361067
+2026-11-07 17:04:42   step 1/295: loss=1.157417
+2026-11-07 17:04:42   step 2/295: loss=1.189775
+2026-11-07 17:04:49   step 100/295: loss=1.442143
+2026-11-07 17:04:56   step 200/295: loss=1.207532
+2026-11-07 17:05:03 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:05:06 Epoch 16/80: loss=1.274643 lr=0.000284
+2026-11-07 17:05:06   epoch 16: val_acc = 2459/3925 = 62.649682%  top5 = 3682/3925 = 93.808917%  [95% CI 61.12–64.15]
+2026-11-07 17:05:06   step 0/295: loss=1.012954
+2026-11-07 17:05:06   step 1/295: loss=1.613862
+2026-11-07 17:05:06   step 2/295: loss=1.141649
+2026-11-07 17:05:14   step 100/295: loss=1.103602
+2026-11-07 17:05:21   step 200/295: loss=1.369937
+2026-11-07 17:05:28 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:05:31 Epoch 17/80: loss=1.258573 lr=0.000281
+2026-11-07 17:05:31   epoch 17: val_acc = 2452/3925 = 62.471338%  top5 = 3684/3925 = 93.859873%  [95% CI 60.95–63.97]
+2026-11-07 17:05:31   step 0/295: loss=1.211920
+2026-11-07 17:05:31   step 1/295: loss=1.083311
+2026-11-07 17:05:31   step 2/295: loss=1.299384
+2026-11-07 17:05:38   step 100/295: loss=1.290017
+2026-11-07 17:05:45   step 200/295: loss=0.937408
+2026-11-07 17:05:52 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:05:55 Epoch 18/80: loss=1.242428 lr=0.000278
+2026-11-07 17:05:55   epoch 18: val_acc = 2502/3925 = 63.745223%  top5 = 3689/3925 = 93.987261%  [95% CI 62.23–65.24]
+2026-11-07 17:05:55   step 0/295: loss=1.171685
+2026-11-07 17:05:56   step 1/295: loss=0.988270
+2026-11-07 17:05:56   step 2/295: loss=1.282387
+2026-11-07 17:06:03   step 100/295: loss=1.155557
+2026-11-07 17:06:10   step 200/295: loss=1.385713
+2026-11-07 17:06:17 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:06:20 Epoch 19/80: loss=1.212637 lr=0.000275
+2026-11-07 17:06:20   epoch 19: val_acc = 2526/3925 = 64.356688%  top5 = 3682/3925 = 93.808917%  [95% CI 62.84–65.84]
+2026-11-07 17:06:20   step 0/295: loss=1.192829
+2026-11-07 17:06:20   step 1/295: loss=1.322600
+2026-11-07 17:06:20   step 2/295: loss=1.319278
+2026-11-07 17:06:27   step 100/295: loss=1.201323
+2026-11-07 17:06:35   step 200/295: loss=1.224941
+2026-11-07 17:06:41 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:06:44 Epoch 20/80: loss=1.183796 lr=0.000271
+2026-11-07 17:06:44   epoch 20: val_acc = 2522/3925 = 64.254777%  top5 = 3691/3925 = 94.038217%  [95% CI 62.74–65.74]
+2026-11-07 17:06:45   step 0/295: loss=1.273925
+2026-11-07 17:06:45   step 1/295: loss=1.100368
+2026-11-07 17:06:45   step 2/295: loss=1.058621
+2026-11-07 17:06:52   step 100/295: loss=1.002508
+2026-11-07 17:06:59   step 200/295: loss=1.244399
+2026-11-07 17:07:06 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:07:09 Epoch 21/80: loss=1.197122 lr=0.000268
+2026-11-07 17:07:09   epoch 21: val_acc = 2474/3925 = 63.031847%  top5 = 3690/3925 = 94.012739%  [95% CI 61.51–64.53]
+2026-11-07 17:07:09   step 0/295: loss=1.107254
+2026-11-07 17:07:09   step 1/295: loss=1.362901
+2026-11-07 17:07:09   step 2/295: loss=1.016425
+2026-11-07 17:07:16   step 100/295: loss=1.537914
+2026-11-07 17:07:24   step 200/295: loss=1.276739
+2026-11-07 17:07:30 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:07:33 Epoch 22/80: loss=1.165807 lr=0.000264
+2026-11-07 17:07:33   epoch 22: val_acc = 2552/3925 = 65.019108%  top5 = 3679/3925 = 93.732484%  [95% CI 63.51–66.50]
+2026-11-07 17:07:34   step 0/295: loss=1.103523
+2026-11-07 17:07:34   step 1/295: loss=1.285607
+2026-11-07 17:07:34   step 2/295: loss=0.917754
+2026-11-07 17:07:41   step 100/295: loss=1.116300
+2026-11-07 17:07:48   step 200/295: loss=1.314226
+2026-11-07 17:07:55 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:07:58 Epoch 23/80: loss=1.140025 lr=0.000259
+2026-11-07 17:07:58   epoch 23: val_acc = 2497/3925 = 63.617834%  top5 = 3666/3925 = 93.401274%  [95% CI 62.10–65.11]
+2026-11-07 17:07:58   step 0/295: loss=1.334694
+2026-11-07 17:07:58   step 1/295: loss=1.322047
+2026-11-07 17:07:58   step 2/295: loss=1.139073
+2026-11-07 17:08:05   step 100/295: loss=1.192792
+2026-11-07 17:08:12   step 200/295: loss=1.429955
+2026-11-07 17:08:19 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:08:22 Epoch 24/80: loss=1.123999 lr=0.000255
+2026-11-07 17:08:22   epoch 24: val_acc = 2536/3925 = 64.611465%  top5 = 3715/3925 = 94.649682%  [95% CI 63.10–66.09]
+2026-11-07 17:08:22   step 0/295: loss=0.831983
+2026-11-07 17:08:22   step 1/295: loss=1.317943
+2026-11-07 17:08:22   step 2/295: loss=0.923528
+2026-11-07 17:08:30   step 100/295: loss=0.991230
+2026-11-07 17:08:37   step 200/295: loss=0.966481
+2026-11-07 17:08:44 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:08:47 Epoch 25/80: loss=1.117278 lr=0.000250
+2026-11-07 17:08:47   epoch 25: val_acc = 2588/3925 = 65.936306%  top5 = 3712/3925 = 94.573248%  [95% CI 64.44–67.40]
+2026-11-07 17:08:47   step 0/295: loss=1.000514
+2026-11-07 17:08:47   step 1/295: loss=1.039009
+2026-11-07 17:08:47   step 2/295: loss=0.936137
+2026-11-07 17:08:54   step 100/295: loss=0.967350
+2026-11-07 17:09:01   step 200/295: loss=1.350699
+2026-11-07 17:09:08 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:09:11 Epoch 26/80: loss=1.095437 lr=0.000246
+2026-11-07 17:09:11   epoch 26: val_acc = 2621/3925 = 66.777070%  top5 = 3716/3925 = 94.675159%  [95% CI 65.29–68.23]
+2026-11-07 17:09:11   step 0/295: loss=1.174285
+2026-11-07 17:09:11   step 1/295: loss=0.827383
+2026-11-07 17:09:11   step 2/295: loss=1.193074
+2026-11-07 17:09:18   step 100/295: loss=0.825987
+2026-11-07 17:09:25   step 200/295: loss=0.926828
+2026-11-07 17:09:32 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:09:35 Epoch 27/80: loss=1.067863 lr=0.000241
+2026-11-07 17:09:35   epoch 27: val_acc = 2639/3925 = 67.235669%  top5 = 3702/3925 = 94.318471%  [95% CI 65.75–68.69]
+2026-11-07 17:09:35   step 0/295: loss=1.105588
+2026-11-07 17:09:35   step 1/295: loss=1.006966
+2026-11-07 17:09:35   step 2/295: loss=1.193622
+2026-11-07 17:09:42   step 100/295: loss=1.181690
+2026-11-07 17:09:50   step 200/295: loss=1.076018
+2026-11-07 17:09:57 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:10:00 Epoch 28/80: loss=1.048356 lr=0.000236
+2026-11-07 17:10:00   epoch 28: val_acc = 2615/3925 = 66.624204%  top5 = 3698/3925 = 94.216561%  [95% CI 65.13–68.08]
+2026-11-07 17:10:00   step 0/295: loss=1.024354
+2026-11-07 17:10:00   step 1/295: loss=0.960351
+2026-11-07 17:10:00   step 2/295: loss=0.854003
+2026-11-07 17:10:07   step 100/295: loss=1.063801
+2026-11-07 17:10:14   step 200/295: loss=0.930366
+2026-11-07 17:10:21 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:10:24 Epoch 29/80: loss=1.036583 lr=0.000230
+2026-11-07 17:10:24   epoch 29: val_acc = 2587/3925 = 65.910828%  top5 = 3703/3925 = 94.343949%  [95% CI 64.41–67.38]
+2026-11-07 17:10:24   step 0/295: loss=1.186759
+2026-11-07 17:10:24   step 1/295: loss=1.021736
+2026-11-07 17:10:24   step 2/295: loss=1.163246
+2026-11-07 17:10:31   step 100/295: loss=0.939491
+2026-11-07 17:10:39   step 200/295: loss=1.099043
+2026-11-07 17:10:46 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:10:49 Epoch 30/80: loss=1.014403 lr=0.000225
+2026-11-07 17:10:49   epoch 30: val_acc = 2607/3925 = 66.420382%  top5 = 3693/3925 = 94.089172%  [95% CI 64.93–67.88]
+2026-11-07 17:10:49   step 0/295: loss=0.999136
+2026-11-07 17:10:49   step 1/295: loss=0.915644
+2026-11-07 17:10:49   step 2/295: loss=1.040718
+2026-11-07 17:10:56   step 100/295: loss=0.721403
+2026-11-07 17:11:03   step 200/295: loss=1.266770
+2026-11-07 17:11:10 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:11:13 Epoch 31/80: loss=0.970634 lr=0.000220
+2026-11-07 17:11:13   epoch 31: val_acc = 2661/3925 = 67.796178%  top5 = 3715/3925 = 94.649682%  [95% CI 66.32–69.24]
+2026-11-07 17:11:13   step 0/295: loss=0.885180
+2026-11-07 17:11:13   step 1/295: loss=1.004650
+2026-11-07 17:11:13   step 2/295: loss=1.147250
+2026-11-07 17:11:20   step 100/295: loss=0.863667
+2026-11-07 17:11:27   step 200/295: loss=1.072541
+2026-11-07 17:11:34 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:11:37 Epoch 32/80: loss=0.962050 lr=0.000214
+2026-11-07 17:11:37   epoch 32: val_acc = 2660/3925 = 67.770701%  top5 = 3689/3925 = 93.987261%  [95% CI 66.29–69.21]
+2026-11-07 17:11:37   step 0/295: loss=0.823730
+2026-11-07 17:11:37   step 1/295: loss=0.777735
+2026-11-07 17:11:37   step 2/295: loss=0.977917
+2026-11-07 17:11:45   step 100/295: loss=0.944767
+2026-11-07 17:11:52   step 200/295: loss=1.011288
+2026-11-07 17:11:59 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:12:02 Epoch 33/80: loss=0.932891 lr=0.000208
+2026-11-07 17:12:02   epoch 33: val_acc = 2676/3925 = 68.178344%  top5 = 3702/3925 = 94.318471%  [95% CI 66.70–69.62]
+2026-11-07 17:12:02   step 0/295: loss=0.795882
+2026-11-07 17:12:02   step 1/295: loss=1.081638
+2026-11-07 17:12:02   step 2/295: loss=0.799103
+2026-11-07 17:12:09   step 100/295: loss=0.897237
+2026-11-07 17:12:16   step 200/295: loss=0.880026
+2026-11-07 17:12:23 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:12:26 Epoch 34/80: loss=0.925712 lr=0.000202
+2026-11-07 17:12:26   epoch 34: val_acc = 2656/3925 = 67.668790%  top5 = 3692/3925 = 94.063694%  [95% CI 66.19–69.11]
+2026-11-07 17:12:26   step 0/295: loss=0.887096
+2026-11-07 17:12:26   step 1/295: loss=0.834144
+2026-11-07 17:12:26   step 2/295: loss=0.835950
+2026-11-07 17:12:33   step 100/295: loss=0.953673
+2026-11-07 17:12:40   step 200/295: loss=0.635496
+2026-11-07 17:12:47 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:12:50 Epoch 35/80: loss=0.890411 lr=0.000196
+2026-11-07 17:12:50   epoch 35: val_acc = 2645/3925 = 67.388535%  top5 = 3683/3925 = 93.834395%  [95% CI 65.91–68.84]
+2026-11-07 17:12:50   step 0/295: loss=0.710334
+2026-11-07 17:12:50   step 1/295: loss=0.886188
+2026-11-07 17:12:50   step 2/295: loss=0.732287
+2026-11-07 17:12:57   step 100/295: loss=0.755182
+2026-11-07 17:13:05   step 200/295: loss=0.956952
+2026-11-07 17:13:11 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:13:14 Epoch 36/80: loss=0.880434 lr=0.000190
+2026-11-07 17:13:14   epoch 36: val_acc = 2633/3925 = 67.082803%  top5 = 3699/3925 = 94.242038%  [95% CI 65.60–68.54]
+2026-11-07 17:13:15   step 0/295: loss=0.794318
+2026-11-07 17:13:15   step 1/295: loss=0.838877
+2026-11-07 17:13:15   step 2/295: loss=0.870198
+2026-11-07 17:13:22   step 100/295: loss=0.978166
+2026-11-07 17:13:29   step 200/295: loss=0.739914
+2026-11-07 17:13:36 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:13:39 Epoch 37/80: loss=0.858156 lr=0.000184
+2026-11-07 17:13:39   epoch 37: val_acc = 2661/3925 = 67.796178%  top5 = 3682/3925 = 93.808917%  [95% CI 66.32–69.24]
+2026-11-07 17:13:39   step 0/295: loss=0.802151
+2026-11-07 17:13:39   step 1/295: loss=0.650639
+2026-11-07 17:13:39   step 2/295: loss=0.848022
+2026-11-07 17:13:46   step 100/295: loss=1.119622
+2026-11-07 17:13:54   step 200/295: loss=0.772785
+2026-11-07 17:14:00 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:14:03 Epoch 38/80: loss=0.838798 lr=0.000178
+2026-11-07 17:14:03   epoch 38: val_acc = 2655/3925 = 67.643312%  top5 = 3677/3925 = 93.681529%  [95% CI 66.16–69.09]
+2026-11-07 17:14:04   step 0/295: loss=0.597831
+2026-11-07 17:14:04   step 1/295: loss=0.838887
+2026-11-07 17:14:04   step 2/295: loss=0.712631
+2026-11-07 17:14:11   step 100/295: loss=0.926912
+2026-11-07 17:14:18   step 200/295: loss=0.903614
+2026-11-07 17:14:25 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:14:28 Epoch 39/80: loss=0.807024 lr=0.000172
+2026-11-07 17:14:28   epoch 39: val_acc = 2635/3925 = 67.133758%  top5 = 3668/3925 = 93.452229%  [95% CI 65.65–68.59]
+2026-11-07 17:14:28   step 0/295: loss=0.769464
+2026-11-07 17:14:28   step 1/295: loss=0.627872
+2026-11-07 17:14:28   step 2/295: loss=0.733697
+2026-11-07 17:14:35   step 100/295: loss=0.693822
+2026-11-07 17:14:42   step 200/295: loss=0.737817
+2026-11-07 17:14:49 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:14:52 Epoch 40/80: loss=0.777813 lr=0.000166
+2026-11-07 17:14:52   epoch 40: val_acc = 2605/3925 = 66.369427%  top5 = 3671/3925 = 93.528662%  [95% CI 64.88–67.83]
+2026-11-07 17:14:52   step 0/295: loss=0.688826
+2026-11-07 17:14:52   step 1/295: loss=0.805593
+2026-11-07 17:14:52   step 2/295: loss=0.731343
+2026-11-07 17:14:59   step 100/295: loss=0.603361
+2026-11-07 17:15:06   step 200/295: loss=0.673371
+2026-11-07 17:15:13 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:15:16 Epoch 41/80: loss=0.766390 lr=0.000159
+2026-11-07 17:15:16   epoch 41: val_acc = 2649/3925 = 67.490446%  top5 = 3661/3925 = 93.273885%  [95% CI 66.01–68.94]
+2026-11-07 17:15:16   step 0/295: loss=0.751923
+2026-11-07 17:15:16   step 1/295: loss=0.791597
+2026-11-07 17:15:16   step 2/295: loss=0.844797
+2026-11-07 17:15:23   step 100/295: loss=0.743075
+2026-11-07 17:15:30   step 200/295: loss=0.781576
+2026-11-07 17:15:37 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:15:40 Epoch 42/80: loss=0.747850 lr=0.000153
+2026-11-07 17:15:40   epoch 42: val_acc = 2632/3925 = 67.057325%  top5 = 3633/3925 = 92.560510%  [95% CI 65.57–68.51]
+2026-11-07 17:15:40   step 0/295: loss=0.741602
+2026-11-07 17:15:40   step 1/295: loss=0.831672
+2026-11-07 17:15:40   step 2/295: loss=0.681575
+2026-11-07 17:15:48   step 100/295: loss=0.747291
+2026-11-07 17:15:55   step 200/295: loss=0.667848
+2026-11-07 17:16:02 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:16:05 Epoch 43/80: loss=0.732992 lr=0.000147
+2026-11-07 17:16:05   epoch 43: val_acc = 2629/3925 = 66.980892%  top5 = 3658/3925 = 93.197452%  [95% CI 65.49–68.43]
+2026-11-07 17:16:05   step 0/295: loss=0.641645
+2026-11-07 17:16:05   step 1/295: loss=0.620408
+2026-11-07 17:16:05   step 2/295: loss=0.817849
+2026-11-07 17:16:12   step 100/295: loss=0.651683
+2026-11-07 17:16:19   step 200/295: loss=0.687862
+2026-11-07 17:16:26 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:16:29 Epoch 44/80: loss=0.723159 lr=0.000141
+2026-11-07 17:16:29   epoch 44: val_acc = 2624/3925 = 66.853503%  top5 = 3616/3925 = 92.127389%  [95% CI 65.36–68.31]
+2026-11-07 17:16:29   step 0/295: loss=0.780631
+2026-11-07 17:16:29   step 1/295: loss=0.670892
+2026-11-07 17:16:29   step 2/295: loss=0.660417
+2026-11-07 17:16:36   step 100/295: loss=0.768813
+2026-11-07 17:16:44   step 200/295: loss=0.729664
+2026-11-07 17:16:51 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:16:54 Epoch 45/80: loss=0.698145 lr=0.000134
+2026-11-07 17:16:54   epoch 45: val_acc = 2644/3925 = 67.363057%  top5 = 3609/3925 = 91.949045%  [95% CI 65.88–68.81]
+2026-11-07 17:16:54   step 0/295: loss=0.679099
+2026-11-07 17:16:54   step 1/295: loss=0.779705
+2026-11-07 17:16:54   step 2/295: loss=0.676296
+2026-11-07 17:17:01   step 100/295: loss=0.669804
+2026-11-07 17:17:08   step 200/295: loss=0.630415
+2026-11-07 17:17:15 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:17:18 Epoch 46/80: loss=0.679146 lr=0.000128
+2026-11-07 17:17:18   epoch 46: val_acc = 2616/3925 = 66.649682%  top5 = 3627/3925 = 92.407643%  [95% CI 65.16–68.11]
+2026-11-07 17:17:18   step 0/295: loss=0.659613
+2026-11-07 17:17:18   step 1/295: loss=0.737045
+2026-11-07 17:17:18   step 2/295: loss=0.904661
+2026-11-07 17:17:25   step 100/295: loss=0.648213
+2026-11-07 17:17:32   step 200/295: loss=0.565479
+2026-11-07 17:17:39 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:17:42 Epoch 47/80: loss=0.675436 lr=0.000122
+2026-11-07 17:17:42   epoch 47: val_acc = 2651/3925 = 67.541401%  top5 = 3604/3925 = 91.821656%  [95% CI 66.06–68.99]
+2026-11-07 17:17:42   step 0/295: loss=0.607662
+2026-11-07 17:17:42   step 1/295: loss=0.554816
+2026-11-07 17:17:42   step 2/295: loss=0.540009
+2026-11-07 17:17:49   step 100/295: loss=0.564676
+2026-11-07 17:17:56   step 200/295: loss=0.569421
+2026-11-07 17:18:03 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:18:06 Epoch 48/80: loss=0.647451 lr=0.000116
+2026-11-07 17:18:06   epoch 48: val_acc = 2640/3925 = 67.261146%  top5 = 3597/3925 = 91.643312%  [95% CI 65.78–68.71]
+2026-11-07 17:18:06   step 0/295: loss=0.605321
+2026-11-07 17:18:06   step 1/295: loss=0.600675
+2026-11-07 17:18:06   step 2/295: loss=0.645825
+2026-11-07 17:18:13   step 100/295: loss=0.536669
+2026-11-07 17:18:21   step 200/295: loss=0.642018
+2026-11-07 17:18:27 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:18:31 Epoch 49/80: loss=0.646335 lr=0.000110
+2026-11-07 17:18:31   epoch 49: val_acc = 2659/3925 = 67.745223%  top5 = 3606/3925 = 91.872611%  [95% CI 66.27–69.19]
+2026-11-07 17:18:31   step 0/295: loss=0.717087
+2026-11-07 17:18:31   step 1/295: loss=0.534795
+2026-11-07 17:18:31   step 2/295: loss=0.657609
+2026-11-07 17:18:38   step 100/295: loss=0.635080
+2026-11-07 17:18:45   step 200/295: loss=0.599797
+2026-11-07 17:18:52 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:18:55 Epoch 50/80: loss=0.637497 lr=0.000104
+2026-11-07 17:18:55   epoch 50: val_acc = 2666/3925 = 67.923567%  top5 = 3587/3925 = 91.388535%  [95% CI 66.45–69.37]
+2026-11-07 17:18:55   step 0/295: loss=0.642362
+2026-11-07 17:18:55   step 1/295: loss=0.610642
+2026-11-07 17:18:55   step 2/295: loss=0.619415
+2026-11-07 17:19:02   step 100/295: loss=0.558560
+2026-11-07 17:19:09   step 200/295: loss=0.600109
+2026-11-07 17:19:16 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:19:19 Epoch 51/80: loss=0.623183 lr=0.000098
+2026-11-07 17:19:19   epoch 51: val_acc = 2615/3925 = 66.624204%  top5 = 3576/3925 = 91.108280%  [95% CI 65.13–68.08]
+2026-11-07 17:19:19   step 0/295: loss=0.564393
+2026-11-07 17:19:19   step 1/295: loss=0.604507
+2026-11-07 17:19:19   step 2/295: loss=0.660099
+2026-11-07 17:19:26   step 100/295: loss=0.620532
+2026-11-07 17:19:33   step 200/295: loss=0.583895
+2026-11-07 17:19:40 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:19:43 Epoch 52/80: loss=0.607081 lr=0.000092
+2026-11-07 17:19:43   epoch 52: val_acc = 2657/3925 = 67.694268%  top5 = 3592/3925 = 91.515924%  [95% CI 66.21–69.14]
+2026-11-07 17:19:43   step 0/295: loss=0.587733
+2026-11-07 17:19:43   step 1/295: loss=0.637660
+2026-11-07 17:19:44   step 2/295: loss=0.545547
+2026-11-07 17:19:50   step 100/295: loss=0.568005
+2026-11-07 17:19:58   step 200/295: loss=0.530185
+2026-11-07 17:20:05 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:20:08 Epoch 53/80: loss=0.599801 lr=0.000086
+2026-11-07 17:20:08   epoch 53: val_acc = 2650/3925 = 67.515924%  top5 = 3586/3925 = 91.363057%  [95% CI 66.03–68.96]
+2026-11-07 17:20:08   step 0/295: loss=0.533091
+2026-11-07 17:20:08   step 1/295: loss=0.569346
+2026-11-07 17:20:08   step 2/295: loss=0.598866
+2026-11-07 17:20:15   step 100/295: loss=0.614738
+2026-11-07 17:20:22   step 200/295: loss=0.538330
+2026-11-07 17:20:29 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:20:32 Epoch 54/80: loss=0.590307 lr=0.000081
+2026-11-07 17:20:32   epoch 54: val_acc = 2652/3925 = 67.566879%  top5 = 3603/3925 = 91.796178%  [95% CI 66.09–69.01]
+2026-11-07 17:20:32   step 0/295: loss=0.524838
+2026-11-07 17:20:32   step 1/295: loss=0.598381
+2026-11-07 17:20:32   step 2/295: loss=0.562859
+2026-11-07 17:20:39   step 100/295: loss=0.612025
+2026-11-07 17:20:46   step 200/295: loss=0.520735
+2026-11-07 17:20:53 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:20:56 Epoch 55/80: loss=0.580304 lr=0.000075
+2026-11-07 17:20:56   epoch 55: val_acc = 2658/3925 = 67.719745%  top5 = 3545/3925 = 90.318471%  [95% CI 66.24–69.16]
+2026-11-07 17:20:56   step 0/295: loss=0.519523
+2026-11-07 17:20:56   step 1/295: loss=0.527580
+2026-11-07 17:20:56   step 2/295: loss=0.625022
+2026-11-07 17:21:03   step 100/295: loss=0.551777
+2026-11-07 17:21:10   step 200/295: loss=0.557102
+2026-11-07 17:21:17 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:21:20 Epoch 56/80: loss=0.575341 lr=0.000070
+2026-11-07 17:21:20   epoch 56: val_acc = 2663/3925 = 67.847134%  top5 = 3560/3925 = 90.700637%  [95% CI 66.37–69.29]
+2026-11-07 17:21:20   step 0/295: loss=0.529773
+2026-11-07 17:21:21   step 1/295: loss=0.588890
+2026-11-07 17:21:21   step 2/295: loss=0.566646
+2026-11-07 17:21:27   step 100/295: loss=0.606936
+2026-11-07 17:21:35   step 200/295: loss=0.542037
+2026-11-07 17:21:42 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:21:45 Epoch 57/80: loss=0.570237 lr=0.000064
+2026-11-07 17:21:45   epoch 57: val_acc = 2687/3925 = 68.458599%  top5 = 3577/3925 = 91.133758%  [95% CI 66.99–69.89]
+2026-11-07 17:21:45   step 0/295: loss=0.567033
+2026-11-07 17:21:45   step 1/295: loss=0.560954
+2026-11-07 17:21:45   step 2/295: loss=0.547710
+2026-11-07 17:21:52   step 100/295: loss=0.561040
+2026-11-07 17:21:59   step 200/295: loss=0.509980
+2026-11-07 17:22:06 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:22:09 Epoch 58/80: loss=0.565786 lr=0.000059
+2026-11-07 17:22:09   epoch 58: val_acc = 2687/3925 = 68.458599%  top5 = 3568/3925 = 90.904459%  [95% CI 66.99–69.89]
+2026-11-07 17:22:09   step 0/295: loss=0.515221
+2026-11-07 17:22:09   step 1/295: loss=0.554082
+2026-11-07 17:22:09   step 2/295: loss=0.544924
+2026-11-07 17:22:17   step 100/295: loss=0.637880
+2026-11-07 17:22:24   step 200/295: loss=0.574014
+2026-11-07 17:22:31 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:22:34 Epoch 59/80: loss=0.553713 lr=0.000054
+2026-11-07 17:22:34   epoch 59: val_acc = 2689/3925 = 68.509554%  top5 = 3541/3925 = 90.216561%  [95% CI 67.04–69.94]
+2026-11-07 17:22:34   step 0/295: loss=0.545122
+2026-11-07 17:22:34   step 1/295: loss=0.522298
+2026-11-07 17:22:34   step 2/295: loss=0.536260
+2026-11-07 17:22:41   step 100/295: loss=0.540785
+2026-11-07 17:22:48   step 200/295: loss=0.513511
+2026-11-07 17:22:55 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:22:58 Epoch 60/80: loss=0.549128 lr=0.000050
+2026-11-07 17:22:58   epoch 60: val_acc = 2661/3925 = 67.796178%  top5 = 3546/3925 = 90.343949%  [95% CI 66.32–69.24]
+2026-11-07 17:22:58   step 0/295: loss=0.580564
+2026-11-07 17:22:58   step 1/295: loss=0.531803
+2026-11-07 17:22:58   step 2/295: loss=0.563450
+2026-11-07 17:23:05   step 100/295: loss=0.513536
+2026-11-07 17:23:13   step 200/295: loss=0.527379
+2026-11-07 17:23:20 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:23:23 Epoch 61/80: loss=0.546242 lr=0.000045
+2026-11-07 17:23:23   epoch 61: val_acc = 2678/3925 = 68.229299%  top5 = 3543/3925 = 90.267516%  [95% CI 66.76–69.67]
+2026-11-07 17:23:23   step 0/295: loss=0.527183
+2026-11-07 17:23:23   step 1/295: loss=0.551254
+2026-11-07 17:23:23   step 2/295: loss=0.534104
+2026-11-07 17:23:30   step 100/295: loss=0.608837
+2026-11-07 17:23:37   step 200/295: loss=0.531858
+2026-11-07 17:23:44 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:23:47 Epoch 62/80: loss=0.538937 lr=0.000041
+2026-11-07 17:23:47   epoch 62: val_acc = 2649/3925 = 67.490446%  top5 = 3544/3925 = 90.292994%  [95% CI 66.01–68.94]
+2026-11-07 17:23:47   step 0/295: loss=0.510339
+2026-11-07 17:23:47   step 1/295: loss=0.516859
+2026-11-07 17:23:47   step 2/295: loss=0.539760
+2026-11-07 17:23:54   step 100/295: loss=0.522460
+2026-11-07 17:24:01   step 200/295: loss=0.515167
+2026-11-07 17:24:08 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:24:11 Epoch 63/80: loss=0.543285 lr=0.000036
+2026-11-07 17:24:11   epoch 63: val_acc = 2680/3925 = 68.280255%  top5 = 3536/3925 = 90.089172%  [95% CI 66.81–69.72]
+2026-11-07 17:24:12   step 0/295: loss=0.517840
+2026-11-07 17:24:12   step 1/295: loss=0.511933
+2026-11-07 17:24:12   step 2/295: loss=0.524799
+2026-11-07 17:24:19   step 100/295: loss=0.516243
+2026-11-07 17:24:26   step 200/295: loss=0.511777
+2026-11-07 17:24:33 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:24:36 Epoch 64/80: loss=0.534261 lr=0.000032
+2026-11-07 17:24:36   epoch 64: val_acc = 2679/3925 = 68.254777%  top5 = 3521/3925 = 89.707006%  [95% CI 66.78–69.69]
+2026-11-07 17:24:36   step 0/295: loss=0.531224
+2026-11-07 17:24:36   step 1/295: loss=0.558104
+2026-11-07 17:24:36   step 2/295: loss=0.542804
+2026-11-07 17:24:43   step 100/295: loss=0.512483
+2026-11-07 17:24:51   step 200/295: loss=0.510736
+2026-11-07 17:24:58 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:25:01 Epoch 65/80: loss=0.532145 lr=0.000029
+2026-11-07 17:25:01   epoch 65: val_acc = 2682/3925 = 68.331210%  top5 = 3545/3925 = 90.318471%  [95% CI 66.86–69.77]
+2026-11-07 17:25:01   step 0/295: loss=0.512585
+2026-11-07 17:25:01   step 1/295: loss=0.510154
+2026-11-07 17:25:01   step 2/295: loss=0.520077
+2026-11-07 17:25:08   step 100/295: loss=0.509427
+2026-11-07 17:25:15   step 200/295: loss=0.519672
+2026-11-07 17:25:22 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:25:25 Epoch 66/80: loss=0.529628 lr=0.000025
+2026-11-07 17:25:25   epoch 66: val_acc = 2649/3925 = 67.490446%  top5 = 3519/3925 = 89.656051%  [95% CI 66.01–68.94]
+2026-11-07 17:25:25   step 0/295: loss=0.552151
+2026-11-07 17:25:25   step 1/295: loss=0.512217
+2026-11-07 17:25:25   step 2/295: loss=0.546792
+2026-11-07 17:25:32   step 100/295: loss=0.520561
+2026-11-07 17:25:40   step 200/295: loss=0.515056
+2026-11-07 17:25:46 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:25:50 Epoch 67/80: loss=0.525693 lr=0.000022
+2026-11-07 17:25:50   epoch 67: val_acc = 2669/3925 = 68.000000%  top5 = 3522/3925 = 89.732484%  [95% CI 66.52–69.44]
+2026-11-07 17:25:50   step 0/295: loss=0.507616
+2026-11-07 17:25:50   step 1/295: loss=0.525260
+2026-11-07 17:25:50   step 2/295: loss=0.509540
+2026-11-07 17:25:57   step 100/295: loss=0.507632
+2026-11-07 17:26:04   step 200/295: loss=0.614807
+2026-11-07 17:26:11 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:26:14 Epoch 68/80: loss=0.523651 lr=0.000019
+2026-11-07 17:26:14   epoch 68: val_acc = 2680/3925 = 68.280255%  top5 = 3522/3925 = 89.732484%  [95% CI 66.81–69.72]
+2026-11-07 17:26:14   step 0/295: loss=0.514778
+2026-11-07 17:26:14   step 1/295: loss=0.517057
+2026-11-07 17:26:14   step 2/295: loss=0.515157
+2026-11-07 17:26:21   step 100/295: loss=0.516611
+2026-11-07 17:26:29   step 200/295: loss=0.512328
+2026-11-07 17:26:36 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:26:39 Epoch 69/80: loss=0.523889 lr=0.000016
+2026-11-07 17:26:39   epoch 69: val_acc = 2663/3925 = 67.847134%  top5 = 3514/3925 = 89.528662%  [95% CI 66.37–69.29]
+2026-11-07 17:26:39   step 0/295: loss=0.535403
+2026-11-07 17:26:39   step 1/295: loss=0.512215
+2026-11-07 17:26:39   step 2/295: loss=0.509079
+2026-11-07 17:26:46   step 100/295: loss=0.513465
+2026-11-07 17:26:53   step 200/295: loss=0.506988
+2026-11-07 17:27:00 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:27:03 Epoch 70/80: loss=0.519959 lr=0.000013
+2026-11-07 17:27:03   epoch 70: val_acc = 2679/3925 = 68.254777%  top5 = 3509/3925 = 89.401274%  [95% CI 66.78–69.69]
+2026-11-07 17:27:03   step 0/295: loss=0.511505
+2026-11-07 17:27:03   step 1/295: loss=0.509973
+2026-11-07 17:27:03   step 2/295: loss=0.510560
+2026-11-07 17:27:10   step 100/295: loss=0.554678
+2026-11-07 17:27:18   step 200/295: loss=0.513892
+2026-11-07 17:27:25 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:27:28 Epoch 71/80: loss=0.519623 lr=0.000011
+2026-11-07 17:27:28   epoch 71: val_acc = 2676/3925 = 68.178344%  top5 = 3516/3925 = 89.579618%  [95% CI 66.70–69.62]
+2026-11-07 17:27:28   step 0/295: loss=0.508240
+2026-11-07 17:27:28   step 1/295: loss=0.509183
+2026-11-07 17:27:28   step 2/295: loss=0.526321
+2026-11-07 17:27:35   step 100/295: loss=0.509751
+2026-11-07 17:27:42   step 200/295: loss=0.508085
+2026-11-07 17:27:49 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:27:52 Epoch 72/80: loss=0.521756 lr=0.000008
+2026-11-07 17:27:52   epoch 72: val_acc = 2697/3925 = 68.713376%  top5 = 3517/3925 = 89.605096%  [95% CI 67.25–70.15]
+2026-11-07 17:27:52   step 0/295: loss=0.513243
+2026-11-07 17:27:52   step 1/295: loss=0.517638
+2026-11-07 17:27:52   step 2/295: loss=0.507852
+2026-11-07 17:27:59   step 100/295: loss=0.532298
+2026-11-07 17:28:06   step 200/295: loss=0.509394
+2026-11-07 17:28:13 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:28:16 Epoch 73/80: loss=0.520856 lr=0.000006
+2026-11-07 17:28:16   epoch 73: val_acc = 2675/3925 = 68.152866%  top5 = 3521/3925 = 89.707006%  [95% CI 66.68–69.59]
+2026-11-07 17:28:16   step 0/295: loss=0.517396
+2026-11-07 17:28:16   step 1/295: loss=0.505278
+2026-11-07 17:28:16   step 2/295: loss=0.515199
+2026-11-07 17:28:23   step 100/295: loss=0.506746
+2026-11-07 17:28:30   step 200/295: loss=0.510561
+2026-11-07 17:28:37 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:28:40 Epoch 74/80: loss=0.517714 lr=0.000005
+2026-11-07 17:28:40   epoch 74: val_acc = 2683/3925 = 68.356688%  top5 = 3517/3925 = 89.605096%  [95% CI 66.88–69.79]
+2026-11-07 17:28:40   step 0/295: loss=0.534184
+2026-11-07 17:28:41   step 1/295: loss=0.507936
+2026-11-07 17:28:41   step 2/295: loss=0.507910
+2026-11-07 17:28:48   step 100/295: loss=0.508493
+2026-11-07 17:28:55   step 200/295: loss=0.513612
+2026-11-07 17:29:02 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:29:05 Epoch 75/80: loss=0.517447 lr=0.000003
+2026-11-07 17:29:05   epoch 75: val_acc = 2685/3925 = 68.407643%  top5 = 3529/3925 = 89.910828%  [95% CI 66.94–69.84]
+2026-11-07 17:29:05   step 0/295: loss=0.527656
+2026-11-07 17:29:05   step 1/295: loss=0.535280
+2026-11-07 17:29:05   step 2/295: loss=0.509336
+2026-11-07 17:29:12   step 100/295: loss=0.507263
+2026-11-07 17:29:19   step 200/295: loss=0.505101
+2026-11-07 17:29:26 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:29:29 Epoch 76/80: loss=0.517752 lr=0.000002
+2026-11-07 17:29:29   epoch 76: val_acc = 2694/3925 = 68.636943%  top5 = 3521/3925 = 89.707006%  [95% CI 67.17–70.07]
+2026-11-07 17:29:29   step 0/295: loss=0.508803
+2026-11-07 17:29:29   step 1/295: loss=0.510233
+2026-11-07 17:29:29   step 2/295: loss=0.533580
+2026-11-07 17:29:36   step 100/295: loss=0.514807
+2026-11-07 17:29:43   step 200/295: loss=0.509145
+2026-11-07 17:29:50 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:29:53 Epoch 77/80: loss=0.516856 lr=0.000001
+2026-11-07 17:29:53   epoch 77: val_acc = 2688/3925 = 68.484076%  top5 = 3519/3925 = 89.656051%  [95% CI 67.01–69.92]
+2026-11-07 17:29:53   step 0/295: loss=0.513004
+2026-11-07 17:29:53   step 1/295: loss=0.521069
+2026-11-07 17:29:53   step 2/295: loss=0.513371
+2026-11-07 17:30:00   step 100/295: loss=0.507678
+2026-11-07 17:30:08   step 200/295: loss=0.504583
+2026-11-07 17:30:14 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:30:17 Epoch 78/80: loss=0.516463 lr=0.000001
+2026-11-07 17:30:17   epoch 78: val_acc = 2689/3925 = 68.509554%  top5 = 3521/3925 = 89.707006%  [95% CI 67.04–69.94]
+2026-11-07 17:30:18   step 0/295: loss=0.508503
+2026-11-07 17:30:18   step 1/295: loss=0.519940
+2026-11-07 17:30:18   step 2/295: loss=0.510951
+2026-11-07 17:30:25   step 100/295: loss=0.521935
+2026-11-07 17:30:32   step 200/295: loss=0.504789
+2026-11-07 17:30:39 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:30:42 Epoch 79/80: loss=0.516076 lr=0.000000
+2026-11-07 17:30:42   epoch 79: val_acc = 2691/3925 = 68.560510%  top5 = 3519/3925 = 89.656051%  [95% CI 67.09–69.99]
+2026-11-07 17:30:42   step 0/295: loss=0.506812
+2026-11-07 17:30:42   step 1/295: loss=0.509571
+2026-11-07 17:30:42   step 2/295: loss=0.504837
+2026-11-07 17:30:49   step 100/295: loss=0.506285
+2026-11-07 17:30:57   step 200/295: loss=0.554211
+2026-11-07 17:31:04 [pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 17:31:07 Epoch 80/80: loss=0.515257 lr=0.000000
+2026-11-07 17:31:07   epoch 80: val_acc = 2691/3925 = 68.560510%  top5 = 3520/3925 = 89.681529%  [95% CI 67.09–69.99]
+2026-11-07 17:31:07 done (trained ViT-Tiny adam + cosine/warmup via packed threading).
