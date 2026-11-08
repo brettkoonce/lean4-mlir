@@ -4901,3 +4901,64 @@ done (trained CIFAR-CNN8-wide-BN-batchstat bf16adam + constant lr via packed thr
   cifar8wb-bbn-ablation: 74.680000% / 75.350000% / 75.640000% / 77.110000% / 76.990000% / 76.560000%   (runs/2026-11-07-cifar8wb-bbn-ablation/cifar8wb-bbn-ablation.log)
 
 ━━━ 2026-11-07 18:13:45  done: build cifar — send back runs/2026-11-07-mac-ladder/ and the runs/<date>-{mnist,cifar8w}*/ trainer logs it names
+════ mac_ladder 2026-11-07 18:19:44 — stages: build grid → runs/2026-11-07-mac-ladder
+  Apple M5 Pro, 64 GB, macOS 27.2, host zs-mac-mini
+  plugin .venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib
+
+━━━ 2026-11-07 18:19:44  build: the ladder's eight binaries
+  ✓ build already done (2026-11-07 13:55:51 built) — rm runs/2026-11-07-mac-ladder/done/build to redo it
+
+━━━ 2026-11-07 18:19:44  grid: cifar8wb-bbn-grid at ten head widths × 25 epochs → runs/2026-11-07-mac-ladder/cifar8wb-bbn-grid-xla
+  ▸ 18:19:44 fc8
+    fc8 acc=75.770000% n=10000 CI=[74.92,76.60]
+  ▸ 18:20:51 fc4096
+    fc4096 acc=77.600000% n=10000 CI=[76.77,78.41]
+  ▸ 18:22:32 fc16
+    fc16 acc=77.080000% n=10000 CI=[76.25,77.89]
+  ▸ 18:23:35 fc2048
+    fc2048 acc=77.980000% n=10000 CI=[77.16,78.78]
+  ▸ 18:24:50 fc32
+    fc32 acc=77.530000% n=10000 CI=[76.70,78.34]
+  ▸ 18:25:54 fc1024
+    fc1024 acc=78.510000% n=10000 CI=[77.69,79.30]
+  ▸ 18:26:59 fc64
+    fc64 acc=76.120000% n=10000 CI=[75.27,76.95]
+  ▸ 18:28:02 fc512
+    fc512 acc=77.650000% n=10000 CI=[76.82,78.46]
+  ▸ 18:29:07 fc128
+    fc128 acc=77.470000% n=10000 CI=[76.64,78.28]
+  ▸ 18:30:12 fc256
+    fc256 acc=77.990000% n=10000 CI=[77.17,78.79]
+d	acc	n_eval	ci_lo	ci_hi	floats	ms_per_ep
+8	75.770000	10000	74.92	76.60	NA	NA
+16	77.080000	10000	76.25	77.89	NA	NA
+32	77.530000	10000	76.70	78.34	NA	NA
+64	76.120000	10000	75.27	76.95	NA	NA
+128	77.470000	10000	76.64	78.28	NA	NA
+256	77.990000	10000	77.17	78.79	NA	NA
+512	77.650000	10000	76.82	78.46	NA	NA
+1024	78.510000	10000	77.69	79.30	NA	NA
+2048	77.980000	10000	77.16	78.78	NA	NA
+4096	77.600000	10000	76.77	78.41	NA	NA
+
+━━━ 2026-11-07 18:31:17  done: build grid — send back runs/2026-11-07-mac-ladder/ and the runs/<date>-{mnist,cifar8w}*/ trainer logs it names
+════ mac_ladder 2026-11-07 18:31:17 — stages: build seeds → runs/2026-11-07-mac-ladder
+  Apple M5 Pro, 64 GB, macOS 27.2, host zs-mac-mini
+  plugin .venv/lib/python3.15/site-packages/metal_pjrt_core/pjrt_c_api_mtl_plugin.dylib
+
+━━━ 2026-11-07 18:31:17  build: the ladder's eight binaries
+  ✓ build already done (2026-11-07 13:55:51 built) — rm runs/2026-11-07-mac-ladder/done/build to redo it
+
+━━━ 2026-11-07 18:31:17  seeds: cifar8wb-bbn-ablation at seeds 1 2 3 4 5, six arms × 40 epochs each → runs/2026-11-07-mac-ladder/bbn-seeds
+  ▸ 18:31:17 cifar8wb_bbn_s1
+    OK 9m40s  74.680000% / 75.350000% / 75.640000% / 77.110000% / 76.990000% / 76.560000%
+  ▸ 18:40:57 cifar8wb_bbn_s2
+    OK 9m42s  77.500000% / 77.320000% / 77.360000% / 76.120000% / 78.150000% / 76.520000%
+  ▸ 18:50:39 cifar8wb_bbn_s3
+    OK 9m44s  74.470000% / 75.830000% / 77.020000% / 75.490000% / 78.110000% / 76.090000%
+  ▸ 19:00:23 cifar8wb_bbn_s4
+    OK 9m45s  76.730000% / 74.950000% / 75.180000% / 74.840000% / 78.720000% / 75.090000%
+  ▸ 19:10:08 cifar8wb_bbn_s5
+    OK 9m46s  76.670000% / 79.000000% / 76.840000% / 76.150000% / 75.790000% / 76.480000%
+
+━━━ 2026-11-07 19:19:54  done: build seeds — send back runs/2026-11-07-mac-ladder/ and the runs/<date>-{mnist,cifar8w}*/ trainer logs it names

@@ -1,0 +1,274 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 18:20:51.437008 39673443 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 49716.0 MB reclaimable now
+I1107 18:20:51.438301 39673439 service.cc:154] XLA service 0x74ab2f65a0 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 18:20:51.438314 39673439 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 18:20:51.439189 39673439 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 18:20:51.445202 39673439 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled .lake/build/cifar8wb_bbn_4096_adam_train_step.mlir (@cifar8wb_bbn_4096_adam_train_step, 133 outputs, 1 replica) in 183 ms
+[pjrt_ffi] compiled .lake/build/cifar8wb_bbn_4096_fwd.mlir (@cifar8wb_bbn_4096_fwd, 1 outputs, 1 replica) in 42 ms
+[pjrt_ffi] compiled .lake/build/cifar8wb_bbn_4096_fwd_eval.mlir (@cifar8wb_bbn_4096_fwd_eval, 1 outputs, 1 replica) in 26 ms
+rendered .lake/build/cifar8wb_bbn_4096_adam_train_step.mlir, _fwd.mlir and _fwd_eval.mlir (batch-statistics BN, fc4096)
+CIFAR-CNN8-BN at BATCH statistics, fc4096 (8× conv→BN→relu [16,16,32,32] → 128→4096→4096→10, AdamW, running-stat eval) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt .lake/build/cifar8wb_bbn_4096_adam_train_step.mlir
+  xla/pjrt .lake/build/cifar8wb_bbn_4096_fwd.mlir
+  xla/pjrt .lake/build/cifar8wb_bbn_4096_fwd_eval.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN-batchstat-fc4096 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 8 layers, 384 stat floats → eval via @cifar8wb_bbn_4096_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_adam_train_step holds 114 parameter tensors (199.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/390: loss=2.322914
+  step 1/390: loss=2.327363
+  step 2/390: loss=2.324465
+  step 100/390: loss=1.858220
+  step 200/390: loss=1.688511
+  step 300/390: loss=1.593219
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/25: loss=1.737220 lr=0.000333
+  epoch 1: test_acc = 4018/10000 = 40.180000%  top5 = 8714/10000 = 87.140000%  [95% CI 39.22–41.14]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 1626637744218547845)
+  step 0/390: loss=1.504101
+  step 1/390: loss=1.489289
+  step 2/390: loss=1.408072
+  step 100/390: loss=1.390597
+  step 200/390: loss=1.278475
+  step 300/390: loss=1.289813
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/25: loss=1.358163 lr=0.000667
+  epoch 2: test_acc = 5097/10000 = 50.970000%  top5 = 9345/10000 = 93.450000%  [95% CI 49.99–51.95]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 16415728241776836848)
+  step 0/390: loss=1.154940
+  step 1/390: loss=1.383974
+  step 2/390: loss=1.152593
+  step 100/390: loss=1.178221
+  step 200/390: loss=1.285566
+  step 300/390: loss=1.132100
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/25: loss=1.162123 lr=0.001000
+  epoch 3: test_acc = 5369/10000 = 53.690000%  top5 = 9378/10000 = 93.780000%  [95% CI 52.71–54.67]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 16809809230547485615)
+  step 0/390: loss=1.118952
+  step 1/390: loss=1.089175
+  step 2/390: loss=0.845147
+  step 100/390: loss=0.988240
+  step 200/390: loss=0.894219
+  step 300/390: loss=1.035304
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/25: loss=1.016557 lr=0.000995
+  epoch 4: test_acc = 6120/10000 = 61.200000%  top5 = 9649/10000 = 96.490000%  [95% CI 60.24–62.15]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 5818526956808823761)
+  step 0/390: loss=1.004773
+  step 1/390: loss=1.193525
+  step 2/390: loss=0.928042
+  step 100/390: loss=0.749107
+  step 200/390: loss=0.776007
+  step 300/390: loss=0.676337
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/25: loss=0.911881 lr=0.000980
+  epoch 5: test_acc = 6177/10000 = 61.770000%  top5 = 9429/10000 = 94.290000%  [95% CI 60.81–62.72]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 13011301589308498535)
+  step 0/390: loss=0.917383
+  step 1/390: loss=0.690825
+  step 2/390: loss=0.882689
+  step 100/390: loss=0.848087
+  step 200/390: loss=0.768806
+  step 300/390: loss=0.829760
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/25: loss=0.827454 lr=0.000955
+  epoch 6: test_acc = 6502/10000 = 65.020000%  top5 = 9630/10000 = 96.300000%  [95% CI 64.08–65.95]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 2110340769091694282)
+  step 0/390: loss=0.687288
+  step 1/390: loss=0.749955
+  step 2/390: loss=0.887493
+  step 100/390: loss=0.701913
+  step 200/390: loss=0.707789
+  step 300/390: loss=0.800330
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/25: loss=0.766748 lr=0.000921
+  epoch 7: test_acc = 6843/10000 = 68.430000%  top5 = 9714/10000 = 97.140000%  [95% CI 67.51–69.33]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 15385875861224753676)
+  step 0/390: loss=0.748877
+  step 1/390: loss=0.668439
+  step 2/390: loss=0.588510
+  step 100/390: loss=0.677525
+  step 200/390: loss=0.640489
+  step 300/390: loss=0.771395
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/25: loss=0.718442 lr=0.000878
+  epoch 8: test_acc = 7150/10000 = 71.500000%  top5 = 9779/10000 = 97.790000%  [95% CI 70.61–72.38]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 16580139714157959373)
+  step 0/390: loss=0.599805
+  step 1/390: loss=0.556996
+  step 2/390: loss=0.571266
+  step 100/390: loss=0.747835
+  step 200/390: loss=0.607812
+  step 300/390: loss=0.723428
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/25: loss=0.671978 lr=0.000828
+  epoch 9: test_acc = 5999/10000 = 59.990000%  top5 = 9185/10000 = 91.850000%  [95% CI 59.03–60.95]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 10462885128483126765)
+  step 0/390: loss=0.628505
+  step 1/390: loss=0.710526
+  step 2/390: loss=0.608074
+  step 100/390: loss=0.647143
+  step 200/390: loss=0.867457
+  step 300/390: loss=0.526718
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/25: loss=0.636291 lr=0.000770
+  epoch 10: test_acc = 7346/10000 = 73.460000%  top5 = 9794/10000 = 97.940000%  [95% CI 72.59–74.32]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 9953773591041946400)
+  step 0/390: loss=0.466352
+  step 1/390: loss=0.486061
+  step 2/390: loss=0.565320
+  step 100/390: loss=0.569539
+  step 200/390: loss=0.600607
+  step 300/390: loss=0.633179
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/25: loss=0.603293 lr=0.000708
+  epoch 11: test_acc = 7176/10000 = 71.760000%  top5 = 9764/10000 = 97.640000%  [95% CI 70.87–72.63]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 2810487432809428475)
+  step 0/390: loss=0.456245
+  step 1/390: loss=0.528253
+  step 2/390: loss=0.553164
+  step 100/390: loss=0.584674
+  step 200/390: loss=0.650755
+  step 300/390: loss=0.622290
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/25: loss=0.567286 lr=0.000641
+  epoch 12: test_acc = 7484/10000 = 74.840000%  top5 = 9812/10000 = 98.120000%  [95% CI 73.98–75.68]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 7261002754114709644)
+  step 0/390: loss=0.565810
+  step 1/390: loss=0.637770
+  step 2/390: loss=0.455515
+  step 100/390: loss=0.501879
+  step 200/390: loss=0.538459
+  step 300/390: loss=0.691982
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/25: loss=0.538662 lr=0.000571
+  epoch 13: test_acc = 7530/10000 = 75.300000%  top5 = 9825/10000 = 98.250000%  [95% CI 74.45–76.14]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 1511704360926182726)
+  step 0/390: loss=0.525990
+  step 1/390: loss=0.420150
+  step 2/390: loss=0.624774
+  step 100/390: loss=0.448236
+  step 200/390: loss=0.392428
+  step 300/390: loss=0.441882
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/25: loss=0.499541 lr=0.000500
+  epoch 14: test_acc = 7436/10000 = 74.360000%  top5 = 9826/10000 = 98.260000%  [95% CI 73.49–75.21]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 12741462512388598763)
+  step 0/390: loss=0.384508
+  step 1/390: loss=0.441020
+  step 2/390: loss=0.483239
+  step 100/390: loss=0.425421
+  step 200/390: loss=0.582922
+  step 300/390: loss=0.432594
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/25: loss=0.463100 lr=0.000429
+  epoch 15: test_acc = 7325/10000 = 73.250000%  top5 = 9775/10000 = 97.750000%  [95% CI 72.37–74.11]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 10069550939560400292)
+  step 0/390: loss=0.365436
+  step 1/390: loss=0.296327
+  step 2/390: loss=0.491120
+  step 100/390: loss=0.378979
+  step 200/390: loss=0.474543
+  step 300/390: loss=0.397975
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/25: loss=0.428096 lr=0.000359
+  epoch 16: test_acc = 7538/10000 = 75.380000%  top5 = 9825/10000 = 98.250000%  [95% CI 74.53–76.21]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 9239848746313556669)
+  step 0/390: loss=0.294302
+  step 1/390: loss=0.357270
+  step 2/390: loss=0.392826
+  step 100/390: loss=0.331203
+  step 200/390: loss=0.378549
+  step 300/390: loss=0.501681
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/25: loss=0.392641 lr=0.000292
+  epoch 17: test_acc = 7651/10000 = 76.510000%  top5 = 9838/10000 = 98.380000%  [95% CI 75.67–77.33]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 16790141325351702959)
+  step 0/390: loss=0.330169
+  step 1/390: loss=0.409293
+  step 2/390: loss=0.316648
+  step 100/390: loss=0.380493
+  step 200/390: loss=0.464105
+  step 300/390: loss=0.303679
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/25: loss=0.357303 lr=0.000230
+  epoch 18: test_acc = 7742/10000 = 77.420000%  top5 = 9869/10000 = 98.690000%  [95% CI 76.59–78.23]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 2835569444496347586)
+  step 0/390: loss=0.394679
+  step 1/390: loss=0.427079
+  step 2/390: loss=0.310171
+  step 100/390: loss=0.357396
+  step 200/390: loss=0.226321
+  step 300/390: loss=0.402632
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/25: loss=0.320232 lr=0.000173
+  epoch 19: test_acc = 7628/10000 = 76.280000%  top5 = 9843/10000 = 98.430000%  [95% CI 75.44–77.10]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 17890770482760609457)
+  step 0/390: loss=0.325201
+  step 1/390: loss=0.303356
+  step 2/390: loss=0.165109
+  step 100/390: loss=0.282827
+  step 200/390: loss=0.292028
+  step 300/390: loss=0.300773
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/25: loss=0.288529 lr=0.000122
+  epoch 20: test_acc = 7697/10000 = 76.970000%  top5 = 9859/10000 = 98.590000%  [95% CI 76.13–77.78]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 5145183458289572913)
+  step 0/390: loss=0.264247
+  step 1/390: loss=0.264326
+  step 2/390: loss=0.214499
+  step 100/390: loss=0.141239
+  step 200/390: loss=0.217286
+  step 300/390: loss=0.198548
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/25: loss=0.261370 lr=0.000079
+  epoch 21: test_acc = 7751/10000 = 77.510000%  top5 = 9854/10000 = 98.540000%  [95% CI 76.68–78.32]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 6151933404874663055)
+  step 0/390: loss=0.202989
+  step 1/390: loss=0.336857
+  step 2/390: loss=0.364483
+  step 100/390: loss=0.208997
+  step 200/390: loss=0.302024
+  step 300/390: loss=0.210945
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/25: loss=0.237407 lr=0.000045
+  epoch 22: test_acc = 7771/10000 = 77.710000%  top5 = 9866/10000 = 98.660000%  [95% CI 76.88–78.51]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 15142310814758163257)
+  step 0/390: loss=0.166801
+  step 1/390: loss=0.262935
+  step 2/390: loss=0.193535
+  step 100/390: loss=0.173784
+  step 200/390: loss=0.188516
+  step 300/390: loss=0.225425
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/25: loss=0.223419 lr=0.000020
+  epoch 23: test_acc = 7733/10000 = 77.330000%  top5 = 9858/10000 = 98.580000%  [95% CI 76.50–78.14]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 146432657026388599)
+  step 0/390: loss=0.249778
+  step 1/390: loss=0.187683
+  step 2/390: loss=0.191692
+  step 100/390: loss=0.182648
+  step 200/390: loss=0.128736
+  step 300/390: loss=0.241910
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/25: loss=0.210990 lr=0.000005
+  epoch 24: test_acc = 7755/10000 = 77.550000%  top5 = 9858/10000 = 98.580000%  [95% CI 76.72–78.36]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 10663039358956464764)
+  step 0/390: loss=0.239513
+  step 1/390: loss=0.301044
+  step 2/390: loss=0.200342
+  step 100/390: loss=0.271988
+  step 200/390: loss=0.266374
+  step 300/390: loss=0.193377
+[pjrt_ffi] RESIDENT: @cifar8wb_bbn_4096_fwd_eval holds 54 parameter tensors (66.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/25: loss=0.210894 lr=0.000000
+  epoch 25: test_acc = 7760/10000 = 77.600000%  top5 = 9861/10000 = 98.610000%  [95% CI 76.77–78.41]
+    BN companion -> .lake/build/cifar8wb_bbn_4096_adam_ckpt_xla_mac-ladder.bin.bn (384 floats x 2, hash 15913217316703788930)
+done (trained CIFAR-CNN8-wide-BN-batchstat-fc4096 adam + cosine/warmup via packed threading).

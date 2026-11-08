@@ -1,3 +1,4 @@
-77b3504c runs(mac M5 Pro): ViT-Tiny on Imagenette, 80 epochs from scratch — 68.56 % top-1 in 32.6 min
+0e7909a9 runs(mac M5 Pro): ladder cifar stage — lake run cifar, 12 arms × 40 epochs in 18.8 min
  M runs/2026-11-07-mac-ladder/commit.txt
  M runs/2026-11-07-mac-ladder/ladder.log
+ M runs/2026-11-07-mac-ladder/sensors.tsv
