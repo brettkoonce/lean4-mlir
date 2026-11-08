@@ -1,0 +1,754 @@
+2026-11-07 21:37:56 ━━━ XLA/PJRT backend ━━━
+2026-11-07 21:37:56   ✓ ffi/libpjrt_ffi.so up to date
+2026-11-07 21:37:56   ▸ PJRT_PLUGIN unset — falling back to the path compiled into ffi/pjrt_ffi.c (a jax rocm/cuda plugin .so). If the run dies in dlopen, set PJRT_PLUGIN to your plugin.
+2026-11-07 21:37:56 
+2026-11-07 21:37:56 ━━━ resnet50-verified-adam: build ━━━
+2026-11-07 21:37:57 Build completed successfully (29 jobs).
+2026-11-07 21:37:57 ━━━ resnet50-verified-adam: run (gpu 0, metal) ━━━
+2026-11-07 21:37:57 grep: illegal byte sequence
+2026-11-07 21:37:57 grep: illegal byte sequence
+2026-11-07 21:37:57 → resnet50-verified-adam (GPU 0, metal) → runs/2026-11-07-resnet50-verified-adam/resnet50-verified-adam.log
+2026-11-07 21:37:57 [pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+2026-11-07 21:37:57 I1107 21:37:57.516357 39831513 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 48565.3 MB reclaimable now
+2026-11-07 21:37:57 I1107 21:37:57.517670 39831510 service.cc:154] XLA service 0x7beedd7d40 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+2026-11-07 21:37:57 I1107 21:37:57.517675 39831510 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+2026-11-07 21:37:57 I1107 21:37:57.518560 39831510 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+2026-11-07 21:37:57 [pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+2026-11-07 21:37:57 [pjrt_ffi] command buffers: enabled (default)
+2026-11-07 21:37:57 [pjrt_ffi] h2d: batched (default)
+2026-11-07 21:37:57 [pjrt_ffi] d2h: batched (default)
+2026-11-07 21:37:57 [pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+2026-11-07 21:37:57 I1107 21:37:57.543354 39831510 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+2026-11-07 21:37:58 [pjrt_ffi] compiled verified_mlir/resnet50_adam_train_step.mlir (@resnet50_adam_train_step, 592 outputs, 1 replica) in 809 ms
+2026-11-07 21:37:58 [pjrt_ffi] compiled verified_mlir/resnet50_fwd.mlir (@resnet50_fwd, 1 outputs, 1 replica) in 131 ms
+2026-11-07 21:37:58 [pjrt_ffi] compiled verified_mlir/resnet50_fwd_eval.mlir (@resnet50_fwd_eval, 1 outputs, 1 replica) in 73 ms
+2026-11-07 21:37:58 ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → XLA/PJRT → GPU
+2026-11-07 21:37:58   xla/pjrt verified_mlir/resnet50_adam_train_step.mlir
+2026-11-07 21:37:58   xla/pjrt verified_mlir/resnet50_fwd.mlir
+2026-11-07 21:37:58   xla/pjrt verified_mlir/resnet50_fwd_eval.mlir
+2026-11-07 21:37:58   imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+2026-11-07 21:37:58   train 9469, val 3925; bs 32, ResNet-50 (Imagenette) adam (cosine+warmup 3ep, baseLR 0.001000), He init
+2026-11-07 21:37:58   running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50_fwd_eval
+2026-11-07 21:37:58      decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+2026-11-07 21:37:58 [pjrt_ffi] RESIDENT: @resnet50_adam_train_step holds 483 parameter tensors (269.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:37:59   step 0/295: loss=3.369507
+2026-11-07 21:37:59   step 1/295: loss=2.980955
+2026-11-07 21:37:59   step 2/295: loss=3.320712
+2026-11-07 21:38:25   step 100/295: loss=2.462236
+2026-11-07 21:38:52   step 200/295: loss=2.011328
+2026-11-07 21:39:17 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:39:23 Epoch 1/80: loss=2.214295 lr=0.000333
+2026-11-07 21:39:23   epoch 1: val_acc = 539/3925 = 13.732484%  top5 = 2206/3925 = 56.203822%  [95% CI 12.69–14.84]
+2026-11-07 21:39:23     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7977899037710299889)
+2026-11-07 21:39:23   step 0/295: loss=1.719155
+2026-11-07 21:39:24   step 1/295: loss=1.865888
+2026-11-07 21:39:24   step 2/295: loss=1.746222
+2026-11-07 21:39:50   step 100/295: loss=2.085339
+2026-11-07 21:40:16   step 200/295: loss=1.713359
+2026-11-07 21:40:41 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:40:48 Epoch 2/80: loss=1.940062 lr=0.000667
+2026-11-07 21:40:48   epoch 2: val_acc = 1044/3925 = 26.598726%  top5 = 2831/3925 = 72.127389%  [95% CI 25.24–28.00]
+2026-11-07 21:40:48     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9312856981559568077)
+2026-11-07 21:40:48   step 0/295: loss=1.913875
+2026-11-07 21:40:48   step 1/295: loss=2.352127
+2026-11-07 21:40:49   step 2/295: loss=1.918380
+2026-11-07 21:41:15   step 100/295: loss=1.694627
+2026-11-07 21:41:41   step 200/295: loss=1.364091
+2026-11-07 21:42:07 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:42:13 Epoch 3/80: loss=1.716973 lr=0.001000
+2026-11-07 21:42:13   epoch 3: val_acc = 787/3925 = 20.050955%  top5 = 3318/3925 = 84.535032%  [95% CI 18.83–21.33]
+2026-11-07 21:42:13     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2601116640638815365)
+2026-11-07 21:42:13   step 0/295: loss=1.570975
+2026-11-07 21:42:13   step 1/295: loss=1.243604
+2026-11-07 21:42:14   step 2/295: loss=1.329956
+2026-11-07 21:42:40   step 100/295: loss=1.575273
+2026-11-07 21:43:07   step 200/295: loss=1.478201
+2026-11-07 21:43:32 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:43:38 Epoch 4/80: loss=1.492488 lr=0.001000
+2026-11-07 21:43:38   epoch 4: val_acc = 2211/3925 = 56.331210%  top5 = 3442/3925 = 87.694268%  [95% CI 54.77–57.88]
+2026-11-07 21:43:38     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2817605581025428183)
+2026-11-07 21:43:38   step 0/295: loss=1.348526
+2026-11-07 21:43:39   step 1/295: loss=1.501563
+2026-11-07 21:43:39   step 2/295: loss=1.222138
+2026-11-07 21:44:05   step 100/295: loss=1.549655
+2026-11-07 21:44:32   step 200/295: loss=1.230184
+2026-11-07 21:44:57 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:45:03 Epoch 5/80: loss=1.321637 lr=0.000998
+2026-11-07 21:45:03   epoch 5: val_acc = 2265/3925 = 57.707006%  top5 = 3646/3925 = 92.891720%  [95% CI 56.15–59.24]
+2026-11-07 21:45:03     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2929203790671871966)
+2026-11-07 21:45:03   step 0/295: loss=1.221720
+2026-11-07 21:45:04   step 1/295: loss=1.096508
+2026-11-07 21:45:04   step 2/295: loss=1.117589
+2026-11-07 21:45:30   step 100/295: loss=1.157198
+2026-11-07 21:45:57   step 200/295: loss=1.193135
+2026-11-07 21:46:22 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:46:28 Epoch 6/80: loss=1.229124 lr=0.000996
+2026-11-07 21:46:28   epoch 6: val_acc = 2501/3925 = 63.719745%  top5 = 3447/3925 = 87.821656%  [95% CI 62.20–65.21]
+2026-11-07 21:46:28     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 16980603983318189236)
+2026-11-07 21:46:28   step 0/295: loss=1.070840
+2026-11-07 21:46:29   step 1/295: loss=1.295123
+2026-11-07 21:46:29   step 2/295: loss=1.140477
+2026-11-07 21:46:55   step 100/295: loss=1.126482
+2026-11-07 21:47:22   step 200/295: loss=1.225938
+2026-11-07 21:47:47 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:47:53 Epoch 7/80: loss=1.190840 lr=0.000993
+2026-11-07 21:47:53   epoch 7: val_acc = 2462/3925 = 62.726115%  top5 = 3695/3925 = 94.140127%  [95% CI 61.20–64.23]
+2026-11-07 21:47:53     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 17641173045590294651)
+2026-11-07 21:47:53   step 0/295: loss=1.023561
+2026-11-07 21:47:54   step 1/295: loss=1.179338
+2026-11-07 21:47:54   step 2/295: loss=1.309430
+2026-11-07 21:48:20   step 100/295: loss=1.309402
+2026-11-07 21:48:47   step 200/295: loss=1.182726
+2026-11-07 21:49:12 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:49:18 Epoch 8/80: loss=1.142875 lr=0.000990
+2026-11-07 21:49:18   epoch 8: val_acc = 2500/3925 = 63.694268%  top5 = 3569/3925 = 90.929936%  [95% CI 62.18–65.18]
+2026-11-07 21:49:18     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 10157345452219530478)
+2026-11-07 21:49:18   step 0/295: loss=1.128048
+2026-11-07 21:49:19   step 1/295: loss=1.047302
+2026-11-07 21:49:19   step 2/295: loss=1.160553
+2026-11-07 21:49:45   step 100/295: loss=1.019950
+2026-11-07 21:50:12   step 200/295: loss=1.072228
+2026-11-07 21:50:37 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:50:43 Epoch 9/80: loss=1.107202 lr=0.000985
+2026-11-07 21:50:43   epoch 9: val_acc = 2472/3925 = 62.980892%  top5 = 3716/3925 = 94.675159%  [95% CI 61.46–64.48]
+2026-11-07 21:50:43     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 1026029296349877154)
+2026-11-07 21:50:44   step 0/295: loss=0.966099
+2026-11-07 21:50:44   step 1/295: loss=1.054375
+2026-11-07 21:50:44   step 2/295: loss=0.947653
+2026-11-07 21:51:10   step 100/295: loss=1.136309
+2026-11-07 21:51:37   step 200/295: loss=0.971385
+2026-11-07 21:52:02 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:52:08 Epoch 10/80: loss=1.067866 lr=0.000980
+2026-11-07 21:52:08   epoch 10: val_acc = 2231/3925 = 56.840764%  top5 = 3475/3925 = 88.535032%  [95% CI 55.29–58.38]
+2026-11-07 21:52:08     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12403346193628394638)
+2026-11-07 21:52:09   step 0/295: loss=1.164197
+2026-11-07 21:52:09   step 1/295: loss=0.924530
+2026-11-07 21:52:09   step 2/295: loss=0.950602
+2026-11-07 21:52:35   step 100/295: loss=1.319060
+2026-11-07 21:53:02   step 200/295: loss=0.883430
+2026-11-07 21:53:27 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:53:33 Epoch 11/80: loss=1.041972 lr=0.000974
+2026-11-07 21:53:33   epoch 11: val_acc = 2519/3925 = 64.178344%  top5 = 3749/3925 = 95.515924%  [95% CI 62.67–65.66]
+2026-11-07 21:53:33     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 3263783533795308487)
+2026-11-07 21:53:34   step 0/295: loss=0.964415
+2026-11-07 21:53:34   step 1/295: loss=0.820628
+2026-11-07 21:53:34   step 2/295: loss=1.098177
+2026-11-07 21:54:00   step 100/295: loss=1.092079
+2026-11-07 21:54:27   step 200/295: loss=1.030516
+2026-11-07 21:54:52 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:54:59 Epoch 12/80: loss=1.019250 lr=0.000967
+2026-11-07 21:54:59   epoch 12: val_acc = 2345/3925 = 59.745223%  top5 = 3555/3925 = 90.573248%  [95% CI 58.20–61.27]
+2026-11-07 21:54:59     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12618959190253396712)
+2026-11-07 21:54:59   step 0/295: loss=1.287597
+2026-11-07 21:54:59   step 1/295: loss=1.161090
+2026-11-07 21:54:59   step 2/295: loss=1.012979
+2026-11-07 21:55:26   step 100/295: loss=0.984025
+2026-11-07 21:55:52   step 200/295: loss=1.148350
+2026-11-07 21:56:17 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:56:24 Epoch 13/80: loss=0.983292 lr=0.000959
+2026-11-07 21:56:24   epoch 13: val_acc = 2908/3925 = 74.089172%  top5 = 3799/3925 = 96.789809%  [95% CI 72.70–75.44]
+2026-11-07 21:56:24     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 3231731737357296474)
+2026-11-07 21:56:24   step 0/295: loss=0.808375
+2026-11-07 21:56:24   step 1/295: loss=0.872442
+2026-11-07 21:56:25   step 2/295: loss=0.936433
+2026-11-07 21:56:51   step 100/295: loss=0.966113
+2026-11-07 21:57:17   step 200/295: loss=1.075104
+2026-11-07 21:57:43 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:57:49 Epoch 14/80: loss=0.977666 lr=0.000951
+2026-11-07 21:57:49   epoch 14: val_acc = 2774/3925 = 70.675159%  top5 = 3727/3925 = 94.955414%  [95% CI 69.23–72.08]
+2026-11-07 21:57:49     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4888259295199391253)
+2026-11-07 21:57:49   step 0/295: loss=1.064522
+2026-11-07 21:57:49   step 1/295: loss=0.999001
+2026-11-07 21:57:50   step 2/295: loss=0.799091
+2026-11-07 21:58:16   step 100/295: loss=0.892493
+2026-11-07 21:58:43   step 200/295: loss=0.850950
+2026-11-07 21:59:08 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 21:59:14 Epoch 15/80: loss=0.955107 lr=0.000941
+2026-11-07 21:59:14   epoch 15: val_acc = 2663/3925 = 67.847134%  top5 = 3736/3925 = 95.184713%  [95% CI 66.37–69.29]
+2026-11-07 21:59:14     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4097629246252699278)
+2026-11-07 21:59:14   step 0/295: loss=1.095784
+2026-11-07 21:59:15   step 1/295: loss=0.859811
+2026-11-07 21:59:15   step 2/295: loss=0.838729
+2026-11-07 21:59:41   step 100/295: loss=0.792326
+2026-11-07 22:00:08   step 200/295: loss=0.763291
+2026-11-07 22:00:33 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:00:39 Epoch 16/80: loss=0.944324 lr=0.000931
+2026-11-07 22:00:39   epoch 16: val_acc = 2750/3925 = 70.063694%  top5 = 3696/3925 = 94.165605%  [95% CI 68.61–71.48]
+2026-11-07 22:00:39     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 8754899519881934082)
+2026-11-07 22:00:39   step 0/295: loss=0.908870
+2026-11-07 22:00:40   step 1/295: loss=1.062283
+2026-11-07 22:00:40   step 2/295: loss=0.914942
+2026-11-07 22:01:06   step 100/295: loss=0.778960
+2026-11-07 22:01:33   step 200/295: loss=1.074652
+2026-11-07 22:01:58 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:02:04 Epoch 17/80: loss=0.936783 lr=0.000921
+2026-11-07 22:02:04   epoch 17: val_acc = 3024/3925 = 77.044586%  top5 = 3781/3925 = 96.331210%  [95% CI 75.70–78.33]
+2026-11-07 22:02:04     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9058704647498912683)
+2026-11-07 22:02:05   step 0/295: loss=0.939106
+2026-11-07 22:02:05   step 1/295: loss=0.821595
+2026-11-07 22:02:05   step 2/295: loss=1.011470
+2026-11-07 22:02:31   step 100/295: loss=0.894318
+2026-11-07 22:02:58   step 200/295: loss=0.792318
+2026-11-07 22:03:23 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:03:29 Epoch 18/80: loss=0.908483 lr=0.000909
+2026-11-07 22:03:29   epoch 18: val_acc = 2989/3925 = 76.152866%  top5 = 3818/3925 = 97.273885%  [95% CI 74.79–77.46]
+2026-11-07 22:03:29     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4107770308585324438)
+2026-11-07 22:03:30   step 0/295: loss=0.845327
+2026-11-07 22:03:30   step 1/295: loss=0.693556
+2026-11-07 22:03:30   step 2/295: loss=0.998001
+2026-11-07 22:03:56   step 100/295: loss=0.731068
+2026-11-07 22:04:23   step 200/295: loss=0.848577
+2026-11-07 22:04:48 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:04:55 Epoch 19/80: loss=0.895173 lr=0.000897
+2026-11-07 22:04:55   epoch 19: val_acc = 2938/3925 = 74.853503%  top5 = 3811/3925 = 97.095541%  [95% CI 73.47–76.19]
+2026-11-07 22:04:55     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 13149154765625228679)
+2026-11-07 22:04:55   step 0/295: loss=0.855633
+2026-11-07 22:04:55   step 1/295: loss=0.887720
+2026-11-07 22:04:55   step 2/295: loss=1.005748
+2026-11-07 22:05:22   step 100/295: loss=0.825832
+2026-11-07 22:05:48   step 200/295: loss=0.752553
+2026-11-07 22:06:13 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:06:20 Epoch 20/80: loss=0.883709 lr=0.000885
+2026-11-07 22:06:20   epoch 20: val_acc = 2536/3925 = 64.611465%  top5 = 3697/3925 = 94.191083%  [95% CI 63.10–66.09]
+2026-11-07 22:06:20     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12139022295491428431)
+2026-11-07 22:06:20   step 0/295: loss=0.949085
+2026-11-07 22:06:20   step 1/295: loss=0.792854
+2026-11-07 22:06:21   step 2/295: loss=0.739659
+2026-11-07 22:06:47   step 100/295: loss=0.868468
+2026-11-07 22:07:13   step 200/295: loss=0.828321
+2026-11-07 22:07:38 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:07:45 Epoch 21/80: loss=0.869600 lr=0.000871
+2026-11-07 22:07:45   epoch 21: val_acc = 2351/3925 = 59.898089%  top5 = 3642/3925 = 92.789809%  [95% CI 58.36–61.42]
+2026-11-07 22:07:45     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 200047771250510294)
+2026-11-07 22:07:45   step 0/295: loss=0.898284
+2026-11-07 22:07:45   step 1/295: loss=0.806576
+2026-11-07 22:07:46   step 2/295: loss=0.998475
+2026-11-07 22:08:12   step 100/295: loss=0.936039
+2026-11-07 22:08:38   step 200/295: loss=0.805685
+2026-11-07 22:09:04 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:09:10 Epoch 22/80: loss=0.859597 lr=0.000857
+2026-11-07 22:09:10   epoch 22: val_acc = 3047/3925 = 77.630573%  top5 = 3818/3925 = 97.273885%  [95% CI 76.30–78.91]
+2026-11-07 22:09:10     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 561452937555962557)
+2026-11-07 22:09:10   step 0/295: loss=0.890876
+2026-11-07 22:09:11   step 1/295: loss=0.852707
+2026-11-07 22:09:11   step 2/295: loss=0.810335
+2026-11-07 22:09:37   step 100/295: loss=0.827797
+2026-11-07 22:10:04   step 200/295: loss=1.003639
+2026-11-07 22:10:29 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:10:35 Epoch 23/80: loss=0.849209 lr=0.000843
+2026-11-07 22:10:35   epoch 23: val_acc = 3088/3925 = 78.675159%  top5 = 3805/3925 = 96.942675%  [95% CI 77.37–79.93]
+2026-11-07 22:10:35     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7694258816305513776)
+2026-11-07 22:10:35   step 0/295: loss=0.881890
+2026-11-07 22:10:36   step 1/295: loss=0.806417
+2026-11-07 22:10:36   step 2/295: loss=0.741809
+2026-11-07 22:11:02   step 100/295: loss=0.822895
+2026-11-07 22:11:29   step 200/295: loss=0.967926
+2026-11-07 22:11:54 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:12:00 Epoch 24/80: loss=0.830005 lr=0.000827
+2026-11-07 22:12:00   epoch 24: val_acc = 2939/3925 = 74.878981%  top5 = 3790/3925 = 96.560510%  [95% CI 73.50–76.21]
+2026-11-07 22:12:00     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 17285774912236083508)
+2026-11-07 22:12:00   step 0/295: loss=0.718504
+2026-11-07 22:12:01   step 1/295: loss=0.846123
+2026-11-07 22:12:01   step 2/295: loss=0.764972
+2026-11-07 22:12:27   step 100/295: loss=0.862250
+2026-11-07 22:12:54   step 200/295: loss=0.750955
+2026-11-07 22:13:19 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:13:25 Epoch 25/80: loss=0.814026 lr=0.000812
+2026-11-07 22:13:25   epoch 25: val_acc = 2755/3925 = 70.191083%  top5 = 3769/3925 = 96.025478%  [95% CI 68.74–71.60]
+2026-11-07 22:13:25     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 8513335514087271747)
+2026-11-07 22:13:26   step 0/295: loss=0.701345
+2026-11-07 22:13:26   step 1/295: loss=0.661802
+2026-11-07 22:13:26   step 2/295: loss=0.808433
+2026-11-07 22:13:52   step 100/295: loss=0.735971
+2026-11-07 22:14:19   step 200/295: loss=0.808785
+2026-11-07 22:14:44 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:14:50 Epoch 26/80: loss=0.793467 lr=0.000796
+2026-11-07 22:14:50   epoch 26: val_acc = 2763/3925 = 70.394904%  top5 = 3678/3925 = 93.707006%  [95% CI 68.95–71.80]
+2026-11-07 22:14:50     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 16642449347906608645)
+2026-11-07 22:14:51   step 0/295: loss=0.768342
+2026-11-07 22:14:51   step 1/295: loss=0.763810
+2026-11-07 22:14:51   step 2/295: loss=0.672441
+2026-11-07 22:15:17   step 100/295: loss=0.738174
+2026-11-07 22:15:44   step 200/295: loss=0.813112
+2026-11-07 22:16:09 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:16:16 Epoch 27/80: loss=0.796275 lr=0.000779
+2026-11-07 22:16:16   epoch 27: val_acc = 2854/3925 = 72.713376%  top5 = 3721/3925 = 94.802548%  [95% CI 71.30–74.08]
+2026-11-07 22:16:16     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2098459390565798211)
+2026-11-07 22:16:16   step 0/295: loss=0.634582
+2026-11-07 22:16:16   step 1/295: loss=0.731517
+2026-11-07 22:16:16   step 2/295: loss=0.829096
+2026-11-07 22:16:43   step 100/295: loss=0.829681
+2026-11-07 22:17:09   step 200/295: loss=0.838836
+2026-11-07 22:17:34 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:17:41 Epoch 28/80: loss=0.769965 lr=0.000762
+2026-11-07 22:17:41   epoch 28: val_acc = 3092/3925 = 78.777070%  top5 = 3777/3925 = 96.229299%  [95% CI 77.47–80.03]
+2026-11-07 22:17:41     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7348326149137287502)
+2026-11-07 22:17:41   step 0/295: loss=0.661513
+2026-11-07 22:17:41   step 1/295: loss=0.659617
+2026-11-07 22:17:42   step 2/295: loss=0.776601
+2026-11-07 22:18:08   step 100/295: loss=0.686069
+2026-11-07 22:18:34   step 200/295: loss=0.704315
+2026-11-07 22:19:00 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:19:06 Epoch 29/80: loss=0.779000 lr=0.000744
+2026-11-07 22:19:06   epoch 29: val_acc = 2769/3925 = 70.547771%  top5 = 3689/3925 = 93.987261%  [95% CI 69.10–71.95]
+2026-11-07 22:19:06     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12628354874291235401)
+2026-11-07 22:19:06   step 0/295: loss=0.711641
+2026-11-07 22:19:07   step 1/295: loss=0.887371
+2026-11-07 22:19:07   step 2/295: loss=0.820432
+2026-11-07 22:19:33   step 100/295: loss=0.772268
+2026-11-07 22:20:00   step 200/295: loss=0.682309
+2026-11-07 22:20:25 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:20:31 Epoch 30/80: loss=0.754159 lr=0.000726
+2026-11-07 22:20:31   epoch 30: val_acc = 2933/3925 = 74.726115%  top5 = 3780/3925 = 96.305732%  [95% CI 73.34–76.06]
+2026-11-07 22:20:31     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2288442069679856575)
+2026-11-07 22:20:31   step 0/295: loss=0.663914
+2026-11-07 22:20:32   step 1/295: loss=0.942132
+2026-11-07 22:20:32   step 2/295: loss=0.801437
+2026-11-07 22:20:58   step 100/295: loss=0.951049
+2026-11-07 22:21:25   step 200/295: loss=0.894808
+2026-11-07 22:21:50 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:21:56 Epoch 31/80: loss=0.739357 lr=0.000708
+2026-11-07 22:21:56   epoch 31: val_acc = 3170/3925 = 80.764331%  top5 = 3848/3925 = 98.038217%  [95% CI 79.50–81.97]
+2026-11-07 22:21:56     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 5705387521470190039)
+2026-11-07 22:21:57   step 0/295: loss=0.622000
+2026-11-07 22:21:57   step 1/295: loss=0.772728
+2026-11-07 22:21:57   step 2/295: loss=0.701227
+2026-11-07 22:22:23   step 100/295: loss=0.639830
+2026-11-07 22:22:50   step 200/295: loss=0.653063
+2026-11-07 22:23:15 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:23:21 Epoch 32/80: loss=0.716496 lr=0.000689
+2026-11-07 22:23:21   epoch 32: val_acc = 3077/3925 = 78.394904%  top5 = 3805/3925 = 96.942675%  [95% CI 77.08–79.65]
+2026-11-07 22:23:21     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12498406873211261029)
+2026-11-07 22:23:22   step 0/295: loss=0.695663
+2026-11-07 22:23:22   step 1/295: loss=0.622987
+2026-11-07 22:23:22   step 2/295: loss=0.662956
+2026-11-07 22:23:48   step 100/295: loss=0.716692
+2026-11-07 22:24:15   step 200/295: loss=0.794753
+2026-11-07 22:24:40 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:24:47 Epoch 33/80: loss=0.713394 lr=0.000670
+2026-11-07 22:24:47   epoch 33: val_acc = 3262/3925 = 83.108280%  top5 = 3852/3925 = 98.140127%  [95% CI 81.90–84.25]
+2026-11-07 22:24:47     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 6100064704907864271)
+2026-11-07 22:24:47   step 0/295: loss=0.580020
+2026-11-07 22:24:47   step 1/295: loss=0.653956
+2026-11-07 22:24:47   step 2/295: loss=0.623291
+2026-11-07 22:25:14   step 100/295: loss=0.690019
+2026-11-07 22:25:40   step 200/295: loss=0.694472
+2026-11-07 22:26:05 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:26:12 Epoch 34/80: loss=0.699045 lr=0.000651
+2026-11-07 22:26:12   epoch 34: val_acc = 3247/3925 = 82.726115%  top5 = 3867/3925 = 98.522293%  [95% CI 81.51–83.88]
+2026-11-07 22:26:12     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7675857354222456252)
+2026-11-07 22:26:12   step 0/295: loss=0.684356
+2026-11-07 22:26:12   step 1/295: loss=0.645176
+2026-11-07 22:26:13   step 2/295: loss=0.622199
+2026-11-07 22:26:39   step 100/295: loss=0.660587
+2026-11-07 22:27:05   step 200/295: loss=0.610757
+2026-11-07 22:27:30 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:27:37 Epoch 35/80: loss=0.688755 lr=0.000631
+2026-11-07 22:27:37   epoch 35: val_acc = 3251/3925 = 82.828025%  top5 = 3857/3925 = 98.267516%  [95% CI 81.62–83.98]
+2026-11-07 22:27:37     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 186564438397409767)
+2026-11-07 22:27:37   step 0/295: loss=0.642977
+2026-11-07 22:27:37   step 1/295: loss=0.643198
+2026-11-07 22:27:38   step 2/295: loss=0.571748
+2026-11-07 22:28:04   step 100/295: loss=0.685498
+2026-11-07 22:28:31   step 200/295: loss=0.679979
+2026-11-07 22:28:56 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:29:02 Epoch 36/80: loss=0.673566 lr=0.000611
+2026-11-07 22:29:02   epoch 36: val_acc = 3209/3925 = 81.757962%  top5 = 3840/3925 = 97.834395%  [95% CI 80.52–82.93]
+2026-11-07 22:29:02     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 10967903400122677630)
+2026-11-07 22:29:02   step 0/295: loss=0.572740
+2026-11-07 22:29:03   step 1/295: loss=0.609464
+2026-11-07 22:29:03   step 2/295: loss=0.657490
+2026-11-07 22:29:29   step 100/295: loss=0.670225
+2026-11-07 22:29:56   step 200/295: loss=0.664411
+2026-11-07 22:30:21 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:30:27 Epoch 37/80: loss=0.663275 lr=0.000591
+2026-11-07 22:30:27   epoch 37: val_acc = 3265/3925 = 83.184713%  top5 = 3845/3925 = 97.961783%  [95% CI 81.98–84.32]
+2026-11-07 22:30:27     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 1126133589484294876)
+2026-11-07 22:30:27   step 0/295: loss=0.641318
+2026-11-07 22:30:28   step 1/295: loss=0.610390
+2026-11-07 22:30:28   step 2/295: loss=0.568488
+2026-11-07 22:30:54   step 100/295: loss=0.590015
+2026-11-07 22:31:21   step 200/295: loss=0.558738
+2026-11-07 22:31:46 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:31:52 Epoch 38/80: loss=0.643823 lr=0.000571
+2026-11-07 22:31:52   epoch 38: val_acc = 3203/3925 = 81.605096%  top5 = 3816/3925 = 97.222930%  [95% CI 80.36–82.79]
+2026-11-07 22:31:52     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 5787643387011823125)
+2026-11-07 22:31:53   step 0/295: loss=0.584751
+2026-11-07 22:31:53   step 1/295: loss=0.673069
+2026-11-07 22:31:53   step 2/295: loss=0.617512
+2026-11-07 22:32:19   step 100/295: loss=0.590087
+2026-11-07 22:32:46   step 200/295: loss=0.695418
+2026-11-07 22:33:11 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:33:18 Epoch 39/80: loss=0.638335 lr=0.000551
+2026-11-07 22:33:18   epoch 39: val_acc = 3346/3925 = 85.248408%  top5 = 3844/3925 = 97.936306%  [95% CI 84.10–86.32]
+2026-11-07 22:33:18     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 17338045603993907504)
+2026-11-07 22:33:18   step 0/295: loss=0.702863
+2026-11-07 22:33:18   step 1/295: loss=0.593059
+2026-11-07 22:33:18   step 2/295: loss=0.625636
+2026-11-07 22:33:45   step 100/295: loss=0.650679
+2026-11-07 22:34:11   step 200/295: loss=0.559962
+2026-11-07 22:34:38 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:34:45 Epoch 40/80: loss=0.626188 lr=0.000531
+2026-11-07 22:34:45   epoch 40: val_acc = 3248/3925 = 82.751592%  top5 = 3858/3925 = 98.292994%  [95% CI 81.54–83.90]
+2026-11-07 22:34:45     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9731567306508062796)
+2026-11-07 22:34:45   step 0/295: loss=0.651140
+2026-11-07 22:34:46   step 1/295: loss=0.558934
+2026-11-07 22:34:46   step 2/295: loss=0.575053
+2026-11-07 22:35:18   step 100/295: loss=0.546471
+2026-11-07 22:35:49   step 200/295: loss=0.583698
+2026-11-07 22:36:15 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:36:22 Epoch 41/80: loss=0.609548 lr=0.000510
+2026-11-07 22:36:22   epoch 41: val_acc = 3391/3925 = 86.394904%  top5 = 3861/3925 = 98.369427%  [95% CI 85.29–87.43]
+2026-11-07 22:36:22     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2606765854823576607)
+2026-11-07 22:36:22   step 0/295: loss=0.632224
+2026-11-07 22:36:23   step 1/295: loss=0.558088
+2026-11-07 22:36:23   step 2/295: loss=0.593346
+2026-11-07 22:36:50   step 100/295: loss=0.620098
+2026-11-07 22:37:17   step 200/295: loss=0.632134
+2026-11-07 22:37:42 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:37:49 Epoch 42/80: loss=0.597223 lr=0.000490
+2026-11-07 22:37:49   epoch 42: val_acc = 3243/3925 = 82.624204%  top5 = 3831/3925 = 97.605096%  [95% CI 81.41–83.78]
+2026-11-07 22:37:49     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 13019315614013531709)
+2026-11-07 22:37:49   step 0/295: loss=0.547076
+2026-11-07 22:37:49   step 1/295: loss=0.725322
+2026-11-07 22:37:49   step 2/295: loss=0.590507
+2026-11-07 22:38:16   step 100/295: loss=0.540590
+2026-11-07 22:38:43   step 200/295: loss=0.547450
+2026-11-07 22:39:08 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:39:15 Epoch 43/80: loss=0.587754 lr=0.000469
+2026-11-07 22:39:15   epoch 43: val_acc = 3274/3925 = 83.414013%  top5 = 3846/3925 = 97.987261%  [95% CI 82.22–84.54]
+2026-11-07 22:39:15     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2449702120094087321)
+2026-11-07 22:39:15   step 0/295: loss=0.545995
+2026-11-07 22:39:15   step 1/295: loss=0.580034
+2026-11-07 22:39:16   step 2/295: loss=0.642576
+2026-11-07 22:39:42   step 100/295: loss=0.560507
+2026-11-07 22:40:09   step 200/295: loss=0.548178
+2026-11-07 22:40:34 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:40:41 Epoch 44/80: loss=0.586326 lr=0.000449
+2026-11-07 22:40:41   epoch 44: val_acc = 3353/3925 = 85.426752%  top5 = 3857/3925 = 98.267516%  [95% CI 84.29–86.50]
+2026-11-07 22:40:41     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4565447722143838185)
+2026-11-07 22:40:41   step 0/295: loss=0.535013
+2026-11-07 22:40:41   step 1/295: loss=0.529273
+2026-11-07 22:40:42   step 2/295: loss=0.564071
+2026-11-07 22:41:08   step 100/295: loss=0.561463
+2026-11-07 22:41:35   step 200/295: loss=0.557295
+2026-11-07 22:42:01 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:42:07 Epoch 45/80: loss=0.574320 lr=0.000429
+2026-11-07 22:42:07   epoch 45: val_acc = 3197/3925 = 81.452229%  top5 = 3821/3925 = 97.350318%  [95% CI 80.21–82.64]
+2026-11-07 22:42:07     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 17878981705746423125)
+2026-11-07 22:42:08   step 0/295: loss=0.585495
+2026-11-07 22:42:08   step 1/295: loss=0.552091
+2026-11-07 22:42:08   step 2/295: loss=0.568473
+2026-11-07 22:42:34   step 100/295: loss=0.558873
+2026-11-07 22:43:01   step 200/295: loss=0.580316
+2026-11-07 22:43:26 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:43:32 Epoch 46/80: loss=0.574564 lr=0.000409
+2026-11-07 22:43:32   epoch 46: val_acc = 3280/3925 = 83.566879%  top5 = 3832/3925 = 97.630573%  [95% CI 82.37–84.69]
+2026-11-07 22:43:32     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 5841388610492317540)
+2026-11-07 22:43:33   step 0/295: loss=0.608425
+2026-11-07 22:43:33   step 1/295: loss=0.538571
+2026-11-07 22:43:33   step 2/295: loss=0.646504
+2026-11-07 22:43:59   step 100/295: loss=0.528526
+2026-11-07 22:44:26   step 200/295: loss=0.537802
+2026-11-07 22:44:51 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:44:58 Epoch 47/80: loss=0.564188 lr=0.000389
+2026-11-07 22:44:58   epoch 47: val_acc = 3353/3925 = 85.426752%  top5 = 3854/3925 = 98.191083%  [95% CI 84.29–86.50]
+2026-11-07 22:44:58     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2042742905365875659)
+2026-11-07 22:44:58   step 0/295: loss=0.572678
+2026-11-07 22:44:58   step 1/295: loss=0.616568
+2026-11-07 22:44:58   step 2/295: loss=0.548984
+2026-11-07 22:45:25   step 100/295: loss=0.575544
+2026-11-07 22:45:51   step 200/295: loss=0.559921
+2026-11-07 22:46:16 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:46:23 Epoch 48/80: loss=0.556791 lr=0.000369
+2026-11-07 22:46:23   epoch 48: val_acc = 3435/3925 = 87.515924%  top5 = 3880/3925 = 98.853503%  [95% CI 86.45–88.51]
+2026-11-07 22:46:23     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12269613213014538306)
+2026-11-07 22:46:23   step 0/295: loss=0.548625
+2026-11-07 22:46:23   step 1/295: loss=0.524727
+2026-11-07 22:46:24   step 2/295: loss=0.517373
+2026-11-07 22:46:50   step 100/295: loss=0.579580
+2026-11-07 22:47:16   step 200/295: loss=0.524783
+2026-11-07 22:47:41 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:47:48 Epoch 49/80: loss=0.544387 lr=0.000349
+2026-11-07 22:47:48   epoch 49: val_acc = 3366/3925 = 85.757962%  top5 = 3864/3925 = 98.445860%  [95% CI 84.63–86.82]
+2026-11-07 22:47:48     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2940500225872687928)
+2026-11-07 22:47:48   step 0/295: loss=0.537982
+2026-11-07 22:47:48   step 1/295: loss=0.531875
+2026-11-07 22:47:49   step 2/295: loss=0.547031
+2026-11-07 22:48:15   step 100/295: loss=0.566787
+2026-11-07 22:48:42   step 200/295: loss=0.543951
+2026-11-07 22:49:07 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:49:13 Epoch 50/80: loss=0.550872 lr=0.000330
+2026-11-07 22:49:13   epoch 50: val_acc = 3385/3925 = 86.242038%  top5 = 3854/3925 = 98.191083%  [95% CI 85.13–87.28]
+2026-11-07 22:49:13     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 928853123369746048)
+2026-11-07 22:49:13   step 0/295: loss=0.566779
+2026-11-07 22:49:14   step 1/295: loss=0.522084
+2026-11-07 22:49:14   step 2/295: loss=0.601804
+2026-11-07 22:49:40   step 100/295: loss=0.563146
+2026-11-07 22:50:07   step 200/295: loss=0.554905
+2026-11-07 22:50:32 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:50:38 Epoch 51/80: loss=0.539771 lr=0.000311
+2026-11-07 22:50:38   epoch 51: val_acc = 3405/3925 = 86.751592%  top5 = 3865/3925 = 98.471338%  [95% CI 85.65–87.78]
+2026-11-07 22:50:38     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 16542097211893329486)
+2026-11-07 22:50:39   step 0/295: loss=0.537262
+2026-11-07 22:50:39   step 1/295: loss=0.576289
+2026-11-07 22:50:39   step 2/295: loss=0.575240
+2026-11-07 22:51:05   step 100/295: loss=0.529643
+2026-11-07 22:51:32   step 200/295: loss=0.560623
+2026-11-07 22:51:57 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:52:04 Epoch 52/80: loss=0.533877 lr=0.000292
+2026-11-07 22:52:04   epoch 52: val_acc = 3457/3925 = 88.076433%  top5 = 3868/3925 = 98.547771%  [95% CI 87.03–89.05]
+2026-11-07 22:52:04     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 11675331758926462165)
+2026-11-07 22:52:04   step 0/295: loss=0.522057
+2026-11-07 22:52:04   step 1/295: loss=0.538325
+2026-11-07 22:52:04   step 2/295: loss=0.518116
+2026-11-07 22:52:31   step 100/295: loss=0.523382
+2026-11-07 22:52:57   step 200/295: loss=0.549479
+2026-11-07 22:53:22 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:53:29 Epoch 53/80: loss=0.531821 lr=0.000274
+2026-11-07 22:53:29   epoch 53: val_acc = 3467/3925 = 88.331210%  top5 = 3870/3925 = 98.598726%  [95% CI 87.29–89.30]
+2026-11-07 22:53:29     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 11745102438300123351)
+2026-11-07 22:53:29   step 0/295: loss=0.515527
+2026-11-07 22:53:29   step 1/295: loss=0.568668
+2026-11-07 22:53:30   step 2/295: loss=0.522264
+2026-11-07 22:53:56   step 100/295: loss=0.523309
+2026-11-07 22:54:23   step 200/295: loss=0.523818
+2026-11-07 22:54:48 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:54:54 Epoch 54/80: loss=0.528817 lr=0.000256
+2026-11-07 22:54:54   epoch 54: val_acc = 3421/3925 = 87.159236%  top5 = 3866/3925 = 98.496815%  [95% CI 86.08–88.17]
+2026-11-07 22:54:54     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7485005232075958290)
+2026-11-07 22:54:54   step 0/295: loss=0.566248
+2026-11-07 22:54:55   step 1/295: loss=0.519503
+2026-11-07 22:54:55   step 2/295: loss=0.514338
+2026-11-07 22:55:21   step 100/295: loss=0.517759
+2026-11-07 22:55:48   step 200/295: loss=0.545642
+2026-11-07 22:56:13 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:56:19 Epoch 55/80: loss=0.526216 lr=0.000238
+2026-11-07 22:56:19   epoch 55: val_acc = 3418/3925 = 87.082803%  top5 = 3867/3925 = 98.522293%  [95% CI 86.00–88.10]
+2026-11-07 22:56:19     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9397392495660829692)
+2026-11-07 22:56:20   step 0/295: loss=0.515265
+2026-11-07 22:56:20   step 1/295: loss=0.554287
+2026-11-07 22:56:20   step 2/295: loss=0.532062
+2026-11-07 22:56:46   step 100/295: loss=0.520515
+2026-11-07 22:57:13   step 200/295: loss=0.546243
+2026-11-07 22:57:38 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:57:45 Epoch 56/80: loss=0.524994 lr=0.000221
+2026-11-07 22:57:45   epoch 56: val_acc = 3471/3925 = 88.433121%  top5 = 3871/3925 = 98.624204%  [95% CI 87.39–89.40]
+2026-11-07 22:57:45     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4057801755625950316)
+2026-11-07 22:57:45   step 0/295: loss=0.508225
+2026-11-07 22:57:45   step 1/295: loss=0.509220
+2026-11-07 22:57:45   step 2/295: loss=0.510771
+2026-11-07 22:58:12   step 100/295: loss=0.544319
+2026-11-07 22:58:38   step 200/295: loss=0.517295
+2026-11-07 22:59:03 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 22:59:10 Epoch 57/80: loss=0.522918 lr=0.000205
+2026-11-07 22:59:10   epoch 57: val_acc = 3462/3925 = 88.203822%  top5 = 3855/3925 = 98.216561%  [95% CI 87.16–89.18]
+2026-11-07 22:59:10     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 16600983620426385022)
+2026-11-07 22:59:10   step 0/295: loss=0.512857
+2026-11-07 22:59:10   step 1/295: loss=0.518512
+2026-11-07 22:59:11   step 2/295: loss=0.521194
+2026-11-07 22:59:37   step 100/295: loss=0.515349
+2026-11-07 23:00:04   step 200/295: loss=0.508502
+2026-11-07 23:00:29 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:00:35 Epoch 58/80: loss=0.521600 lr=0.000188
+2026-11-07 23:00:35   epoch 58: val_acc = 3463/3925 = 88.229299%  top5 = 3866/3925 = 98.496815%  [95% CI 87.18–89.20]
+2026-11-07 23:00:35     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 13321434065567650925)
+2026-11-07 23:00:35   step 0/295: loss=0.527461
+2026-11-07 23:00:36   step 1/295: loss=0.507425
+2026-11-07 23:00:36   step 2/295: loss=0.552711
+2026-11-07 23:01:02   step 100/295: loss=0.512447
+2026-11-07 23:01:29   step 200/295: loss=0.512106
+2026-11-07 23:01:54 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:02:00 Epoch 59/80: loss=0.515905 lr=0.000173
+2026-11-07 23:02:00   epoch 59: val_acc = 3472/3925 = 88.458599%  top5 = 3871/3925 = 98.624204%  [95% CI 87.42–89.42]
+2026-11-07 23:02:00     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7787638870499388798)
+2026-11-07 23:02:01   step 0/295: loss=0.511398
+2026-11-07 23:02:01   step 1/295: loss=0.522539
+2026-11-07 23:02:01   step 2/295: loss=0.521430
+2026-11-07 23:02:28   step 100/295: loss=0.506730
+2026-11-07 23:02:54   step 200/295: loss=0.531059
+2026-11-07 23:03:19 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:03:26 Epoch 60/80: loss=0.513956 lr=0.000157
+2026-11-07 23:03:26   epoch 60: val_acc = 3491/3925 = 88.942675%  top5 = 3860/3925 = 98.343949%  [95% CI 87.92–89.89]
+2026-11-07 23:03:26     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 12954333468463911775)
+2026-11-07 23:03:26   step 0/295: loss=0.514241
+2026-11-07 23:03:26   step 1/295: loss=0.518210
+2026-11-07 23:03:27   step 2/295: loss=0.504793
+2026-11-07 23:03:53   step 100/295: loss=0.508031
+2026-11-07 23:04:20   step 200/295: loss=0.528101
+2026-11-07 23:04:45 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:04:51 Epoch 61/80: loss=0.514390 lr=0.000143
+2026-11-07 23:04:51   epoch 61: val_acc = 3442/3925 = 87.694268%  top5 = 3863/3925 = 98.420382%  [95% CI 86.63–88.69]
+2026-11-07 23:04:51     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 17928014662732113458)
+2026-11-07 23:04:51   step 0/295: loss=0.510163
+2026-11-07 23:04:52   step 1/295: loss=0.508584
+2026-11-07 23:04:52   step 2/295: loss=0.527705
+2026-11-07 23:05:18   step 100/295: loss=0.506777
+2026-11-07 23:05:45   step 200/295: loss=0.520428
+2026-11-07 23:06:10 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:06:16 Epoch 62/80: loss=0.511123 lr=0.000129
+2026-11-07 23:06:16   epoch 62: val_acc = 3498/3925 = 89.121019%  top5 = 3874/3925 = 98.700637%  [95% CI 88.11–90.06]
+2026-11-07 23:06:16     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 15436698972651203846)
+2026-11-07 23:06:17   step 0/295: loss=0.505854
+2026-11-07 23:06:17   step 1/295: loss=0.509878
+2026-11-07 23:06:17   step 2/295: loss=0.504306
+2026-11-07 23:06:43   step 100/295: loss=0.506893
+2026-11-07 23:07:10   step 200/295: loss=0.506454
+2026-11-07 23:07:35 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:07:42 Epoch 63/80: loss=0.509426 lr=0.000116
+2026-11-07 23:07:42   epoch 63: val_acc = 3496/3925 = 89.070064%  top5 = 3864/3925 = 98.445860%  [95% CI 88.06–90.01]
+2026-11-07 23:07:42     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 13290472488904083376)
+2026-11-07 23:07:42   step 0/295: loss=0.509886
+2026-11-07 23:07:42   step 1/295: loss=0.531742
+2026-11-07 23:07:43   step 2/295: loss=0.512306
+2026-11-07 23:08:09   step 100/295: loss=0.503477
+2026-11-07 23:08:35   step 200/295: loss=0.504594
+2026-11-07 23:09:01 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:09:07 Epoch 64/80: loss=0.507850 lr=0.000103
+2026-11-07 23:09:07   epoch 64: val_acc = 3484/3925 = 88.764331%  top5 = 3867/3925 = 98.522293%  [95% CI 87.74–89.71]
+2026-11-07 23:09:07     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 6782859764438002379)
+2026-11-07 23:09:07   step 0/295: loss=0.504386
+2026-11-07 23:09:08   step 1/295: loss=0.519979
+2026-11-07 23:09:08   step 2/295: loss=0.504225
+2026-11-07 23:09:34   step 100/295: loss=0.504531
+2026-11-07 23:10:01   step 200/295: loss=0.505120
+2026-11-07 23:10:26 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:10:32 Epoch 65/80: loss=0.508594 lr=0.000091
+2026-11-07 23:10:32   epoch 65: val_acc = 3480/3925 = 88.662420%  top5 = 3858/3925 = 98.292994%  [95% CI 87.63–89.62]
+2026-11-07 23:10:32     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 10015075091071852897)
+2026-11-07 23:10:33   step 0/295: loss=0.503408
+2026-11-07 23:10:33   step 1/295: loss=0.505899
+2026-11-07 23:10:33   step 2/295: loss=0.502812
+2026-11-07 23:10:59   step 100/295: loss=0.505584
+2026-11-07 23:11:26   step 200/295: loss=0.508539
+2026-11-07 23:11:51 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:11:57 Epoch 66/80: loss=0.506970 lr=0.000079
+2026-11-07 23:11:57   epoch 66: val_acc = 3495/3925 = 89.044586%  top5 = 3875/3925 = 98.726115%  [95% CI 88.03–89.98]
+2026-11-07 23:11:57     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 7531414950330171718)
+2026-11-07 23:11:58   step 0/295: loss=0.520059
+2026-11-07 23:11:58   step 1/295: loss=0.505146
+2026-11-07 23:11:58   step 2/295: loss=0.508750
+2026-11-07 23:12:25   step 100/295: loss=0.504933
+2026-11-07 23:12:51   step 200/295: loss=0.504801
+2026-11-07 23:13:16 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:13:23 Epoch 67/80: loss=0.507097 lr=0.000069
+2026-11-07 23:13:23   epoch 67: val_acc = 3494/3925 = 89.019108%  top5 = 3872/3925 = 98.649682%  [95% CI 88.00–89.96]
+2026-11-07 23:13:23     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 2139879302572548005)
+2026-11-07 23:13:23   step 0/295: loss=0.508262
+2026-11-07 23:13:23   step 1/295: loss=0.503964
+2026-11-07 23:13:24   step 2/295: loss=0.504053
+2026-11-07 23:13:50   step 100/295: loss=0.515935
+2026-11-07 23:14:17   step 200/295: loss=0.505224
+2026-11-07 23:14:42 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:14:48 Epoch 68/80: loss=0.506653 lr=0.000059
+2026-11-07 23:14:48   epoch 68: val_acc = 3515/3925 = 89.554140%  top5 = 3868/3925 = 98.547771%  [95% CI 88.56–90.47]
+2026-11-07 23:14:48     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 14880923057811282274)
+2026-11-07 23:14:49   step 0/295: loss=0.506405
+2026-11-07 23:14:49   step 1/295: loss=0.518391
+2026-11-07 23:14:49   step 2/295: loss=0.513718
+2026-11-07 23:15:15   step 100/295: loss=0.504033
+2026-11-07 23:15:42   step 200/295: loss=0.505066
+2026-11-07 23:16:07 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:16:14 Epoch 69/80: loss=0.505434 lr=0.000050
+2026-11-07 23:16:14   epoch 69: val_acc = 3496/3925 = 89.070064%  top5 = 3868/3925 = 98.547771%  [95% CI 88.06–90.01]
+2026-11-07 23:16:14     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 11945299740297371381)
+2026-11-07 23:16:14   step 0/295: loss=0.506473
+2026-11-07 23:16:14   step 1/295: loss=0.504489
+2026-11-07 23:16:15   step 2/295: loss=0.505879
+2026-11-07 23:16:41   step 100/295: loss=0.504750
+2026-11-07 23:17:08   step 200/295: loss=0.503092
+2026-11-07 23:17:33 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:17:39 Epoch 70/80: loss=0.504829 lr=0.000041
+2026-11-07 23:17:39   epoch 70: val_acc = 3512/3925 = 89.477707%  top5 = 3869/3925 = 98.573248%  [95% CI 88.48–90.40]
+2026-11-07 23:17:39     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 14218457208597102675)
+2026-11-07 23:17:40   step 0/295: loss=0.503283
+2026-11-07 23:17:40   step 1/295: loss=0.504223
+2026-11-07 23:17:40   step 2/295: loss=0.507667
+2026-11-07 23:18:07   step 100/295: loss=0.503800
+2026-11-07 23:18:33   step 200/295: loss=0.505952
+2026-11-07 23:18:59 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:19:05 Epoch 71/80: loss=0.505139 lr=0.000033
+2026-11-07 23:19:05   epoch 71: val_acc = 3532/3925 = 89.987261%  top5 = 3873/3925 = 98.675159%  [95% CI 89.01–90.89]
+2026-11-07 23:19:05     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9867554593539041067)
+2026-11-07 23:19:05   step 0/295: loss=0.502598
+2026-11-07 23:19:06   step 1/295: loss=0.504872
+2026-11-07 23:19:06   step 2/295: loss=0.511551
+2026-11-07 23:19:32   step 100/295: loss=0.510466
+2026-11-07 23:19:59   step 200/295: loss=0.504800
+2026-11-07 23:20:24 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:20:30 Epoch 72/80: loss=0.504704 lr=0.000026
+2026-11-07 23:20:30   epoch 72: val_acc = 3515/3925 = 89.554140%  top5 = 3875/3925 = 98.726115%  [95% CI 88.56–90.47]
+2026-11-07 23:20:30     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 5412840033109940351)
+2026-11-07 23:20:31   step 0/295: loss=0.504537
+2026-11-07 23:20:31   step 1/295: loss=0.503260
+2026-11-07 23:20:31   step 2/295: loss=0.504167
+2026-11-07 23:20:57   step 100/295: loss=0.503769
+2026-11-07 23:21:24   step 200/295: loss=0.502655
+2026-11-07 23:21:49 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:21:56 Epoch 73/80: loss=0.504450 lr=0.000020
+2026-11-07 23:21:56   epoch 73: val_acc = 3530/3925 = 89.936306%  top5 = 3875/3925 = 98.726115%  [95% CI 88.96–90.84]
+2026-11-07 23:21:56     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 1009128780777472751)
+2026-11-07 23:21:56   step 0/295: loss=0.503489
+2026-11-07 23:21:56   step 1/295: loss=0.503074
+2026-11-07 23:21:57   step 2/295: loss=0.503636
+2026-11-07 23:22:23   step 100/295: loss=0.501834
+2026-11-07 23:22:49   step 200/295: loss=0.504257
+2026-11-07 23:23:15 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:23:21 Epoch 74/80: loss=0.504123 lr=0.000015
+2026-11-07 23:23:21   epoch 74: val_acc = 3520/3925 = 89.681529%  top5 = 3875/3925 = 98.726115%  [95% CI 88.69–90.59]
+2026-11-07 23:23:21     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 3666799251240034060)
+2026-11-07 23:23:21   step 0/295: loss=0.501992
+2026-11-07 23:23:22   step 1/295: loss=0.502798
+2026-11-07 23:23:22   step 2/295: loss=0.502656
+2026-11-07 23:23:48   step 100/295: loss=0.503188
+2026-11-07 23:24:15   step 200/295: loss=0.505179
+2026-11-07 23:24:40 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:24:46 Epoch 75/80: loss=0.503885 lr=0.000010
+2026-11-07 23:24:46   epoch 75: val_acc = 3524/3925 = 89.783439%  top5 = 3873/3925 = 98.675159%  [95% CI 88.80–90.69]
+2026-11-07 23:24:46     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 963966831935071840)
+2026-11-07 23:24:47   step 0/295: loss=0.502038
+2026-11-07 23:24:47   step 1/295: loss=0.502609
+2026-11-07 23:24:47   step 2/295: loss=0.502910
+2026-11-07 23:25:14   step 100/295: loss=0.512810
+2026-11-07 23:25:40   step 200/295: loss=0.501960
+2026-11-07 23:26:05 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:26:12 Epoch 76/80: loss=0.503453 lr=0.000007
+2026-11-07 23:26:12   epoch 76: val_acc = 3520/3925 = 89.681529%  top5 = 3871/3925 = 98.624204%  [95% CI 88.69–90.59]
+2026-11-07 23:26:12     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 9559782788348202999)
+2026-11-07 23:26:12   step 0/295: loss=0.502667
+2026-11-07 23:26:12   step 1/295: loss=0.502981
+2026-11-07 23:26:13   step 2/295: loss=0.503257
+2026-11-07 23:26:39   step 100/295: loss=0.502636
+2026-11-07 23:27:06   step 200/295: loss=0.502114
+2026-11-07 23:27:31 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:27:37 Epoch 77/80: loss=0.503470 lr=0.000004
+2026-11-07 23:27:37   epoch 77: val_acc = 3527/3925 = 89.859873%  top5 = 3873/3925 = 98.675159%  [95% CI 88.88–90.77]
+2026-11-07 23:27:37     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 15868408326070144520)
+2026-11-07 23:27:38   step 0/295: loss=0.502678
+2026-11-07 23:27:38   step 1/295: loss=0.506801
+2026-11-07 23:27:38   step 2/295: loss=0.501937
+2026-11-07 23:28:04   step 100/295: loss=0.501926
+2026-11-07 23:28:31   step 200/295: loss=0.503022
+2026-11-07 23:28:56 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:29:03 Epoch 78/80: loss=0.503720 lr=0.000002
+2026-11-07 23:29:03   epoch 78: val_acc = 3524/3925 = 89.783439%  top5 = 3873/3925 = 98.675159%  [95% CI 88.80–90.69]
+2026-11-07 23:29:03     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 4438792246086627189)
+2026-11-07 23:29:03   step 0/295: loss=0.501793
+2026-11-07 23:29:03   step 1/295: loss=0.504024
+2026-11-07 23:29:04   step 2/295: loss=0.502805
+2026-11-07 23:29:30   step 100/295: loss=0.501870
+2026-11-07 23:29:57   step 200/295: loss=0.502558
+2026-11-07 23:30:22 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:30:28 Epoch 79/80: loss=0.503743 lr=0.000000
+2026-11-07 23:30:28   epoch 79: val_acc = 3523/3925 = 89.757962%  top5 = 3874/3925 = 98.700637%  [95% CI 88.77–90.67]
+2026-11-07 23:30:28     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 15904823777092998952)
+2026-11-07 23:30:29   step 0/295: loss=0.503445
+2026-11-07 23:30:29   step 1/295: loss=0.502159
+2026-11-07 23:30:29   step 2/295: loss=0.503415
+2026-11-07 23:30:55   step 100/295: loss=0.502899
+2026-11-07 23:31:22   step 200/295: loss=0.502635
+2026-11-07 23:31:47 [pjrt_ffi] RESIDENT: @resnet50_fwd_eval holds 267 parameter tensors (90.0 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+2026-11-07 23:31:54 Epoch 80/80: loss=0.503504 lr=0.000000
+2026-11-07 23:31:54   epoch 80: val_acc = 3525/3925 = 89.808917%  top5 = 3873/3925 = 98.675159%  [95% CI 88.82–90.72]
+2026-11-07 23:31:54     BN companion -> .lake/build/resnet50_adam_ckpt_xla_m5pro80.bin.bn (53120 floats x 2, hash 16110234739896110531)
+2026-11-07 23:31:54 done (trained ResNet-50 (Imagenette) adam + cosine/warmup via packed threading).
