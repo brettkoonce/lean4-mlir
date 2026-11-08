@@ -1,0 +1,744 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1108 01:58:31.537595 40120130 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 37812.4 MB reclaimable now
+I1108 01:58:31.538932 40120127 service.cc:154] XLA service 0x774915e220 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1108 01:58:31.538938 40120127 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1108 01:58:31.539862 40120127 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1108 01:58:31.575063 40120127 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/mnv4_adam_train_step.mlir (@mnv4_adam_train_step, 856 outputs, 1 replica) in 1181 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd.mlir (@mnv4_fwd, 1 outputs, 1 replica) in 211 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd_eval.mlir (@mnv4_fwd_eval, 1 outputs, 1 replica) in 124 ms
+MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mnv4_adam_train_step.mlir
+  xla/pjrt verified_mlir/mnv4_fwd.mlir
+  xla/pjrt verified_mlir/mnv4_fwd_eval.mlir
+  imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+  train 9469, val 3925; bs 32, MobileNetV4-Conv-M adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @mnv4_adam_train_step holds 699 parameter tensors (96.7 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/295: loss=2.728643
+  step 1/295: loss=2.643625
+  step 2/295: loss=2.512885
+  step 100/295: loss=2.127477
+  step 200/295: loss=2.169791
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/80: loss=2.105702 lr=0.000333
+  epoch 1: val_acc = 708/3925 = 18.038217%  top5 = 2645/3925 = 67.388535%  [95% CI 16.87–19.27]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 7170137904303332378)
+  step 0/295: loss=2.030057
+  step 1/295: loss=1.553316
+  step 2/295: loss=1.551250
+  step 100/295: loss=1.488382
+  step 200/295: loss=1.583692
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/80: loss=1.740524 lr=0.000667
+  epoch 2: val_acc = 976/3925 = 24.866242%  top5 = 2984/3925 = 76.025478%  [95% CI 23.54–26.24]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2830827482695937419)
+  step 0/295: loss=1.507929
+  step 1/295: loss=2.325540
+  step 2/295: loss=1.720668
+  step 100/295: loss=1.470319
+  step 200/295: loss=1.370612
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/80: loss=1.554915 lr=0.001000
+  epoch 3: val_acc = 1420/3925 = 36.178344%  top5 = 3397/3925 = 86.547771%  [95% CI 34.69–37.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 11803286124866536247)
+  step 0/295: loss=1.491275
+  step 1/295: loss=1.123157
+  step 2/295: loss=1.525894
+  step 100/295: loss=1.412293
+  step 200/295: loss=1.406342
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/80: loss=1.431902 lr=0.001000
+  epoch 4: val_acc = 1918/3925 = 48.866242%  top5 = 3399/3925 = 86.598726%  [95% CI 47.30–50.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2174407003873924691)
+  step 0/295: loss=1.226624
+  step 1/295: loss=1.346086
+  step 2/295: loss=1.172059
+  step 100/295: loss=1.504390
+  step 200/295: loss=1.338533
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/80: loss=1.316663 lr=0.000998
+  epoch 5: val_acc = 2203/3925 = 56.127389%  top5 = 3666/3925 = 93.401274%  [95% CI 54.57–57.67]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 585859823133159138)
+  step 0/295: loss=1.240562
+  step 1/295: loss=1.069517
+  step 2/295: loss=1.348912
+  step 100/295: loss=1.269938
+  step 200/295: loss=1.517163
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/80: loss=1.213753 lr=0.000996
+  epoch 6: val_acc = 2382/3925 = 60.687898%  top5 = 3697/3925 = 94.191083%  [95% CI 59.15–62.20]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2194458261330519791)
+  step 0/295: loss=1.217480
+  step 1/295: loss=1.200942
+  step 2/295: loss=1.171796
+  step 100/295: loss=1.373141
+  step 200/295: loss=1.271165
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/80: loss=1.198356 lr=0.000993
+  epoch 7: val_acc = 2438/3925 = 62.114650%  top5 = 3680/3925 = 93.757962%  [95% CI 60.59–63.62]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14793232611616037502)
+  step 0/295: loss=1.057152
+  step 1/295: loss=1.234259
+  step 2/295: loss=1.599106
+  step 100/295: loss=1.211640
+  step 200/295: loss=1.051248
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/80: loss=1.141870 lr=0.000990
+  epoch 8: val_acc = 2304/3925 = 58.700637%  top5 = 3565/3925 = 90.828025%  [95% CI 57.15–60.23]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 10649459453731559164)
+  step 0/295: loss=0.930417
+  step 1/295: loss=0.918771
+  step 2/295: loss=1.112269
+  step 100/295: loss=0.914680
+  step 200/295: loss=1.101766
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/80: loss=1.123270 lr=0.000985
+  epoch 9: val_acc = 2801/3925 = 71.363057%  top5 = 3756/3925 = 95.694268%  [95% CI 69.93–72.76]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 662523174250025351)
+  step 0/295: loss=1.107765
+  step 1/295: loss=0.855659
+  step 2/295: loss=0.909480
+  step 100/295: loss=1.208219
+  step 200/295: loss=1.080293
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/80: loss=1.119286 lr=0.000980
+  epoch 10: val_acc = 2508/3925 = 63.898089%  top5 = 3714/3925 = 94.624204%  [95% CI 62.38–65.39]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4830454984730724518)
+  step 0/295: loss=1.066090
+  step 1/295: loss=0.771759
+  step 2/295: loss=0.943000
+  step 100/295: loss=1.228574
+  step 200/295: loss=1.068165
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/80: loss=1.067420 lr=0.000974
+  epoch 11: val_acc = 2881/3925 = 73.401274%  top5 = 3766/3925 = 95.949045%  [95% CI 72.00–74.76]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 7940447359595882687)
+  step 0/295: loss=1.035887
+  step 1/295: loss=0.837521
+  step 2/295: loss=0.860736
+  step 100/295: loss=0.815839
+  step 200/295: loss=0.890528
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/80: loss=1.014588 lr=0.000967
+  epoch 12: val_acc = 2645/3925 = 67.388535%  top5 = 3718/3925 = 94.726115%  [95% CI 65.91–68.84]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 3871849708784327598)
+  step 0/295: loss=1.050979
+  step 1/295: loss=1.107044
+  step 2/295: loss=1.332728
+  step 100/295: loss=1.221720
+  step 200/295: loss=1.056482
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/80: loss=1.070316 lr=0.000959
+  epoch 13: val_acc = 1939/3925 = 49.401274%  top5 = 3356/3925 = 85.503185%  [95% CI 47.84–50.97]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14538072016406881401)
+  step 0/295: loss=0.898804
+  step 1/295: loss=1.269005
+  step 2/295: loss=1.112026
+  step 100/295: loss=1.041479
+  step 200/295: loss=1.139811
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/80: loss=1.160657 lr=0.000951
+  epoch 14: val_acc = 520/3925 = 13.248408%  top5 = 2026/3925 = 51.617834%  [95% CI 12.22–14.35]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12049601937007180355)
+  step 0/295: loss=1.618245
+  step 1/295: loss=1.278976
+  step 2/295: loss=1.275469
+  step 100/295: loss=1.276266
+  step 200/295: loss=1.141220
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/80: loss=1.243669 lr=0.000941
+  epoch 15: val_acc = 2461/3925 = 62.700637%  top5 = 3559/3925 = 90.675159%  [95% CI 61.18–64.20]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 16372288752548660374)
+  step 0/295: loss=1.210620
+  step 1/295: loss=1.057664
+  step 2/295: loss=0.877325
+  step 100/295: loss=0.941937
+  step 200/295: loss=1.014765
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/80: loss=1.131766 lr=0.000931
+  epoch 16: val_acc = 1966/3925 = 50.089172%  top5 = 3284/3925 = 83.668790%  [95% CI 48.53–51.65]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 17507223775620850174)
+  step 0/295: loss=1.183948
+  step 1/295: loss=1.118004
+  step 2/295: loss=1.259412
+  step 100/295: loss=0.871386
+  step 200/295: loss=1.095107
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/80: loss=1.049015 lr=0.000921
+  epoch 17: val_acc = 3059/3925 = 77.936306%  top5 = 3778/3925 = 96.254777%  [95% CI 76.61–79.21]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 1509180977706708103)
+  step 0/295: loss=0.957527
+  step 1/295: loss=0.797320
+  step 2/295: loss=0.968601
+  step 100/295: loss=0.898077
+  step 200/295: loss=1.358232
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/80: loss=1.084362 lr=0.000909
+  epoch 18: val_acc = 785/3925 = 20.000000%  top5 = 2491/3925 = 63.464968%  [95% CI 18.78–21.28]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4276189476861139345)
+  step 0/295: loss=1.008146
+  step 1/295: loss=0.934978
+  step 2/295: loss=1.245913
+  step 100/295: loss=1.050197
+  step 200/295: loss=1.173352
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/80: loss=1.117150 lr=0.000897
+  epoch 19: val_acc = 2266/3925 = 57.732484%  top5 = 3427/3925 = 87.312102%  [95% CI 56.18–59.27]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15238756678271345318)
+  step 0/295: loss=0.989042
+  step 1/295: loss=1.099633
+  step 2/295: loss=1.465225
+  step 100/295: loss=1.196017
+  step 200/295: loss=0.818479
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/80: loss=0.974721 lr=0.000885
+  epoch 20: val_acc = 3101/3925 = 79.006369%  top5 = 3807/3925 = 96.993631%  [95% CI 77.70–80.25]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 1208549309065950701)
+  step 0/295: loss=0.922798
+  step 1/295: loss=0.767971
+  step 2/295: loss=0.785839
+  step 100/295: loss=0.731388
+  step 200/295: loss=0.831014
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/80: loss=0.959231 lr=0.000871
+  epoch 21: val_acc = 1865/3925 = 47.515924%  top5 = 3048/3925 = 77.656051%  [95% CI 45.96–49.08]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 3346304546344686734)
+  step 0/295: loss=1.011535
+  step 1/295: loss=1.221837
+  step 2/295: loss=0.982169
+  step 100/295: loss=1.150496
+  step 200/295: loss=1.012242
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/80: loss=0.963833 lr=0.000857
+  epoch 22: val_acc = 3069/3925 = 78.191083%  top5 = 3801/3925 = 96.840764%  [95% CI 76.87–79.46]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 17051138039024677083)
+  step 0/295: loss=1.062881
+  step 1/295: loss=0.864709
+  step 2/295: loss=0.752151
+  step 100/295: loss=0.868355
+  step 200/295: loss=1.019474
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/80: loss=0.912862 lr=0.000843
+  epoch 23: val_acc = 2897/3925 = 73.808917%  top5 = 3668/3925 = 93.452229%  [95% CI 72.41–75.16]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4381427912953978627)
+  step 0/295: loss=1.216543
+  step 1/295: loss=0.908170
+  step 2/295: loss=0.784136
+  step 100/295: loss=1.445905
+  step 200/295: loss=1.381421
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/80: loss=1.089899 lr=0.000827
+  epoch 24: val_acc = 1435/3925 = 36.560510%  top5 = 3022/3925 = 76.993631%  [95% CI 35.07–38.08]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4526578640885443142)
+  step 0/295: loss=1.157052
+  step 1/295: loss=1.399328
+  step 2/295: loss=1.013201
+  step 100/295: loss=1.065857
+  step 200/295: loss=1.147086
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/80: loss=1.101213 lr=0.000812
+  epoch 25: val_acc = 2589/3925 = 65.961783%  top5 = 3656/3925 = 93.146497%  [95% CI 64.46–67.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15325458640282683858)
+  step 0/295: loss=0.858183
+  step 1/295: loss=0.954332
+  step 2/295: loss=0.956867
+  step 100/295: loss=0.906493
+  step 200/295: loss=1.046323
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 26/80: loss=0.978438 lr=0.000796
+  epoch 26: val_acc = 1584/3925 = 40.356688%  top5 = 3107/3925 = 79.159236%  [95% CI 38.83–41.90]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 6561422650040670515)
+  step 0/295: loss=0.965737
+  step 1/295: loss=0.973820
+  step 2/295: loss=1.013182
+  step 100/295: loss=0.770498
+  step 200/295: loss=0.923508
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 27/80: loss=0.922307 lr=0.000779
+  epoch 27: val_acc = 3097/3925 = 78.904459%  top5 = 3786/3925 = 96.458599%  [95% CI 77.60–80.15]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 5356115309890516656)
+  step 0/295: loss=0.802564
+  step 1/295: loss=0.731598
+  step 2/295: loss=0.793995
+  step 100/295: loss=0.782904
+  step 200/295: loss=0.927664
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 28/80: loss=0.830949 lr=0.000762
+  epoch 28: val_acc = 2961/3925 = 75.439490%  top5 = 3723/3925 = 94.853503%  [95% CI 74.07–76.76]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15403617343898995644)
+  step 0/295: loss=0.868989
+  step 1/295: loss=0.716887
+  step 2/295: loss=0.712477
+  step 100/295: loss=0.792116
+  step 200/295: loss=0.828038
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 29/80: loss=0.832352 lr=0.000744
+  epoch 29: val_acc = 3146/3925 = 80.152866%  top5 = 3780/3925 = 96.305732%  [95% CI 78.88–81.37]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 16664082785443700335)
+  step 0/295: loss=0.772738
+  step 1/295: loss=0.809510
+  step 2/295: loss=0.748995
+  step 100/295: loss=0.672455
+  step 200/295: loss=0.808931
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 30/80: loss=0.775711 lr=0.000726
+  epoch 30: val_acc = 3147/3925 = 80.178344%  top5 = 3828/3925 = 97.528662%  [95% CI 78.90–81.40]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 13161840517946976289)
+  step 0/295: loss=0.813630
+  step 1/295: loss=0.896144
+  step 2/295: loss=0.731868
+  step 100/295: loss=0.863259
+  step 200/295: loss=0.785414
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 31/80: loss=0.803697 lr=0.000708
+  epoch 31: val_acc = 3063/3925 = 78.038217%  top5 = 3794/3925 = 96.662420%  [95% CI 76.72–79.31]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 3915490536157764101)
+  step 0/295: loss=0.728960
+  step 1/295: loss=0.791148
+  step 2/295: loss=0.873256
+  step 100/295: loss=0.575232
+  step 200/295: loss=0.856498
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 32/80: loss=0.779740 lr=0.000689
+  epoch 32: val_acc = 3133/3925 = 79.821656%  top5 = 3726/3925 = 94.929936%  [95% CI 78.54–81.05]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12297731435974189433)
+  step 0/295: loss=0.636272
+  step 1/295: loss=0.801132
+  step 2/295: loss=0.605436
+  step 100/295: loss=0.873629
+  step 200/295: loss=0.892631
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 33/80: loss=0.722842 lr=0.000670
+  epoch 33: val_acc = 3196/3925 = 81.426752%  top5 = 3831/3925 = 97.605096%  [95% CI 80.18–82.61]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2288566970746019910)
+  step 0/295: loss=0.683827
+  step 1/295: loss=0.744238
+  step 2/295: loss=0.596907
+  step 100/295: loss=0.636991
+  step 200/295: loss=0.678665
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 34/80: loss=0.732722 lr=0.000651
+  epoch 34: val_acc = 3119/3925 = 79.464968%  top5 = 3765/3925 = 95.923567%  [95% CI 78.17–80.70]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14586868690785558232)
+  step 0/295: loss=0.664940
+  step 1/295: loss=0.697047
+  step 2/295: loss=0.616599
+  step 100/295: loss=0.749796
+  step 200/295: loss=0.773463
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 35/80: loss=0.816778 lr=0.000631
+  epoch 35: val_acc = 2397/3925 = 61.070064%  top5 = 3414/3925 = 86.980892%  [95% CI 59.53–62.58]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 8623759132390141429)
+  step 0/295: loss=0.792956
+  step 1/295: loss=0.917184
+  step 2/295: loss=0.754201
+  step 100/295: loss=0.662347
+  step 200/295: loss=0.896356
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 36/80: loss=0.796141 lr=0.000611
+  epoch 36: val_acc = 3232/3925 = 82.343949%  top5 = 3807/3925 = 96.993631%  [95% CI 81.12–83.51]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 9596261167158199982)
+  step 0/295: loss=0.687283
+  step 1/295: loss=0.664480
+  step 2/295: loss=0.688286
+  step 100/295: loss=0.654713
+  step 200/295: loss=0.659191
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 37/80: loss=0.708220 lr=0.000591
+  epoch 37: val_acc = 3242/3925 = 82.598726%  top5 = 3792/3925 = 96.611465%  [95% CI 81.38–83.75]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4946495629828348954)
+  step 0/295: loss=0.658017
+  step 1/295: loss=0.764651
+  step 2/295: loss=0.574536
+  step 100/295: loss=0.658700
+  step 200/295: loss=0.564268
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 38/80: loss=0.687869 lr=0.000571
+  epoch 38: val_acc = 3196/3925 = 81.426752%  top5 = 3813/3925 = 97.146497%  [95% CI 80.18–82.61]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12055378789966359151)
+  step 0/295: loss=0.653813
+  step 1/295: loss=0.654257
+  step 2/295: loss=0.639036
+  step 100/295: loss=0.732632
+  step 200/295: loss=0.870327
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 39/80: loss=0.771314 lr=0.000551
+  epoch 39: val_acc = 3209/3925 = 81.757962%  top5 = 3738/3925 = 95.235669%  [95% CI 80.52–82.93]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 9493118508127962666)
+  step 0/295: loss=0.617877
+  step 1/295: loss=0.604332
+  step 2/295: loss=0.601174
+  step 100/295: loss=0.577719
+  step 200/295: loss=0.584959
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 40/80: loss=0.662020 lr=0.000531
+  epoch 40: val_acc = 3255/3925 = 82.929936%  top5 = 3793/3925 = 96.636943%  [95% CI 81.72–84.07]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 16759313484320647849)
+  step 0/295: loss=0.614026
+  step 1/295: loss=0.528599
+  step 2/295: loss=0.613269
+  step 100/295: loss=0.564027
+  step 200/295: loss=0.640632
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 41/80: loss=0.615625 lr=0.000510
+  epoch 41: val_acc = 3312/3925 = 84.382166%  top5 = 3800/3925 = 96.815287%  [95% CI 83.21–85.48]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2596036550614786907)
+  step 0/295: loss=0.549013
+  step 1/295: loss=0.538214
+  step 2/295: loss=0.574202
+  step 100/295: loss=0.648640
+  step 200/295: loss=0.640503
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 42/80: loss=0.605422 lr=0.000490
+  epoch 42: val_acc = 3187/3925 = 81.197452%  top5 = 3736/3925 = 95.184713%  [95% CI 79.94–82.39]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 3591471934865059834)
+  step 0/295: loss=0.568813
+  step 1/295: loss=0.626205
+  step 2/295: loss=0.541436
+  step 100/295: loss=0.560715
+  step 200/295: loss=0.735104
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 43/80: loss=0.608207 lr=0.000469
+  epoch 43: val_acc = 3136/3925 = 79.898089%  top5 = 3673/3925 = 93.579618%  [95% CI 78.62–81.12]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14567911265243508048)
+  step 0/295: loss=0.579390
+  step 1/295: loss=0.545191
+  step 2/295: loss=0.658186
+  step 100/295: loss=0.563139
+  step 200/295: loss=0.524074
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 44/80: loss=0.590906 lr=0.000449
+  epoch 44: val_acc = 3306/3925 = 84.229299%  top5 = 3789/3925 = 96.535032%  [95% CI 83.06–85.34]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 18022813139120034910)
+  step 0/295: loss=0.544194
+  step 1/295: loss=0.536329
+  step 2/295: loss=0.610603
+  step 100/295: loss=0.627985
+  step 200/295: loss=0.585392
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 45/80: loss=0.582767 lr=0.000429
+  epoch 45: val_acc = 3291/3925 = 83.847134%  top5 = 3774/3925 = 96.152866%  [95% CI 82.66–84.97]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15552433388430793913)
+  step 0/295: loss=0.599655
+  step 1/295: loss=0.573785
+  step 2/295: loss=0.615152
+  step 100/295: loss=0.616616
+  step 200/295: loss=0.612442
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 46/80: loss=0.584343 lr=0.000409
+  epoch 46: val_acc = 3150/3925 = 80.254777%  top5 = 3684/3925 = 93.859873%  [95% CI 78.98–81.47]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 11147608797471362439)
+  step 0/295: loss=0.701897
+  step 1/295: loss=0.571765
+  step 2/295: loss=0.664915
+  step 100/295: loss=0.540795
+  step 200/295: loss=0.525622
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 47/80: loss=0.586024 lr=0.000389
+  epoch 47: val_acc = 3238/3925 = 82.496815%  top5 = 3736/3925 = 95.184713%  [95% CI 81.28–83.65]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 3257617599196937158)
+  step 0/295: loss=0.591653
+  step 1/295: loss=0.579836
+  step 2/295: loss=0.529437
+  step 100/295: loss=0.590693
+  step 200/295: loss=0.763335
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 48/80: loss=0.572837 lr=0.000369
+  epoch 48: val_acc = 3146/3925 = 80.152866%  top5 = 3690/3925 = 94.012739%  [95% CI 78.88–81.37]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 10864127277587129227)
+  step 0/295: loss=0.527194
+  step 1/295: loss=0.527224
+  step 2/295: loss=0.546874
+  step 100/295: loss=0.566956
+  step 200/295: loss=0.570282
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 49/80: loss=0.563316 lr=0.000349
+  epoch 49: val_acc = 3307/3925 = 84.254777%  top5 = 3766/3925 = 95.949045%  [95% CI 83.08–85.36]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 18245678455351883613)
+  step 0/295: loss=0.550495
+  step 1/295: loss=0.519438
+  step 2/295: loss=0.557455
+  step 100/295: loss=0.530479
+  step 200/295: loss=0.562195
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 50/80: loss=0.575700 lr=0.000330
+  epoch 50: val_acc = 3340/3925 = 85.095541%  top5 = 3767/3925 = 95.974522%  [95% CI 83.95–86.18]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 106091953616726651)
+  step 0/295: loss=0.549433
+  step 1/295: loss=0.520558
+  step 2/295: loss=0.519473
+  step 100/295: loss=0.521595
+  step 200/295: loss=0.613199
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 51/80: loss=0.568340 lr=0.000311
+  epoch 51: val_acc = 3266/3925 = 83.210191%  top5 = 3734/3925 = 95.133758%  [95% CI 82.01–84.35]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12759779851005599125)
+  step 0/295: loss=0.544596
+  step 1/295: loss=0.578710
+  step 2/295: loss=0.529336
+  step 100/295: loss=0.537169
+  step 200/295: loss=0.523935
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 52/80: loss=0.555245 lr=0.000292
+  epoch 52: val_acc = 3306/3925 = 84.229299%  top5 = 3796/3925 = 96.713376%  [95% CI 83.06–85.34]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 1182559239677762628)
+  step 0/295: loss=0.530596
+  step 1/295: loss=0.563306
+  step 2/295: loss=0.509915
+  step 100/295: loss=0.590568
+  step 200/295: loss=0.720370
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 53/80: loss=0.547767 lr=0.000274
+  epoch 53: val_acc = 3204/3925 = 81.630573%  top5 = 3751/3925 = 95.566879%  [95% CI 80.39–82.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15606594155740182822)
+  step 0/295: loss=0.648277
+  step 1/295: loss=0.599909
+  step 2/295: loss=0.549159
+  step 100/295: loss=0.511167
+  step 200/295: loss=0.621978
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 54/80: loss=0.552250 lr=0.000256
+  epoch 54: val_acc = 3346/3925 = 85.248408%  top5 = 3791/3925 = 96.585987%  [95% CI 84.10–86.32]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 1676142454928329605)
+  step 0/295: loss=0.548669
+  step 1/295: loss=0.713368
+  step 2/295: loss=0.513831
+  step 100/295: loss=0.524260
+  step 200/295: loss=0.558375
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 55/80: loss=0.544298 lr=0.000238
+  epoch 55: val_acc = 3331/3925 = 84.866242%  top5 = 3811/3925 = 97.095541%  [95% CI 83.71–85.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 266271568308372627)
+  step 0/295: loss=0.510394
+  step 1/295: loss=0.551878
+  step 2/295: loss=0.512215
+  step 100/295: loss=0.509480
+  step 200/295: loss=0.519613
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 56/80: loss=0.538263 lr=0.000221
+  epoch 56: val_acc = 3314/3925 = 84.433121%  top5 = 3796/3925 = 96.713376%  [95% CI 83.27–85.53]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 16238874517944978909)
+  step 0/295: loss=0.511907
+  step 1/295: loss=0.514032
+  step 2/295: loss=0.507474
+  step 100/295: loss=0.577631
+  step 200/295: loss=0.516228
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 57/80: loss=0.531784 lr=0.000205
+  epoch 57: val_acc = 3199/3925 = 81.503185%  top5 = 3695/3925 = 94.140127%  [95% CI 80.26–82.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 7717146624105984372)
+  step 0/295: loss=0.547527
+  step 1/295: loss=0.532951
+  step 2/295: loss=0.527534
+  step 100/295: loss=0.512707
+  step 200/295: loss=0.517145
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 58/80: loss=0.526563 lr=0.000188
+  epoch 58: val_acc = 3339/3925 = 85.070064%  top5 = 3789/3925 = 96.535032%  [95% CI 83.92–86.15]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 13123417053136332737)
+  step 0/295: loss=0.506440
+  step 1/295: loss=0.518130
+  step 2/295: loss=0.514141
+  step 100/295: loss=0.505738
+  step 200/295: loss=0.517115
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 59/80: loss=0.519158 lr=0.000173
+  epoch 59: val_acc = 3270/3925 = 83.312102%  top5 = 3693/3925 = 94.089172%  [95% CI 82.11–84.45]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14910302231813838033)
+  step 0/295: loss=0.506230
+  step 1/295: loss=0.521540
+  step 2/295: loss=0.562050
+  step 100/295: loss=0.506220
+  step 200/295: loss=0.601831
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 60/80: loss=0.518870 lr=0.000157
+  epoch 60: val_acc = 3342/3925 = 85.146497%  top5 = 3753/3925 = 95.617834%  [95% CI 84.00–86.22]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12904118960316392072)
+  step 0/295: loss=0.569555
+  step 1/295: loss=0.509848
+  step 2/295: loss=0.503894
+  step 100/295: loss=0.511371
+  step 200/295: loss=0.510093
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 61/80: loss=0.516027 lr=0.000143
+  epoch 61: val_acc = 3320/3925 = 84.585987%  top5 = 3737/3925 = 95.210191%  [95% CI 83.42–85.68]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 11646545378854923899)
+  step 0/295: loss=0.510113
+  step 1/295: loss=0.506374
+  step 2/295: loss=0.504011
+  step 100/295: loss=0.510636
+  step 200/295: loss=0.519162
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 62/80: loss=0.529455 lr=0.000129
+  epoch 62: val_acc = 3220/3925 = 82.038217%  top5 = 3713/3925 = 94.598726%  [95% CI 80.81–83.21]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 12167132541999590624)
+  step 0/295: loss=0.512928
+  step 1/295: loss=0.528857
+  step 2/295: loss=0.510196
+  step 100/295: loss=0.525764
+  step 200/295: loss=0.562909
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 63/80: loss=0.526853 lr=0.000116
+  epoch 63: val_acc = 3319/3925 = 84.560510%  top5 = 3758/3925 = 95.745223%  [95% CI 83.40–85.66]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 18170565464624597531)
+  step 0/295: loss=0.509957
+  step 1/295: loss=0.509617
+  step 2/295: loss=0.516545
+  step 100/295: loss=0.515073
+  step 200/295: loss=0.507910
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 64/80: loss=0.517281 lr=0.000103
+  epoch 64: val_acc = 3320/3925 = 84.585987%  top5 = 3757/3925 = 95.719745%  [95% CI 83.42–85.68]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 6756980801305229611)
+  step 0/295: loss=0.511337
+  step 1/295: loss=0.515983
+  step 2/295: loss=0.525266
+  step 100/295: loss=0.503829
+  step 200/295: loss=0.506087
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 65/80: loss=0.515494 lr=0.000091
+  epoch 65: val_acc = 3334/3925 = 84.942675%  top5 = 3751/3925 = 95.566879%  [95% CI 83.79–86.03]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4862383286208237047)
+  step 0/295: loss=0.507217
+  step 1/295: loss=0.507002
+  step 2/295: loss=0.503828
+  step 100/295: loss=0.507436
+  step 200/295: loss=0.504755
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 66/80: loss=0.511552 lr=0.000079
+  epoch 66: val_acc = 3329/3925 = 84.815287%  top5 = 3756/3925 = 95.694268%  [95% CI 83.66–85.90]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14383464128733466349)
+  step 0/295: loss=0.509065
+  step 1/295: loss=0.510535
+  step 2/295: loss=0.504404
+  step 100/295: loss=0.517082
+  step 200/295: loss=0.514932
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 67/80: loss=0.511801 lr=0.000069
+  epoch 67: val_acc = 3336/3925 = 84.993631%  top5 = 3761/3925 = 95.821656%  [95% CI 83.84–86.08]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 13208502578106568611)
+  step 0/295: loss=0.512104
+  step 1/295: loss=0.502912
+  step 2/295: loss=0.546571
+  step 100/295: loss=0.509014
+  step 200/295: loss=0.510940
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 68/80: loss=0.510762 lr=0.000059
+  epoch 68: val_acc = 3342/3925 = 85.146497%  top5 = 3750/3925 = 95.541401%  [95% CI 84.00–86.22]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 15428528568684964970)
+  step 0/295: loss=0.506259
+  step 1/295: loss=0.512035
+  step 2/295: loss=0.512894
+  step 100/295: loss=0.502517
+  step 200/295: loss=0.504627
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 69/80: loss=0.510745 lr=0.000050
+  epoch 69: val_acc = 3345/3925 = 85.222930%  top5 = 3770/3925 = 96.050955%  [95% CI 84.08–86.30]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 14066202687187161513)
+  step 0/295: loss=0.506670
+  step 1/295: loss=0.502450
+  step 2/295: loss=0.504479
+  step 100/295: loss=0.507202
+  step 200/295: loss=0.505533
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 70/80: loss=0.509813 lr=0.000041
+  epoch 70: val_acc = 3351/3925 = 85.375796%  top5 = 3757/3925 = 95.719745%  [95% CI 84.24–86.45]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 9414685418733064008)
+  step 0/295: loss=0.505383
+  step 1/295: loss=0.503253
+  step 2/295: loss=0.508895
+  step 100/295: loss=0.527574
+  step 200/295: loss=0.505281
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 71/80: loss=0.509398 lr=0.000033
+  epoch 71: val_acc = 3359/3925 = 85.579618%  top5 = 3762/3925 = 95.847134%  [95% CI 84.45–86.64]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 345312026674408359)
+  step 0/295: loss=0.503333
+  step 1/295: loss=0.511640
+  step 2/295: loss=0.574410
+  step 100/295: loss=0.506832
+  step 200/295: loss=0.515622
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 72/80: loss=0.508837 lr=0.000026
+  epoch 72: val_acc = 3349/3925 = 85.324841%  top5 = 3759/3925 = 95.770701%  [95% CI 84.18–86.40]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 6322485616020749634)
+  step 0/295: loss=0.515669
+  step 1/295: loss=0.504658
+  step 2/295: loss=0.506237
+  step 100/295: loss=0.506328
+  step 200/295: loss=0.503773
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 73/80: loss=0.508556 lr=0.000020
+  epoch 73: val_acc = 3308/3925 = 84.280255%  top5 = 3734/3925 = 95.133758%  [95% CI 83.11–85.39]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 9423824218710619258)
+  step 0/295: loss=0.505693
+  step 1/295: loss=0.505642
+  step 2/295: loss=0.502429
+  step 100/295: loss=0.507033
+  step 200/295: loss=0.504765
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 74/80: loss=0.507946 lr=0.000015
+  epoch 74: val_acc = 3331/3925 = 84.866242%  top5 = 3743/3925 = 95.363057%  [95% CI 83.71–85.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 17434843886281785929)
+  step 0/295: loss=0.504389
+  step 1/295: loss=0.504108
+  step 2/295: loss=0.503005
+  step 100/295: loss=0.502142
+  step 200/295: loss=0.508206
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 75/80: loss=0.506717 lr=0.000010
+  epoch 75: val_acc = 3334/3925 = 84.942675%  top5 = 3750/3925 = 95.541401%  [95% CI 83.79–86.03]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 16595546674555677334)
+  step 0/295: loss=0.502135
+  step 1/295: loss=0.504584
+  step 2/295: loss=0.502244
+  step 100/295: loss=0.520258
+  step 200/295: loss=0.503536
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 76/80: loss=0.506836 lr=0.000007
+  epoch 76: val_acc = 3324/3925 = 84.687898%  top5 = 3731/3925 = 95.057325%  [95% CI 83.53–85.78]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 10636077755703655642)
+  step 0/295: loss=0.502258
+  step 1/295: loss=0.502234
+  step 2/295: loss=0.503542
+  step 100/295: loss=0.505978
+  step 200/295: loss=0.504139
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 77/80: loss=0.506432 lr=0.000004
+  epoch 77: val_acc = 3339/3925 = 85.070064%  top5 = 3745/3925 = 95.414013%  [95% CI 83.92–86.15]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 10006662831243254886)
+  step 0/295: loss=0.512502
+  step 1/295: loss=0.503657
+  step 2/295: loss=0.503177
+  step 100/295: loss=0.502607
+  step 200/295: loss=0.502214
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 78/80: loss=0.507610 lr=0.000002
+  epoch 78: val_acc = 3347/3925 = 85.273885%  top5 = 3754/3925 = 95.643312%  [95% CI 84.13–86.35]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 4224300702529035996)
+  step 0/295: loss=0.502389
+  step 1/295: loss=0.508970
+  step 2/295: loss=0.504909
+  step 100/295: loss=0.502537
+  step 200/295: loss=0.515733
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 79/80: loss=0.506164 lr=0.000000
+  epoch 79: val_acc = 3350/3925 = 85.350318%  top5 = 3756/3925 = 95.694268%  [95% CI 84.21–86.42]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 2901356038289431278)
+  step 0/295: loss=0.506804
+  step 1/295: loss=0.502813
+  step 2/295: loss=0.515535
+  step 100/295: loss=0.502878
+  step 200/295: loss=0.505008
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 80/80: loss=0.507173 lr=0.000000
+  epoch 80: val_acc = 3343/3925 = 85.171975%  top5 = 3746/3925 = 95.439490%  [95% CI 84.03–86.25]
+    BN companion -> .lake/build/mnv4_adam_ckpt_xla_m5pro80.bin.bn (67904 floats x 2, hash 8777241786986467494)
+done (trained MobileNetV4-Conv-M adam + cosine/warmup via packed threading).
