@@ -107,7 +107,9 @@ LEAN_MLIR_IMAGENETTE_STREAM=1 LEAN_MLIR_CKPT_TAG=<chip>80 lake run train r34
 ```
 
 ResNet-34 first: 80 epochs of AdamW at 224², batch 32, checkpointed every epoch (Ctrl-C and the
-same command resume it; never `kill -9` — the GPU also drives the display). CUDA lands at
+same command resume it, but a resumed run is a valid run and not the same run — the shuffle
+state is not in the checkpoint, so run each net in one piece where you can; never `kill -9` —
+the GPU also drives the display). CUDA lands at
 89.68–90.37 % over five seeds, the 7900 XTX at 90.47 %. Then, if the bench's estimates allow,
 `vit`, `mnv2`, `enet`, `mnv4`, `r50`, `cnx` the same way (`lake run train` with no argument lists
 them). `LEAN_MLIR_IMAGENETTE_STREAM=1` streams the train split instead of keeping 7.4 GB of it

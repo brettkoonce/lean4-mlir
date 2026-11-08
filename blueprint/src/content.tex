@@ -20019,9 +20019,10 @@ recipe, nothing else. The Imagenette tier runs there end to end, seven nets
 in a day with ConvNeXt-T as four accumulated micro-batches of eight, each
 landing within a quarter of a point of its five-seed range in
 Table~\ref{tab:imagenette_five}; \texttt{deploy/ORIN.md} is its runbook. The Mac
-is the same point on a laptop: Metal through a PJRT plugin, unified memory
-(nothing is staged to the device), float32 only (the MNIST renders use no
-float64), and \texttt{deploy/MAC.md} is its runbook. The 7900 XTX is the
+is the same point on Apple's silicon: Metal through a PJRT plugin, unified
+memory (nothing is staged to the device), float32 only (the MNIST renders use
+no float64), every rung through Imagenette on an M5 Pro Mac mini, and
+\texttt{deploy/MAC.md} is its runbook. The 7900 XTX is the
 second vendor's desktop card: AMD's PJRT plugin on the ROCm 10.1 wheels;
 \texttt{deploy/ROCM\_7900XTX.md} is its runbook.
 The Arc is the third
@@ -20033,8 +20034,7 @@ plugin loads, the shim's guards hold and the committed artifacts match
 XLA:CPU goldens, in minutes and without Lean; that is the suite rung, and
 the same run regenerates \texttt{PLATFORMS.md} and Table~\ref{tab:platforms}.
 \texttt{PLATFORMS.md} has each cell's date and a link to its record; where
-a cell is a dash, as the Mac's are above mnist, the runbook says what has
-been tried.
+a cell is a dash, the runbook says what has been tried.
 
 \medskip\noindent The last row is not a card but the second lowerer,
 \textbf{IREE}, which compiles every kernel itself and so runs where no
@@ -21806,6 +21806,10 @@ proof.
 \href{https://leanprover.zulipchat.com/}{Lean Zulip} for reviewing
 early drafts and suggesting the comparator approach used in
 Appendix~\ref{app:verification}.
+
+\noindent Thanks to \textbf{Zhaolong Zhong}
+(\href{https://zhaolongzhong.com}{zhaolongzhong.com}) for testing
+and proving out Apple silicon support.
 
 % =====================================================================
 %  Colophon — closing chapter on authorship in the AI age. SKELETON:
