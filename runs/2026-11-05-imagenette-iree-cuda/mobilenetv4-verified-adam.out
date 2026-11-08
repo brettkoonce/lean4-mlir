@@ -1,0 +1,649 @@
+→ mobilenetv4-verified-adam (GPU 3, cuda) → runs/2026-11-05-imagenette-iree-cuda/mobilenetv4-verified-adam.log
+MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/mnv4_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/mnv4_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/mnv4_fwd_eval_cuda.vmfb
+  train 9469, val 3925; bs 32, MobileNetV4-Conv-M adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/295: loss=2.709661
+  step 1/295: loss=2.649239
+  step 2/295: loss=2.515456
+  step 100/295: loss=2.102793
+  step 200/295: loss=2.081110
+Epoch 1/80: loss=2.115302 lr=0.000333
+  epoch 1: val_acc = 718/3925 = 18.292994%  top5 = 2511/3925 = 63.974522%  [95% CI 17.11–19.53]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 16890821186137931686)
+  step 0/295: loss=1.937898
+  step 1/295: loss=1.611916
+  step 2/295: loss=1.526851
+  step 100/295: loss=1.446415
+  step 200/295: loss=1.580415
+Epoch 2/80: loss=1.748913 lr=0.000667
+  epoch 2: val_acc = 938/3925 = 23.898089%  top5 = 2849/3925 = 72.585987%  [95% CI 22.59–25.26]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4279496290609864078)
+  step 0/295: loss=1.621962
+  step 1/295: loss=2.286523
+  step 2/295: loss=1.498256
+  step 100/295: loss=1.636944
+  step 200/295: loss=1.253453
+Epoch 3/80: loss=1.579906 lr=0.001000
+  epoch 3: val_acc = 1701/3925 = 43.337580%  top5 = 3460/3925 = 88.152866%  [95% CI 41.79–44.89]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 12591433045734150558)
+  step 0/295: loss=1.505926
+  step 1/295: loss=1.285772
+  step 2/295: loss=1.454984
+  step 100/295: loss=1.589507
+  step 200/295: loss=1.386076
+Epoch 4/80: loss=1.442302 lr=0.001000
+  epoch 4: val_acc = 1860/3925 = 47.388535%  top5 = 3085/3925 = 78.598726%  [95% CI 45.83–48.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 1305439997484538288)
+  step 0/295: loss=1.265164
+  step 1/295: loss=1.474312
+  step 2/295: loss=1.354996
+  step 100/295: loss=1.408216
+  step 200/295: loss=1.340162
+Epoch 5/80: loss=1.317181 lr=0.000998
+  epoch 5: val_acc = 1273/3925 = 32.433121%  top5 = 2995/3925 = 76.305732%  [95% CI 30.99–33.91]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11759309277939042719)
+  step 0/295: loss=1.320599
+  step 1/295: loss=1.022839
+  step 2/295: loss=1.091274
+  step 100/295: loss=1.354249
+  step 200/295: loss=1.650750
+Epoch 6/80: loss=1.247854 lr=0.000996
+  epoch 6: val_acc = 1984/3925 = 50.547771%  top5 = 3464/3925 = 88.254777%  [95% CI 48.98–52.11]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 3926223412827342070)
+  step 0/295: loss=0.965161
+  step 1/295: loss=1.207695
+  step 2/295: loss=0.937021
+  step 100/295: loss=1.363269
+  step 200/295: loss=1.315566
+Epoch 7/80: loss=1.227970 lr=0.000993
+  epoch 7: val_acc = 2614/3925 = 66.598726%  top5 = 3718/3925 = 94.726115%  [95% CI 65.11–68.06]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6648633889799945025)
+  step 0/295: loss=1.098582
+  step 1/295: loss=1.446800
+  step 2/295: loss=1.542945
+  step 100/295: loss=1.209354
+  step 200/295: loss=1.040772
+Epoch 8/80: loss=1.143561 lr=0.000990
+  epoch 8: val_acc = 2776/3925 = 70.726115%  top5 = 3781/3925 = 96.331210%  [95% CI 69.28–72.13]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11282815600053415009)
+  step 0/295: loss=0.965534
+  step 1/295: loss=0.864712
+  step 2/295: loss=1.033422
+  step 100/295: loss=0.914507
+  step 200/295: loss=1.063443
+Epoch 9/80: loss=1.121339 lr=0.000985
+  epoch 9: val_acc = 2569/3925 = 65.452229%  top5 = 3712/3925 = 94.573248%  [95% CI 63.95–66.92]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9958372503284904142)
+  step 0/295: loss=1.139436
+  step 1/295: loss=0.966237
+  step 2/295: loss=0.772594
+  step 100/295: loss=1.237424
+  step 200/295: loss=0.974975
+Epoch 10/80: loss=1.113216 lr=0.000980
+  epoch 10: val_acc = 2248/3925 = 57.273885%  top5 = 3631/3925 = 92.509554%  [95% CI 55.72–58.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 8337946704776208547)
+  step 0/295: loss=1.094524
+  step 1/295: loss=1.192952
+  step 2/295: loss=1.410106
+  step 100/295: loss=1.184693
+  step 200/295: loss=1.192587
+Epoch 11/80: loss=1.198141 lr=0.000974
+  epoch 11: val_acc = 2518/3925 = 64.152866%  top5 = 3570/3925 = 90.955414%  [95% CI 62.64–65.64]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4723187693359472165)
+  step 0/295: loss=1.317901
+  step 1/295: loss=0.998873
+  step 2/295: loss=1.204232
+  step 100/295: loss=0.986363
+  step 200/295: loss=0.976558
+Epoch 12/80: loss=1.096899 lr=0.000967
+  epoch 12: val_acc = 2456/3925 = 62.573248%  top5 = 3615/3925 = 92.101911%  [95% CI 61.05–64.07]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 18378829616595339822)
+  step 0/295: loss=1.167984
+  step 1/295: loss=1.236654
+  step 2/295: loss=1.427316
+  step 100/295: loss=1.053757
+  step 200/295: loss=1.028286
+Epoch 13/80: loss=1.021983 lr=0.000959
+  epoch 13: val_acc = 2414/3925 = 61.503185%  top5 = 3622/3925 = 92.280255%  [95% CI 59.97–63.01]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 14834394490722753339)
+  step 0/295: loss=0.887904
+  step 1/295: loss=0.954692
+  step 2/295: loss=1.155873
+  step 100/295: loss=0.932999
+  step 200/295: loss=1.082499
+Epoch 14/80: loss=1.125379 lr=0.000951
+  epoch 14: val_acc = 2463/3925 = 62.751592%  top5 = 3467/3925 = 88.331210%  [95% CI 61.23–64.25]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 17337937590714104171)
+  step 0/295: loss=1.175070
+  step 1/295: loss=1.162478
+  step 2/295: loss=0.925987
+  step 100/295: loss=1.065242
+  step 200/295: loss=0.881820
+Epoch 15/80: loss=1.160979 lr=0.000941
+  epoch 15: val_acc = 2634/3925 = 67.108280%  top5 = 3675/3925 = 93.630573%  [95% CI 65.62–68.56]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6004140258837349817)
+  step 0/295: loss=1.313584
+  step 1/295: loss=1.026125
+  step 2/295: loss=0.872900
+  step 100/295: loss=1.163942
+  step 200/295: loss=0.816472
+Epoch 16/80: loss=1.006402 lr=0.000931
+  epoch 16: val_acc = 2540/3925 = 64.713376%  top5 = 3694/3925 = 94.114650%  [95% CI 63.20–66.19]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 17700812420962571999)
+  step 0/295: loss=1.084210
+  step 1/295: loss=1.069549
+  step 2/295: loss=0.913382
+  step 100/295: loss=0.846293
+  step 200/295: loss=1.009102
+Epoch 17/80: loss=1.006340 lr=0.000921
+  epoch 17: val_acc = 2897/3925 = 73.808917%  top5 = 3709/3925 = 94.496815%  [95% CI 72.41–75.16]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 13548330370744859907)
+  step 0/295: loss=0.895163
+  step 1/295: loss=0.717133
+  step 2/295: loss=0.958730
+  step 100/295: loss=0.800657
+  step 200/295: loss=0.849148
+Epoch 18/80: loss=0.927221 lr=0.000909
+  epoch 18: val_acc = 2855/3925 = 72.738854%  top5 = 3782/3925 = 96.356688%  [95% CI 71.32–74.11]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 528900427211021539)
+  step 0/295: loss=0.744952
+  step 1/295: loss=0.647058
+  step 2/295: loss=0.716909
+  step 100/295: loss=0.715030
+  step 200/295: loss=1.016073
+Epoch 19/80: loss=1.001418 lr=0.000897
+  epoch 19: val_acc = 2071/3925 = 52.764331%  top5 = 3486/3925 = 88.815287%  [95% CI 51.20–54.32]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 1953966931338054728)
+  step 0/295: loss=1.126240
+  step 1/295: loss=1.107027
+  step 2/295: loss=1.315613
+  step 100/295: loss=1.072829
+  step 200/295: loss=0.856386
+Epoch 20/80: loss=1.063840 lr=0.000885
+  epoch 20: val_acc = 2904/3925 = 73.987261%  top5 = 3702/3925 = 94.318471%  [95% CI 72.59–75.34]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6990849030617104069)
+  step 0/295: loss=0.936924
+  step 1/295: loss=0.754420
+  step 2/295: loss=0.891899
+  step 100/295: loss=0.848747
+  step 200/295: loss=0.773533
+Epoch 21/80: loss=0.903583 lr=0.000871
+  epoch 21: val_acc = 3043/3925 = 77.528662%  top5 = 3761/3925 = 95.821656%  [95% CI 76.20–78.81]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 16399927300158555888)
+  step 0/295: loss=0.756869
+  step 1/295: loss=0.961099
+  step 2/295: loss=0.918959
+  step 100/295: loss=1.067736
+  step 200/295: loss=1.218549
+Epoch 22/80: loss=1.068257 lr=0.000857
+  epoch 22: val_acc = 2786/3925 = 70.980892%  top5 = 3759/3925 = 95.770701%  [95% CI 69.54–72.38]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 15573473926407548600)
+  step 0/295: loss=1.005657
+  step 1/295: loss=0.893495
+  step 2/295: loss=0.765094
+  step 100/295: loss=1.016939
+  step 200/295: loss=1.000052
+Epoch 23/80: loss=0.928444 lr=0.000843
+  epoch 23: val_acc = 3152/3925 = 80.305732%  top5 = 3825/3925 = 97.452229%  [95% CI 79.03–81.52]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 3565080842239265889)
+  step 0/295: loss=0.844713
+  step 1/295: loss=0.826266
+  step 2/295: loss=0.829665
+  step 100/295: loss=1.053554
+  step 200/295: loss=0.887765
+Epoch 24/80: loss=0.870895 lr=0.000827
+  epoch 24: val_acc = 2849/3925 = 72.585987%  top5 = 3768/3925 = 96.000000%  [95% CI 71.17–73.96]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 10308874951228640943)
+  step 0/295: loss=0.757990
+  step 1/295: loss=1.040402
+  step 2/295: loss=0.806658
+  step 100/295: loss=0.714137
+  step 200/295: loss=0.872577
+Epoch 25/80: loss=0.830534 lr=0.000812
+  epoch 25: val_acc = 3019/3925 = 76.917197%  top5 = 3820/3925 = 97.324841%  [95% CI 75.57–78.21]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 8190032126616044178)
+  step 0/295: loss=0.716196
+  step 1/295: loss=0.690025
+  step 2/295: loss=0.745550
+  step 100/295: loss=0.843009
+  step 200/295: loss=1.078929
+Epoch 26/80: loss=0.904969 lr=0.000796
+  epoch 26: val_acc = 2985/3925 = 76.050955%  top5 = 3728/3925 = 94.980892%  [95% CI 74.69–77.36]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 15734312387292642781)
+  step 0/295: loss=1.061990
+  step 1/295: loss=0.738397
+  step 2/295: loss=0.766368
+  step 100/295: loss=0.639927
+  step 200/295: loss=0.799482
+Epoch 27/80: loss=0.825238 lr=0.000779
+  epoch 27: val_acc = 3160/3925 = 80.509554%  top5 = 3845/3925 = 97.961783%  [95% CI 79.24–81.72]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 14042613199826494442)
+  step 0/295: loss=0.629392
+  step 1/295: loss=0.751304
+  step 2/295: loss=0.803409
+  step 100/295: loss=0.733764
+  step 200/295: loss=0.944324
+Epoch 28/80: loss=0.779631 lr=0.000762
+  epoch 28: val_acc = 3158/3925 = 80.458599%  top5 = 3821/3925 = 97.350318%  [95% CI 79.19–81.67]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11474340171735139411)
+  step 0/295: loss=0.712522
+  step 1/295: loss=0.651674
+  step 2/295: loss=0.614816
+  step 100/295: loss=1.088255
+  step 200/295: loss=0.675780
+Epoch 29/80: loss=0.791822 lr=0.000744
+  epoch 29: val_acc = 2652/3925 = 67.566879%  top5 = 3623/3925 = 92.305732%  [95% CI 66.09–69.01]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11660474723222268360)
+  step 0/295: loss=0.921271
+  step 1/295: loss=0.831152
+  step 2/295: loss=1.041584
+  step 100/295: loss=0.621952
+  step 200/295: loss=1.027396
+Epoch 30/80: loss=0.822131 lr=0.000726
+  epoch 30: val_acc = 2807/3925 = 71.515924%  top5 = 3567/3925 = 90.878981%  [95% CI 70.08–72.91]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 12175401840495955638)
+  step 0/295: loss=0.818036
+  step 1/295: loss=1.027299
+  step 2/295: loss=1.003912
+  step 100/295: loss=0.758664
+  step 200/295: loss=0.685005
+Epoch 31/80: loss=0.770498 lr=0.000708
+  epoch 31: val_acc = 3055/3925 = 77.834395%  top5 = 3757/3925 = 95.719745%  [95% CI 76.51–79.11]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11035657777564352290)
+  step 0/295: loss=0.733022
+  step 1/295: loss=0.661305
+  step 2/295: loss=0.890908
+  step 100/295: loss=0.611005
+  step 200/295: loss=0.647571
+Epoch 32/80: loss=0.734875 lr=0.000689
+  epoch 32: val_acc = 3040/3925 = 77.452229%  top5 = 3712/3925 = 94.573248%  [95% CI 76.12–78.73]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 15952234145148373970)
+  step 0/295: loss=0.628060
+  step 1/295: loss=0.660775
+  step 2/295: loss=0.697199
+  step 100/295: loss=0.943322
+  step 200/295: loss=0.828965
+Epoch 33/80: loss=0.870534 lr=0.000670
+  epoch 33: val_acc = 3130/3925 = 79.745223%  top5 = 3814/3925 = 97.171975%  [95% CI 78.46–80.97]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 13424486333846902543)
+  step 0/295: loss=0.650501
+  step 1/295: loss=0.734688
+  step 2/295: loss=0.623936
+  step 100/295: loss=0.729984
+  step 200/295: loss=0.680650
+Epoch 34/80: loss=0.772635 lr=0.000651
+  epoch 34: val_acc = 3199/3925 = 81.503185%  top5 = 3833/3925 = 97.656051%  [95% CI 80.26–82.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6446184956152941692)
+  step 0/295: loss=0.784121
+  step 1/295: loss=0.812074
+  step 2/295: loss=0.596567
+  step 100/295: loss=0.709056
+  step 200/295: loss=0.759813
+Epoch 35/80: loss=0.731754 lr=0.000631
+  epoch 35: val_acc = 3249/3925 = 82.777070%  top5 = 3787/3925 = 96.484076%  [95% CI 81.56–83.93]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 10485164034820425518)
+  step 0/295: loss=0.608422
+  step 1/295: loss=0.700223
+  step 2/295: loss=0.614658
+  step 100/295: loss=0.694954
+  step 200/295: loss=0.966594
+Epoch 36/80: loss=0.803616 lr=0.000611
+  epoch 36: val_acc = 3068/3925 = 78.165605%  top5 = 3809/3925 = 97.044586%  [95% CI 76.85–79.43]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 13905836787468574387)
+  step 0/295: loss=0.743222
+  step 1/295: loss=0.759313
+  step 2/295: loss=0.728287
+  step 100/295: loss=0.701779
+  step 200/295: loss=0.674446
+Epoch 37/80: loss=0.777065 lr=0.000591
+  epoch 37: val_acc = 2731/3925 = 69.579618%  top5 = 3719/3925 = 94.751592%  [95% CI 68.12–71.00]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6910504782347788559)
+  step 0/295: loss=0.784556
+  step 1/295: loss=0.826008
+  step 2/295: loss=0.809559
+  step 100/295: loss=0.901138
+  step 200/295: loss=0.626851
+Epoch 38/80: loss=0.774684 lr=0.000571
+  epoch 38: val_acc = 3234/3925 = 82.394904%  top5 = 3849/3925 = 98.063694%  [95% CI 81.17–83.55]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 12039604558847558675)
+  step 0/295: loss=0.657254
+  step 1/295: loss=0.689538
+  step 2/295: loss=0.605295
+  step 100/295: loss=0.802555
+  step 200/295: loss=0.671893
+Epoch 39/80: loss=0.678190 lr=0.000551
+  epoch 39: val_acc = 3166/3925 = 80.662420%  top5 = 3747/3925 = 95.464968%  [95% CI 79.40–81.87]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 7014558167470374426)
+  step 0/295: loss=0.666804
+  step 1/295: loss=0.669179
+  step 2/295: loss=0.629378
+  step 100/295: loss=0.560247
+  step 200/295: loss=0.635919
+Epoch 40/80: loss=0.638170 lr=0.000531
+  epoch 40: val_acc = 3186/3925 = 81.171975%  top5 = 3762/3925 = 95.847134%  [95% CI 79.92–82.36]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6777693066470687038)
+  step 0/295: loss=0.596098
+  step 1/295: loss=0.559888
+  step 2/295: loss=0.585019
+  step 100/295: loss=0.553466
+  step 200/295: loss=0.683314
+Epoch 41/80: loss=0.643928 lr=0.000510
+  epoch 41: val_acc = 3275/3925 = 83.439490%  top5 = 3767/3925 = 95.974522%  [95% CI 82.24–84.57]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 3778423437855430311)
+  step 0/295: loss=0.546695
+  step 1/295: loss=0.572846
+  step 2/295: loss=0.537637
+  step 100/295: loss=0.603804
+  step 200/295: loss=0.563530
+Epoch 42/80: loss=0.616982 lr=0.000490
+  epoch 42: val_acc = 3037/3925 = 77.375796%  top5 = 3692/3925 = 94.063694%  [95% CI 76.04–78.66]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 10498626055604399892)
+  step 0/295: loss=0.601349
+  step 1/295: loss=0.606058
+  step 2/295: loss=0.593979
+  step 100/295: loss=0.554344
+  step 200/295: loss=0.755203
+Epoch 43/80: loss=0.676866 lr=0.000469
+  epoch 43: val_acc = 3129/3925 = 79.719745%  top5 = 3699/3925 = 94.242038%  [95% CI 78.43–80.95]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 12160885917983579174)
+  step 0/295: loss=0.649916
+  step 1/295: loss=0.550749
+  step 2/295: loss=0.662420
+  step 100/295: loss=0.630747
+  step 200/295: loss=0.540505
+Epoch 44/80: loss=0.646044 lr=0.000449
+  epoch 44: val_acc = 3261/3925 = 83.082803%  top5 = 3767/3925 = 95.974522%  [95% CI 81.88–84.22]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 3373075521905700594)
+  step 0/295: loss=0.526011
+  step 1/295: loss=0.552408
+  step 2/295: loss=0.662041
+  step 100/295: loss=0.630224
+  step 200/295: loss=0.532867
+Epoch 45/80: loss=0.598010 lr=0.000429
+  epoch 45: val_acc = 3225/3925 = 82.165605%  top5 = 3728/3925 = 94.980892%  [95% CI 80.94–83.33]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 7706653141503277470)
+  step 0/295: loss=0.657315
+  step 1/295: loss=0.543810
+  step 2/295: loss=0.580036
+  step 100/295: loss=0.575212
+  step 200/295: loss=0.686642
+Epoch 46/80: loss=0.587478 lr=0.000409
+  epoch 46: val_acc = 3322/3925 = 84.636943%  top5 = 3798/3925 = 96.764331%  [95% CI 83.48–85.73]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 10743404251824568341)
+  step 0/295: loss=0.548487
+  step 1/295: loss=0.545046
+  step 2/295: loss=0.626936
+  step 100/295: loss=0.513681
+  step 200/295: loss=0.584753
+Epoch 47/80: loss=0.568778 lr=0.000389
+  epoch 47: val_acc = 3287/3925 = 83.745223%  top5 = 3792/3925 = 96.611465%  [95% CI 82.56–84.87]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 7455561522755561924)
+  step 0/295: loss=0.603113
+  step 1/295: loss=0.566534
+  step 2/295: loss=0.526071
+  step 100/295: loss=0.534529
+  step 200/295: loss=0.571225
+Epoch 48/80: loss=0.561685 lr=0.000369
+  epoch 48: val_acc = 3322/3925 = 84.636943%  top5 = 3801/3925 = 96.840764%  [95% CI 83.48–85.73]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 18105887428240433563)
+  step 0/295: loss=0.558376
+  step 1/295: loss=0.554977
+  step 2/295: loss=0.527947
+  step 100/295: loss=0.586498
+  step 200/295: loss=0.519442
+Epoch 49/80: loss=0.555841 lr=0.000349
+  epoch 49: val_acc = 3288/3925 = 83.770701%  top5 = 3834/3925 = 97.681529%  [95% CI 82.58–84.89]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4819349320069428559)
+  step 0/295: loss=0.510023
+  step 1/295: loss=0.558415
+  step 2/295: loss=0.535666
+  step 100/295: loss=0.568968
+  step 200/295: loss=0.564238
+Epoch 50/80: loss=0.560253 lr=0.000330
+  epoch 50: val_acc = 3337/3925 = 85.019108%  top5 = 3786/3925 = 96.458599%  [95% CI 83.87–86.10]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6107571061183380515)
+  step 0/295: loss=0.562652
+  step 1/295: loss=0.584865
+  step 2/295: loss=0.510513
+  step 100/295: loss=0.522797
+  step 200/295: loss=0.626693
+Epoch 51/80: loss=0.548775 lr=0.000311
+  epoch 51: val_acc = 3289/3925 = 83.796178%  top5 = 3768/3925 = 96.000000%  [95% CI 82.61–84.92]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 8221134794653932222)
+  step 0/295: loss=0.509926
+  step 1/295: loss=0.569934
+  step 2/295: loss=0.533061
+  step 100/295: loss=0.547825
+  step 200/295: loss=0.537405
+Epoch 52/80: loss=0.562689 lr=0.000292
+  epoch 52: val_acc = 3311/3925 = 84.356688%  top5 = 3772/3925 = 96.101911%  [95% CI 83.19–85.46]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 5691358539667696560)
+  step 0/295: loss=0.534697
+  step 1/295: loss=0.542738
+  step 2/295: loss=0.523323
+  step 100/295: loss=0.568995
+  step 200/295: loss=0.648335
+Epoch 53/80: loss=0.551283 lr=0.000274
+  epoch 53: val_acc = 3286/3925 = 83.719745%  top5 = 3753/3925 = 95.617834%  [95% CI 82.53–84.84]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 15895018630984380932)
+  step 0/295: loss=0.513861
+  step 1/295: loss=0.551652
+  step 2/295: loss=0.574256
+  step 100/295: loss=0.510709
+  step 200/295: loss=0.557913
+Epoch 54/80: loss=0.539674 lr=0.000256
+  epoch 54: val_acc = 3320/3925 = 84.585987%  top5 = 3752/3925 = 95.592357%  [95% CI 83.42–85.68]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 17122688962629311021)
+  step 0/295: loss=0.511499
+  step 1/295: loss=0.540528
+  step 2/295: loss=0.531797
+  step 100/295: loss=0.527966
+  step 200/295: loss=0.519123
+Epoch 55/80: loss=0.532392 lr=0.000238
+  epoch 55: val_acc = 3343/3925 = 85.171975%  top5 = 3777/3925 = 96.229299%  [95% CI 84.03–86.25]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 2137284640763091860)
+  step 0/295: loss=0.507795
+  step 1/295: loss=0.517827
+  step 2/295: loss=0.506090
+  step 100/295: loss=0.514638
+  step 200/295: loss=0.730963
+Epoch 56/80: loss=0.530715 lr=0.000221
+  epoch 56: val_acc = 3344/3925 = 85.197452%  top5 = 3772/3925 = 96.101911%  [95% CI 84.05–86.27]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 11834015689152230696)
+  step 0/295: loss=0.517209
+  step 1/295: loss=0.515577
+  step 2/295: loss=0.506192
+  step 100/295: loss=0.517596
+  step 200/295: loss=0.522235
+Epoch 57/80: loss=0.529644 lr=0.000205
+  epoch 57: val_acc = 3313/3925 = 84.407643%  top5 = 3747/3925 = 95.464968%  [95% CI 83.24–85.51]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 8354994112860845529)
+  step 0/295: loss=0.523943
+  step 1/295: loss=0.507534
+  step 2/295: loss=0.530740
+  step 100/295: loss=0.511415
+  step 200/295: loss=0.507925
+Epoch 58/80: loss=0.526379 lr=0.000188
+  epoch 58: val_acc = 3327/3925 = 84.764331%  top5 = 3756/3925 = 95.694268%  [95% CI 83.61–85.85]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 6964939125543152453)
+  step 0/295: loss=0.514216
+  step 1/295: loss=0.506641
+  step 2/295: loss=0.517312
+  step 100/295: loss=0.515093
+  step 200/295: loss=0.536423
+Epoch 59/80: loss=0.520106 lr=0.000173
+  epoch 59: val_acc = 3324/3925 = 84.687898%  top5 = 3743/3925 = 95.363057%  [95% CI 83.53–85.78]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 10438982255165509416)
+  step 0/295: loss=0.512621
+  step 1/295: loss=0.519435
+  step 2/295: loss=0.605440
+  step 100/295: loss=0.509369
+  step 200/295: loss=0.534069
+Epoch 60/80: loss=0.519057 lr=0.000157
+  epoch 60: val_acc = 3349/3925 = 85.324841%  top5 = 3787/3925 = 96.484076%  [95% CI 84.18–86.40]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4754211538684174889)
+  step 0/295: loss=0.537254
+  step 1/295: loss=0.502813
+  step 2/295: loss=0.510218
+  step 100/295: loss=0.506737
+  step 200/295: loss=0.548641
+Epoch 61/80: loss=0.516825 lr=0.000143
+  epoch 61: val_acc = 3290/3925 = 83.821656%  top5 = 3740/3925 = 95.286624%  [95% CI 82.64–84.94]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 2819955324187432104)
+  step 0/295: loss=0.521373
+  step 1/295: loss=0.513334
+  step 2/295: loss=0.527760
+  step 100/295: loss=0.527569
+  step 200/295: loss=0.546333
+Epoch 62/80: loss=0.519539 lr=0.000129
+  epoch 62: val_acc = 3361/3925 = 85.630573%  top5 = 3790/3925 = 96.560510%  [95% CI 84.50–86.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 7433028263787520137)
+  step 0/295: loss=0.503893
+  step 1/295: loss=0.510266
+  step 2/295: loss=0.503354
+  step 100/295: loss=0.539123
+  step 200/295: loss=0.510397
+Epoch 63/80: loss=0.516669 lr=0.000116
+  epoch 63: val_acc = 3343/3925 = 85.171975%  top5 = 3760/3925 = 95.796178%  [95% CI 84.03–86.25]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9074412559903242281)
+  step 0/295: loss=0.518593
+  step 1/295: loss=0.504129
+  step 2/295: loss=0.525998
+  step 100/295: loss=0.509128
+  step 200/295: loss=0.506274
+Epoch 64/80: loss=0.511522 lr=0.000103
+  epoch 64: val_acc = 3335/3925 = 84.968153%  top5 = 3742/3925 = 95.337580%  [95% CI 83.82–86.05]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 2684834753845959958)
+  step 0/295: loss=0.511737
+  step 1/295: loss=0.508437
+  step 2/295: loss=0.503792
+  step 100/295: loss=0.503890
+  step 200/295: loss=0.502830
+Epoch 65/80: loss=0.510415 lr=0.000091
+  epoch 65: val_acc = 3342/3925 = 85.146497%  top5 = 3745/3925 = 95.414013%  [95% CI 84.00–86.22]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 13069377954677765149)
+  step 0/295: loss=0.502051
+  step 1/295: loss=0.503155
+  step 2/295: loss=0.502099
+  step 100/295: loss=0.502861
+  step 200/295: loss=0.503244
+Epoch 66/80: loss=0.509461 lr=0.000079
+  epoch 66: val_acc = 3362/3925 = 85.656051%  top5 = 3758/3925 = 95.745223%  [95% CI 84.52–86.72]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 16659541738536330824)
+  step 0/295: loss=0.507068
+  step 1/295: loss=0.508655
+  step 2/295: loss=0.503227
+  step 100/295: loss=0.511622
+  step 200/295: loss=0.523301
+Epoch 67/80: loss=0.508677 lr=0.000069
+  epoch 67: val_acc = 3354/3925 = 85.452229%  top5 = 3754/3925 = 95.643312%  [95% CI 84.31–86.52]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4432550187521078345)
+  step 0/295: loss=0.511648
+  step 1/295: loss=0.514102
+  step 2/295: loss=0.504590
+  step 100/295: loss=0.510884
+  step 200/295: loss=0.510474
+Epoch 68/80: loss=0.511375 lr=0.000059
+  epoch 68: val_acc = 3350/3925 = 85.350318%  top5 = 3743/3925 = 95.363057%  [95% CI 84.21–86.42]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9521490987375739304)
+  step 0/295: loss=0.509332
+  step 1/295: loss=0.502970
+  step 2/295: loss=0.512123
+  step 100/295: loss=0.536500
+  step 200/295: loss=0.502670
+Epoch 69/80: loss=0.508515 lr=0.000050
+  epoch 69: val_acc = 3365/3925 = 85.732484%  top5 = 3754/3925 = 95.643312%  [95% CI 84.60–86.79]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 335087872058166768)
+  step 0/295: loss=0.508214
+  step 1/295: loss=0.502110
+  step 2/295: loss=0.504435
+  step 100/295: loss=0.506822
+  step 200/295: loss=0.503092
+Epoch 70/80: loss=0.506410 lr=0.000041
+  epoch 70: val_acc = 3353/3925 = 85.426752%  top5 = 3739/3925 = 95.261146%  [95% CI 84.29–86.50]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 5112138930300143021)
+  step 0/295: loss=0.502409
+  step 1/295: loss=0.503155
+  step 2/295: loss=0.503317
+  step 100/295: loss=0.507338
+  step 200/295: loss=0.502610
+Epoch 71/80: loss=0.507120 lr=0.000033
+  epoch 71: val_acc = 3361/3925 = 85.630573%  top5 = 3749/3925 = 95.515924%  [95% CI 84.50–86.69]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 5797682775201076549)
+  step 0/295: loss=0.502542
+  step 1/295: loss=0.520681
+  step 2/295: loss=0.515017
+  step 100/295: loss=0.502595
+  step 200/295: loss=0.518436
+Epoch 72/80: loss=0.505911 lr=0.000026
+  epoch 72: val_acc = 3355/3925 = 85.477707%  top5 = 3745/3925 = 95.414013%  [95% CI 84.34–86.55]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4147088189413358803)
+  step 0/295: loss=0.518649
+  step 1/295: loss=0.502379
+  step 2/295: loss=0.503493
+  step 100/295: loss=0.506347
+  step 200/295: loss=0.501955
+Epoch 73/80: loss=0.506402 lr=0.000020
+  epoch 73: val_acc = 3368/3925 = 85.808917%  top5 = 3760/3925 = 95.796178%  [95% CI 84.68–86.87]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4027466615663916476)
+  step 0/295: loss=0.504192
+  step 1/295: loss=0.502146
+  step 2/295: loss=0.513869
+  step 100/295: loss=0.502117
+  step 200/295: loss=0.502240
+Epoch 74/80: loss=0.505935 lr=0.000015
+  epoch 74: val_acc = 3374/3925 = 85.961783%  top5 = 3754/3925 = 95.643312%  [95% CI 84.84–87.01]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9273869336487387790)
+  step 0/295: loss=0.505856
+  step 1/295: loss=0.501477
+  step 2/295: loss=0.501498
+  step 100/295: loss=0.503603
+  step 200/295: loss=0.502541
+Epoch 75/80: loss=0.506408 lr=0.000010
+  epoch 75: val_acc = 3383/3925 = 86.191083%  top5 = 3767/3925 = 95.974522%  [95% CI 85.08–87.24]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9431386157409981617)
+  step 0/295: loss=0.501400
+  step 1/295: loss=0.503331
+  step 2/295: loss=0.501511
+  step 100/295: loss=0.521422
+  step 200/295: loss=0.502087
+Epoch 76/80: loss=0.505517 lr=0.000007
+  epoch 76: val_acc = 3360/3925 = 85.605096%  top5 = 3743/3925 = 95.363057%  [95% CI 84.47–86.67]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 14584979755389950158)
+  step 0/295: loss=0.501979
+  step 1/295: loss=0.501703
+  step 2/295: loss=0.505509
+  step 100/295: loss=0.508808
+  step 200/295: loss=0.503252
+Epoch 77/80: loss=0.505300 lr=0.000004
+  epoch 77: val_acc = 3367/3925 = 85.783439%  top5 = 3753/3925 = 95.617834%  [95% CI 84.66–86.84]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 644501744092789129)
+  step 0/295: loss=0.502518
+  step 1/295: loss=0.504893
+  step 2/295: loss=0.501807
+  step 100/295: loss=0.502868
+  step 200/295: loss=0.501758
+Epoch 78/80: loss=0.505202 lr=0.000002
+  epoch 78: val_acc = 3370/3925 = 85.859873%  top5 = 3752/3925 = 95.592357%  [95% CI 84.73–86.91]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 4216243843882468486)
+  step 0/295: loss=0.501475
+  step 1/295: loss=0.502453
+  step 2/295: loss=0.502237
+  step 100/295: loss=0.502585
+  step 200/295: loss=0.508425
+Epoch 79/80: loss=0.505120 lr=0.000000
+  epoch 79: val_acc = 3375/3925 = 85.987261%  top5 = 3753/3925 = 95.617834%  [95% CI 84.87–87.04]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 15586715274983067835)
+  step 0/295: loss=0.503794
+  step 1/295: loss=0.501482
+  step 2/295: loss=0.516464
+  step 100/295: loss=0.501837
+  step 200/295: loss=0.506272
+Epoch 80/80: loss=0.506013 lr=0.000000
+  epoch 80: val_acc = 3369/3925 = 85.834395%  top5 = 3752/3925 = 95.592357%  [95% CI 84.71–86.89]
+    BN companion -> .lake/build/mnv4_adam_ckpt_iree.bin.bn (67904 floats x 2, hash 9812565511244129046)
+done (trained MobileNetV4-Conv-M adam + cosine/warmup via packed threading).

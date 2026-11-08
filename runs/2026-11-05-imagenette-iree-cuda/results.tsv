@@ -1,0 +1,9 @@
+# `lake run imagenette-iree`'s seven binaries, IREE 3.12.0 on one RTX 4060 Ti each (cuda, sm_86 PTX), ares, 2026-11-05/06: 80 epochs, the final top-1 against XLA/CUDA's five seeds per net (runs/2026-08-31-imagenette-n3), except ConvNeXt-T (LayerScale 1e-6 recipe: the one CUDA run, runs/2026-09-13-convnext-imagenette-ls1e-6-resident, 82.27 %) and MobileNetV4 (timm conv_medium rebuild of 2026-09-25: no post-rebuild 80-epoch CUDA run on record; the pre-rebuild seeds are shown).
+net	top1	top5	xla_ref	verdict	wall	epochs_done
+resnet34-verified-adam	89.76 %	98.52 %	89.68–90.37 (5 seeds)	inside	40.62 h	80/80
+resnet50-verified-adam	90.17 %	98.75 %	89.58–89.96 (5 seeds)	over by 0.20 pt = 8.0 images	47.47 h	80/80
+mobilenetv2-verified-adam	88.89 %	98.70 %	88.74–89.32 (5 seeds)	inside	19.32 h	80/80
+mobilenetv4-verified-adam	85.83 %	95.59 %	85.15–86.90 (5 seeds)	inside (pre-rebuild seeds)	24.40 h	80/80
+efficientnet-verified-adam	89.86 %	98.32 %	89.45–90.50 (5 seeds)	inside	21.45 h	80/80
+convnext-verified-adam	82.17 %	95.80 %	82.27–82.27 (one run)	under by 0.10 pt = 4.1 images	33.96 h	80/80
+vit-verified-adam	67.90 %	90.22 %	67.82–69.17 (5 seeds)	inside	64.37 h	80/80

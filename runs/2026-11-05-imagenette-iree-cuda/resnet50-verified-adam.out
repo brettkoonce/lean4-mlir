@@ -1,0 +1,649 @@
+→ resnet50-verified-adam (GPU 1, cuda) → runs/2026-11-05-imagenette-iree-cuda/resnet50-verified-adam.log
+ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/resnet50_adam_train_step_cuda.vmfb
+  (cached vmfb) .lake/build/resnet50_fwd_cuda.vmfb
+  (cached vmfb) .lake/build/resnet50_fwd_eval_cuda.vmfb
+  train 9469, val 3925; bs 32, ResNet-50 (Imagenette) adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/295: loss=3.358058
+  step 1/295: loss=2.981784
+  step 2/295: loss=3.329058
+  step 100/295: loss=2.428697
+  step 200/295: loss=2.103416
+Epoch 1/80: loss=2.219948 lr=0.000333
+  epoch 1: val_acc = 772/3925 = 19.668790%  top5 = 2404/3925 = 61.248408%  [95% CI 18.46–20.94]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8461994211137156283)
+  step 0/295: loss=1.924175
+  step 1/295: loss=1.842259
+  step 2/295: loss=1.838004
+  step 100/295: loss=1.802268
+  step 200/295: loss=1.746127
+Epoch 2/80: loss=1.948518 lr=0.000667
+  epoch 2: val_acc = 1222/3925 = 31.133758%  top5 = 2776/3925 = 70.726115%  [95% CI 29.70–32.60]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13032475925025649734)
+  step 0/295: loss=2.027485
+  step 1/295: loss=2.464640
+  step 2/295: loss=2.237073
+  step 100/295: loss=1.492848
+  step 200/295: loss=1.430436
+Epoch 3/80: loss=1.703171 lr=0.001000
+  epoch 3: val_acc = 1777/3925 = 45.273885%  top5 = 3324/3925 = 84.687898%  [95% CI 43.72–46.83]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 6816176756722261284)
+  step 0/295: loss=1.484507
+  step 1/295: loss=1.129869
+  step 2/295: loss=1.466921
+  step 100/295: loss=1.496632
+  step 200/295: loss=1.485545
+Epoch 4/80: loss=1.488204 lr=0.001000
+  epoch 4: val_acc = 1978/3925 = 50.394904%  top5 = 3320/3925 = 84.585987%  [95% CI 48.83–51.96]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 6335934070675158982)
+  step 0/295: loss=1.527580
+  step 1/295: loss=1.528873
+  step 2/295: loss=1.214792
+  step 100/295: loss=1.533660
+  step 200/295: loss=1.165930
+Epoch 5/80: loss=1.316120 lr=0.000998
+  epoch 5: val_acc = 2025/3925 = 51.592357%  top5 = 3510/3925 = 89.426752%  [95% CI 50.03–53.15]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12643587559075463253)
+  step 0/295: loss=1.321435
+  step 1/295: loss=1.119979
+  step 2/295: loss=1.182346
+  step 100/295: loss=1.164937
+  step 200/295: loss=1.194850
+Epoch 6/80: loss=1.227888 lr=0.000996
+  epoch 6: val_acc = 2276/3925 = 57.987261%  top5 = 3410/3925 = 86.878981%  [95% CI 56.44–59.52]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 9954090777003647852)
+  step 0/295: loss=1.230084
+  step 1/295: loss=1.318580
+  step 2/295: loss=1.120120
+  step 100/295: loss=1.231660
+  step 200/295: loss=1.263971
+Epoch 7/80: loss=1.185499 lr=0.000993
+  epoch 7: val_acc = 2494/3925 = 63.541401%  top5 = 3713/3925 = 94.598726%  [95% CI 62.02–65.03]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5732419393917375026)
+  step 0/295: loss=1.100000
+  step 1/295: loss=1.244563
+  step 2/295: loss=1.209460
+  step 100/295: loss=1.325315
+  step 200/295: loss=1.085389
+Epoch 8/80: loss=1.136784 lr=0.000990
+  epoch 8: val_acc = 2374/3925 = 60.484076%  top5 = 3541/3925 = 90.216561%  [95% CI 58.95–62.00]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 16868013037147565352)
+  step 0/295: loss=1.282675
+  step 1/295: loss=1.032777
+  step 2/295: loss=1.261208
+  step 100/295: loss=0.967489
+  step 200/295: loss=1.029314
+Epoch 9/80: loss=1.104871 lr=0.000985
+  epoch 9: val_acc = 2381/3925 = 60.662420%  top5 = 3681/3925 = 93.783439%  [95% CI 59.12–62.18]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 1046847361808210058)
+  step 0/295: loss=1.018769
+  step 1/295: loss=1.161593
+  step 2/295: loss=0.884752
+  step 100/295: loss=1.188484
+  step 200/295: loss=0.862656
+Epoch 10/80: loss=1.072372 lr=0.000980
+  epoch 10: val_acc = 2560/3925 = 65.222930%  top5 = 3555/3925 = 90.573248%  [95% CI 63.72–66.70]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 9692178879422122391)
+  step 0/295: loss=1.093794
+  step 1/295: loss=1.051324
+  step 2/295: loss=1.016560
+  step 100/295: loss=1.364922
+  step 200/295: loss=0.884508
+Epoch 11/80: loss=1.046289 lr=0.000974
+  epoch 11: val_acc = 2275/3925 = 57.961783%  top5 = 3563/3925 = 90.777070%  [95% CI 56.41–59.50]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 6192946271020274431)
+  step 0/295: loss=0.942021
+  step 1/295: loss=0.855861
+  step 2/295: loss=0.995342
+  step 100/295: loss=0.930306
+  step 200/295: loss=0.942048
+Epoch 12/80: loss=1.011956 lr=0.000967
+  epoch 12: val_acc = 2753/3925 = 70.140127%  top5 = 3706/3925 = 94.420382%  [95% CI 68.69–71.55]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 3357144032128304895)
+  step 0/295: loss=1.276922
+  step 1/295: loss=1.185101
+  step 2/295: loss=1.021715
+  step 100/295: loss=1.097772
+  step 200/295: loss=1.051880
+Epoch 13/80: loss=0.988490 lr=0.000959
+  epoch 13: val_acc = 2439/3925 = 62.140127%  top5 = 3700/3925 = 94.267516%  [95% CI 60.61–63.64]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12725629415681902920)
+  step 0/295: loss=0.853935
+  step 1/295: loss=0.929691
+  step 2/295: loss=1.054781
+  step 100/295: loss=0.988025
+  step 200/295: loss=1.054137
+Epoch 14/80: loss=0.974782 lr=0.000951
+  epoch 14: val_acc = 2463/3925 = 62.751592%  top5 = 3661/3925 = 93.273885%  [95% CI 61.23–64.25]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 2788953974622801637)
+  step 0/295: loss=1.114972
+  step 1/295: loss=0.980355
+  step 2/295: loss=0.810087
+  step 100/295: loss=0.922201
+  step 200/295: loss=0.866522
+Epoch 15/80: loss=0.960749 lr=0.000941
+  epoch 15: val_acc = 2692/3925 = 68.585987%  top5 = 3762/3925 = 95.847134%  [95% CI 67.12–70.02]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13142695508524555652)
+  step 0/295: loss=1.041266
+  step 1/295: loss=0.958992
+  step 2/295: loss=0.732825
+  step 100/295: loss=0.787742
+  step 200/295: loss=0.790735
+Epoch 16/80: loss=0.944959 lr=0.000931
+  epoch 16: val_acc = 2649/3925 = 67.490446%  top5 = 3758/3925 = 95.745223%  [95% CI 66.01–68.94]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13623108947932974284)
+  step 0/295: loss=0.910256
+  step 1/295: loss=1.058209
+  step 2/295: loss=1.125907
+  step 100/295: loss=0.841046
+  step 200/295: loss=0.957483
+Epoch 17/80: loss=0.943115 lr=0.000921
+  epoch 17: val_acc = 2758/3925 = 70.267516%  top5 = 3713/3925 = 94.598726%  [95% CI 68.82–71.68]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8716664232576388460)
+  step 0/295: loss=0.857293
+  step 1/295: loss=0.738401
+  step 2/295: loss=1.128221
+  step 100/295: loss=0.911304
+  step 200/295: loss=0.741072
+Epoch 18/80: loss=0.908503 lr=0.000909
+  epoch 18: val_acc = 2965/3925 = 75.541401%  top5 = 3777/3925 = 96.229299%  [95% CI 74.17–76.86]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13132401915197809594)
+  step 0/295: loss=0.854092
+  step 1/295: loss=0.744336
+  step 2/295: loss=1.005990
+  step 100/295: loss=0.803321
+  step 200/295: loss=1.016673
+Epoch 19/80: loss=0.907507 lr=0.000897
+  epoch 19: val_acc = 2947/3925 = 75.082803%  top5 = 3802/3925 = 96.866242%  [95% CI 73.71–76.41]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13287100136095671060)
+  step 0/295: loss=0.956922
+  step 1/295: loss=0.877651
+  step 2/295: loss=1.067299
+  step 100/295: loss=0.793575
+  step 200/295: loss=0.726313
+Epoch 20/80: loss=0.884149 lr=0.000885
+  epoch 20: val_acc = 2832/3925 = 72.152866%  top5 = 3775/3925 = 96.178344%  [95% CI 70.73–73.53]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12784179318478463572)
+  step 0/295: loss=0.883924
+  step 1/295: loss=0.813365
+  step 2/295: loss=0.771503
+  step 100/295: loss=0.716911
+  step 200/295: loss=0.829928
+Epoch 21/80: loss=0.870536 lr=0.000871
+  epoch 21: val_acc = 2340/3925 = 59.617834%  top5 = 3670/3925 = 93.503185%  [95% CI 58.07–61.14]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14021188784072828775)
+  step 0/295: loss=0.742249
+  step 1/295: loss=1.010362
+  step 2/295: loss=0.892125
+  step 100/295: loss=1.010620
+  step 200/295: loss=0.897944
+Epoch 22/80: loss=0.866465 lr=0.000857
+  epoch 22: val_acc = 2677/3925 = 68.203822%  top5 = 3793/3925 = 96.636943%  [95% CI 66.73–69.64]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17195226431497751550)
+  step 0/295: loss=1.058681
+  step 1/295: loss=0.850413
+  step 2/295: loss=0.783399
+  step 100/295: loss=0.872745
+  step 200/295: loss=0.951343
+Epoch 23/80: loss=0.845316 lr=0.000843
+  epoch 23: val_acc = 3007/3925 = 76.611465%  top5 = 3834/3925 = 97.681529%  [95% CI 75.26–77.91]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 1480984493368992256)
+  step 0/295: loss=0.833471
+  step 1/295: loss=0.881309
+  step 2/295: loss=0.740322
+  step 100/295: loss=0.848622
+  step 200/295: loss=0.955511
+Epoch 24/80: loss=0.828002 lr=0.000827
+  epoch 24: val_acc = 3009/3925 = 76.662420%  top5 = 3816/3925 = 97.222930%  [95% CI 75.31–77.96]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 16592967323102597768)
+  step 0/295: loss=0.604877
+  step 1/295: loss=0.805603
+  step 2/295: loss=0.829492
+  step 100/295: loss=0.719909
+  step 200/295: loss=0.813539
+Epoch 25/80: loss=0.809289 lr=0.000812
+  epoch 25: val_acc = 3086/3925 = 78.624204%  top5 = 3786/3925 = 96.458599%  [95% CI 77.31–79.88]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 3772093019447625609)
+  step 0/295: loss=0.746983
+  step 1/295: loss=0.674184
+  step 2/295: loss=0.748032
+  step 100/295: loss=0.645193
+  step 200/295: loss=0.906807
+Epoch 26/80: loss=0.795444 lr=0.000796
+  epoch 26: val_acc = 2748/3925 = 70.012739%  top5 = 3787/3925 = 96.484076%  [95% CI 68.56–71.43]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14200235586342090587)
+  step 0/295: loss=0.734085
+  step 1/295: loss=0.728923
+  step 2/295: loss=0.761001
+  step 100/295: loss=0.717122
+  step 200/295: loss=0.791635
+Epoch 27/80: loss=0.799821 lr=0.000779
+  epoch 27: val_acc = 2658/3925 = 67.719745%  top5 = 3680/3925 = 93.757962%  [95% CI 66.24–69.16]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 11606414423120337420)
+  step 0/295: loss=0.598793
+  step 1/295: loss=0.706798
+  step 2/295: loss=0.855463
+  step 100/295: loss=0.755728
+  step 200/295: loss=0.820795
+Epoch 28/80: loss=0.770222 lr=0.000762
+  epoch 28: val_acc = 3026/3925 = 77.095541%  top5 = 3810/3925 = 97.070064%  [95% CI 75.75–78.38]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10100229300115757288)
+  step 0/295: loss=0.725642
+  step 1/295: loss=0.680018
+  step 2/295: loss=0.634990
+  step 100/295: loss=0.667832
+  step 200/295: loss=0.670733
+Epoch 29/80: loss=0.769286 lr=0.000744
+  epoch 29: val_acc = 3138/3925 = 79.949045%  top5 = 3823/3925 = 97.401274%  [95% CI 78.67–81.17]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 951093061690794222)
+  step 0/295: loss=0.727917
+  step 1/295: loss=0.794555
+  step 2/295: loss=0.805044
+  step 100/295: loss=0.649235
+  step 200/295: loss=0.806911
+Epoch 30/80: loss=0.751110 lr=0.000726
+  epoch 30: val_acc = 3099/3925 = 78.955414%  top5 = 3815/3925 = 97.197452%  [95% CI 77.65–80.20]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17765886495719102734)
+  step 0/295: loss=0.800326
+  step 1/295: loss=0.920920
+  step 2/295: loss=0.789529
+  step 100/295: loss=0.936230
+  step 200/295: loss=0.892786
+Epoch 31/80: loss=0.738713 lr=0.000708
+  epoch 31: val_acc = 3207/3925 = 81.707006%  top5 = 3852/3925 = 98.140127%  [95% CI 80.47–82.89]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14595904982774732087)
+  step 0/295: loss=0.603994
+  step 1/295: loss=0.754252
+  step 2/295: loss=0.722283
+  step 100/295: loss=0.594879
+  step 200/295: loss=0.708070
+Epoch 32/80: loss=0.717538 lr=0.000689
+  epoch 32: val_acc = 2968/3925 = 75.617834%  top5 = 3825/3925 = 97.452229%  [95% CI 74.25–76.94]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 4194302765217235979)
+  step 0/295: loss=0.609567
+  step 1/295: loss=0.700637
+  step 2/295: loss=0.667560
+  step 100/295: loss=0.688661
+  step 200/295: loss=0.766046
+Epoch 33/80: loss=0.708189 lr=0.000670
+  epoch 33: val_acc = 3001/3925 = 76.458599%  top5 = 3816/3925 = 97.222930%  [95% CI 75.11–77.76]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8997495738607952184)
+  step 0/295: loss=0.608250
+  step 1/295: loss=0.617103
+  step 2/295: loss=0.631945
+  step 100/295: loss=0.672015
+  step 200/295: loss=0.708553
+Epoch 34/80: loss=0.693201 lr=0.000651
+  epoch 34: val_acc = 2524/3925 = 64.305732%  top5 = 3449/3925 = 87.872611%  [95% CI 62.79–65.79]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10485996775206262072)
+  step 0/295: loss=0.708036
+  step 1/295: loss=0.674923
+  step 2/295: loss=0.612469
+  step 100/295: loss=0.680160
+  step 200/295: loss=0.579825
+Epoch 35/80: loss=0.687157 lr=0.000631
+  epoch 35: val_acc = 3187/3925 = 81.197452%  top5 = 3812/3925 = 97.121019%  [95% CI 79.94–82.39]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13115768988467906777)
+  step 0/295: loss=0.596857
+  step 1/295: loss=0.689739
+  step 2/295: loss=0.622270
+  step 100/295: loss=0.685554
+  step 200/295: loss=0.760740
+Epoch 36/80: loss=0.671020 lr=0.000611
+  epoch 36: val_acc = 3342/3925 = 85.146497%  top5 = 3851/3925 = 98.114650%  [95% CI 84.00–86.22]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 9974542965303800928)
+  step 0/295: loss=0.599818
+  step 1/295: loss=0.602984
+  step 2/295: loss=0.702615
+  step 100/295: loss=0.678682
+  step 200/295: loss=0.579749
+Epoch 37/80: loss=0.668663 lr=0.000591
+  epoch 37: val_acc = 3288/3925 = 83.770701%  top5 = 3847/3925 = 98.012739%  [95% CI 82.58–84.89]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14390751975685005238)
+  step 0/295: loss=0.592656
+  step 1/295: loss=0.575879
+  step 2/295: loss=0.542731
+  step 100/295: loss=0.599668
+  step 200/295: loss=0.566204
+Epoch 38/80: loss=0.647489 lr=0.000571
+  epoch 38: val_acc = 3174/3925 = 80.866242%  top5 = 3802/3925 = 96.866242%  [95% CI 79.61–82.07]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10847665949513226159)
+  step 0/295: loss=0.629027
+  step 1/295: loss=0.665342
+  step 2/295: loss=0.596366
+  step 100/295: loss=0.605770
+  step 200/295: loss=0.670331
+Epoch 39/80: loss=0.639836 lr=0.000551
+  epoch 39: val_acc = 3166/3925 = 80.662420%  top5 = 3803/3925 = 96.891720%  [95% CI 79.40–81.87]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12826287940074320042)
+  step 0/295: loss=0.627890
+  step 1/295: loss=0.615574
+  step 2/295: loss=0.708050
+  step 100/295: loss=0.737136
+  step 200/295: loss=0.548373
+Epoch 40/80: loss=0.622541 lr=0.000531
+  epoch 40: val_acc = 3292/3925 = 83.872611%  top5 = 3854/3925 = 98.191083%  [95% CI 82.69–84.99]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10804007584374942699)
+  step 0/295: loss=0.606635
+  step 1/295: loss=0.563645
+  step 2/295: loss=0.587324
+  step 100/295: loss=0.546460
+  step 200/295: loss=0.591862
+Epoch 41/80: loss=0.609451 lr=0.000510
+  epoch 41: val_acc = 3389/3925 = 86.343949%  top5 = 3856/3925 = 98.242038%  [95% CI 85.23–87.38]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 7135831172279323184)
+  step 0/295: loss=0.576002
+  step 1/295: loss=0.552102
+  step 2/295: loss=0.555762
+  step 100/295: loss=0.622787
+  step 200/295: loss=0.595938
+Epoch 42/80: loss=0.599806 lr=0.000490
+  epoch 42: val_acc = 3317/3925 = 84.509554%  top5 = 3852/3925 = 98.140127%  [95% CI 83.34–85.61]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 4903795479358432954)
+  step 0/295: loss=0.567225
+  step 1/295: loss=0.641968
+  step 2/295: loss=0.549613
+  step 100/295: loss=0.543519
+  step 200/295: loss=0.573304
+Epoch 43/80: loss=0.596868 lr=0.000469
+  epoch 43: val_acc = 3206/3925 = 81.681529%  top5 = 3853/3925 = 98.165605%  [95% CI 80.44–82.86]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 2145877317386242922)
+  step 0/295: loss=0.582920
+  step 1/295: loss=0.557142
+  step 2/295: loss=0.660378
+  step 100/295: loss=0.584772
+  step 200/295: loss=0.546163
+Epoch 44/80: loss=0.588781 lr=0.000449
+  epoch 44: val_acc = 3363/3925 = 85.681529%  top5 = 3861/3925 = 98.369427%  [95% CI 84.55–86.74]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14473694961366002270)
+  step 0/295: loss=0.564574
+  step 1/295: loss=0.544749
+  step 2/295: loss=0.581898
+  step 100/295: loss=0.619626
+  step 200/295: loss=0.579270
+Epoch 45/80: loss=0.577834 lr=0.000429
+  epoch 45: val_acc = 3316/3925 = 84.484076%  top5 = 3846/3925 = 97.987261%  [95% CI 83.32–85.58]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 15641511113820452756)
+  step 0/295: loss=0.599880
+  step 1/295: loss=0.556126
+  step 2/295: loss=0.583566
+  step 100/295: loss=0.562043
+  step 200/295: loss=0.579850
+Epoch 46/80: loss=0.575928 lr=0.000409
+  epoch 46: val_acc = 3429/3925 = 87.363057%  top5 = 3873/3925 = 98.675159%  [95% CI 86.29–88.37]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 15266330455993634448)
+  step 0/295: loss=0.554045
+  step 1/295: loss=0.547410
+  step 2/295: loss=0.622999
+  step 100/295: loss=0.539694
+  step 200/295: loss=0.528497
+Epoch 47/80: loss=0.564008 lr=0.000389
+  epoch 47: val_acc = 3300/3925 = 84.076433%  top5 = 3848/3925 = 98.038217%  [95% CI 82.90–85.19]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17564500653788380326)
+  step 0/295: loss=0.598676
+  step 1/295: loss=0.575972
+  step 2/295: loss=0.563876
+  step 100/295: loss=0.564366
+  step 200/295: loss=0.563165
+Epoch 48/80: loss=0.559542 lr=0.000369
+  epoch 48: val_acc = 3456/3925 = 88.050955%  top5 = 3869/3925 = 98.573248%  [95% CI 87.00–89.03]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17300908099282954564)
+  step 0/295: loss=0.585120
+  step 1/295: loss=0.544357
+  step 2/295: loss=0.560823
+  step 100/295: loss=0.528477
+  step 200/295: loss=0.525047
+Epoch 49/80: loss=0.553355 lr=0.000349
+  epoch 49: val_acc = 3405/3925 = 86.751592%  top5 = 3864/3925 = 98.445860%  [95% CI 85.65–87.78]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8421546252098025850)
+  step 0/295: loss=0.545116
+  step 1/295: loss=0.548480
+  step 2/295: loss=0.565332
+  step 100/295: loss=0.530076
+  step 200/295: loss=0.539738
+Epoch 50/80: loss=0.544584 lr=0.000330
+  epoch 50: val_acc = 3468/3925 = 88.356688%  top5 = 3870/3925 = 98.598726%  [95% CI 87.32–89.32]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 4400438270888694732)
+  step 0/295: loss=0.534775
+  step 1/295: loss=0.514177
+  step 2/295: loss=0.524195
+  step 100/295: loss=0.521347
+  step 200/295: loss=0.607920
+Epoch 51/80: loss=0.536459 lr=0.000311
+  epoch 51: val_acc = 3382/3925 = 86.165605%  top5 = 3844/3925 = 97.936306%  [95% CI 85.05–87.21]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 4771642404687286149)
+  step 0/295: loss=0.578897
+  step 1/295: loss=0.536172
+  step 2/295: loss=0.547185
+  step 100/295: loss=0.520547
+  step 200/295: loss=0.520384
+Epoch 52/80: loss=0.539129 lr=0.000292
+  epoch 52: val_acc = 3465/3925 = 88.280255%  top5 = 3881/3925 = 98.878981%  [95% CI 87.24–89.25]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 1091482244385303717)
+  step 0/295: loss=0.518276
+  step 1/295: loss=0.530078
+  step 2/295: loss=0.525423
+  step 100/295: loss=0.526792
+  step 200/295: loss=0.573826
+Epoch 53/80: loss=0.538851 lr=0.000274
+  epoch 53: val_acc = 3401/3925 = 86.649682%  top5 = 3858/3925 = 98.292994%  [95% CI 85.55–87.68]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8054718694081467045)
+  step 0/295: loss=0.522743
+  step 1/295: loss=0.537916
+  step 2/295: loss=0.542730
+  step 100/295: loss=0.638694
+  step 200/295: loss=0.522985
+Epoch 54/80: loss=0.536834 lr=0.000256
+  epoch 54: val_acc = 3459/3925 = 88.127389%  top5 = 3858/3925 = 98.292994%  [95% CI 87.08–89.10]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 9101770273074260253)
+  step 0/295: loss=0.517199
+  step 1/295: loss=0.556724
+  step 2/295: loss=0.534526
+  step 100/295: loss=0.527099
+  step 200/295: loss=0.527262
+Epoch 55/80: loss=0.526740 lr=0.000238
+  epoch 55: val_acc = 3462/3925 = 88.203822%  top5 = 3864/3925 = 98.445860%  [95% CI 87.16–89.18]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 15276612749687837691)
+  step 0/295: loss=0.517234
+  step 1/295: loss=0.544967
+  step 2/295: loss=0.511541
+  step 100/295: loss=0.525277
+  step 200/295: loss=0.515877
+Epoch 56/80: loss=0.523296 lr=0.000221
+  epoch 56: val_acc = 3476/3925 = 88.560510%  top5 = 3873/3925 = 98.675159%  [95% CI 87.53–89.52]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13025929183602641959)
+  step 0/295: loss=0.512507
+  step 1/295: loss=0.514280
+  step 2/295: loss=0.509971
+  step 100/295: loss=0.598173
+  step 200/295: loss=0.520607
+Epoch 57/80: loss=0.522476 lr=0.000205
+  epoch 57: val_acc = 3468/3925 = 88.356688%  top5 = 3867/3925 = 98.522293%  [95% CI 87.32–89.32]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 7103553193379027858)
+  step 0/295: loss=0.521127
+  step 1/295: loss=0.512094
+  step 2/295: loss=0.512618
+  step 100/295: loss=0.518210
+  step 200/295: loss=0.509475
+Epoch 58/80: loss=0.520806 lr=0.000188
+  epoch 58: val_acc = 3484/3925 = 88.764331%  top5 = 3870/3925 = 98.598726%  [95% CI 87.74–89.71]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 18328476926975812066)
+  step 0/295: loss=0.507959
+  step 1/295: loss=0.508358
+  step 2/295: loss=0.533178
+  step 100/295: loss=0.509931
+  step 200/295: loss=0.527490
+Epoch 59/80: loss=0.518267 lr=0.000173
+  epoch 59: val_acc = 3471/3925 = 88.433121%  top5 = 3872/3925 = 98.649682%  [95% CI 87.39–89.40]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 11554701177026867342)
+  step 0/295: loss=0.511827
+  step 1/295: loss=0.510506
+  step 2/295: loss=0.556077
+  step 100/295: loss=0.508307
+  step 200/295: loss=0.545549
+Epoch 60/80: loss=0.518103 lr=0.000157
+  epoch 60: val_acc = 3470/3925 = 88.407643%  top5 = 3863/3925 = 98.420382%  [95% CI 87.37–89.37]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 485014775748686181)
+  step 0/295: loss=0.534727
+  step 1/295: loss=0.523972
+  step 2/295: loss=0.522520
+  step 100/295: loss=0.507834
+  step 200/295: loss=0.511284
+Epoch 61/80: loss=0.514958 lr=0.000143
+  epoch 61: val_acc = 3480/3925 = 88.662420%  top5 = 3871/3925 = 98.624204%  [95% CI 87.63–89.62]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5535452669951050048)
+  step 0/295: loss=0.511729
+  step 1/295: loss=0.506587
+  step 2/295: loss=0.511390
+  step 100/295: loss=0.507153
+  step 200/295: loss=0.515041
+Epoch 62/80: loss=0.512656 lr=0.000129
+  epoch 62: val_acc = 3515/3925 = 89.554140%  top5 = 3878/3925 = 98.802548%  [95% CI 88.56–90.47]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8115083344217604834)
+  step 0/295: loss=0.508332
+  step 1/295: loss=0.506331
+  step 2/295: loss=0.505168
+  step 100/295: loss=0.525584
+  step 200/295: loss=0.505695
+Epoch 63/80: loss=0.511070 lr=0.000116
+  epoch 63: val_acc = 3524/3925 = 89.783439%  top5 = 3868/3925 = 98.547771%  [95% CI 88.80–90.69]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17540977286060518144)
+  step 0/295: loss=0.504731
+  step 1/295: loss=0.515377
+  step 2/295: loss=0.512864
+  step 100/295: loss=0.506315
+  step 200/295: loss=0.507410
+Epoch 64/80: loss=0.509571 lr=0.000103
+  epoch 64: val_acc = 3522/3925 = 89.732484%  top5 = 3874/3925 = 98.700637%  [95% CI 88.74–90.64]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 11147570842049897553)
+  step 0/295: loss=0.513898
+  step 1/295: loss=0.510442
+  step 2/295: loss=0.504472
+  step 100/295: loss=0.505424
+  step 200/295: loss=0.504151
+Epoch 65/80: loss=0.507981 lr=0.000091
+  epoch 65: val_acc = 3533/3925 = 90.012739%  top5 = 3875/3925 = 98.726115%  [95% CI 89.04–90.91]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5403524305843272406)
+  step 0/295: loss=0.503794
+  step 1/295: loss=0.506073
+  step 2/295: loss=0.502782
+  step 100/295: loss=0.505421
+  step 200/295: loss=0.508182
+Epoch 66/80: loss=0.507938 lr=0.000079
+  epoch 66: val_acc = 3495/3925 = 89.044586%  top5 = 3870/3925 = 98.598726%  [95% CI 88.03–89.98]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12652086383078770933)
+  step 0/295: loss=0.506014
+  step 1/295: loss=0.504401
+  step 2/295: loss=0.510180
+  step 100/295: loss=0.507937
+  step 200/295: loss=0.504677
+Epoch 67/80: loss=0.507805 lr=0.000069
+  epoch 67: val_acc = 3509/3925 = 89.401274%  top5 = 3870/3925 = 98.598726%  [95% CI 88.40–90.33]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5343986070810332270)
+  step 0/295: loss=0.514054
+  step 1/295: loss=0.504873
+  step 2/295: loss=0.506877
+  step 100/295: loss=0.506584
+  step 200/295: loss=0.506108
+Epoch 68/80: loss=0.506612 lr=0.000059
+  epoch 68: val_acc = 3519/3925 = 89.656051%  top5 = 3874/3925 = 98.700637%  [95% CI 88.66–90.57]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 7864645372242429528)
+  step 0/295: loss=0.505104
+  step 1/295: loss=0.508412
+  step 2/295: loss=0.506219
+  step 100/295: loss=0.504372
+  step 200/295: loss=0.504522
+Epoch 69/80: loss=0.505863 lr=0.000050
+  epoch 69: val_acc = 3524/3925 = 89.783439%  top5 = 3872/3925 = 98.649682%  [95% CI 88.80–90.69]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17981260796392095620)
+  step 0/295: loss=0.504387
+  step 1/295: loss=0.504205
+  step 2/295: loss=0.509318
+  step 100/295: loss=0.504330
+  step 200/295: loss=0.503311
+Epoch 70/80: loss=0.505124 lr=0.000041
+  epoch 70: val_acc = 3522/3925 = 89.732484%  top5 = 3876/3925 = 98.751592%  [95% CI 88.74–90.64]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10989587681476758532)
+  step 0/295: loss=0.502936
+  step 1/295: loss=0.503153
+  step 2/295: loss=0.502968
+  step 100/295: loss=0.508629
+  step 200/295: loss=0.502849
+Epoch 71/80: loss=0.505169 lr=0.000033
+  epoch 71: val_acc = 3523/3925 = 89.757962%  top5 = 3874/3925 = 98.700637%  [95% CI 88.77–90.67]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17836241987014004950)
+  step 0/295: loss=0.502705
+  step 1/295: loss=0.503608
+  step 2/295: loss=0.507551
+  step 100/295: loss=0.503940
+  step 200/295: loss=0.513771
+Epoch 72/80: loss=0.504761 lr=0.000026
+  epoch 72: val_acc = 3526/3925 = 89.834395%  top5 = 3879/3925 = 98.828025%  [95% CI 88.85–90.74]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 10836876994685027485)
+  step 0/295: loss=0.502299
+  step 1/295: loss=0.503421
+  step 2/295: loss=0.502596
+  step 100/295: loss=0.503579
+  step 200/295: loss=0.504712
+Epoch 73/80: loss=0.504653 lr=0.000020
+  epoch 73: val_acc = 3534/3925 = 90.038217%  top5 = 3876/3925 = 98.751592%  [95% CI 89.06–90.94]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 14074693505482924995)
+  step 0/295: loss=0.504299
+  step 1/295: loss=0.502395
+  step 2/295: loss=0.502665
+  step 100/295: loss=0.502172
+  step 200/295: loss=0.502704
+Epoch 74/80: loss=0.504329 lr=0.000015
+  epoch 74: val_acc = 3539/3925 = 90.165605%  top5 = 3878/3925 = 98.802548%  [95% CI 89.19–91.06]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5225219925092083981)
+  step 0/295: loss=0.504926
+  step 1/295: loss=0.502201
+  step 2/295: loss=0.502496
+  step 100/295: loss=0.503127
+  step 200/295: loss=0.505152
+Epoch 75/80: loss=0.504176 lr=0.000010
+  epoch 75: val_acc = 3537/3925 = 90.114650%  top5 = 3874/3925 = 98.700637%  [95% CI 89.14–91.01]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 13547947095636879829)
+  step 0/295: loss=0.501824
+  step 1/295: loss=0.503865
+  step 2/295: loss=0.502397
+  step 100/295: loss=0.518697
+  step 200/295: loss=0.502629
+Epoch 76/80: loss=0.503851 lr=0.000007
+  epoch 76: val_acc = 3540/3925 = 90.191083%  top5 = 3872/3925 = 98.649682%  [95% CI 89.22–91.08]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 12138986616654862790)
+  step 0/295: loss=0.502379
+  step 1/295: loss=0.503436
+  step 2/295: loss=0.503462
+  step 100/295: loss=0.504124
+  step 200/295: loss=0.502624
+Epoch 77/80: loss=0.503796 lr=0.000004
+  epoch 77: val_acc = 3540/3925 = 90.191083%  top5 = 3876/3925 = 98.751592%  [95% CI 89.22–91.08]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 1389292026872180227)
+  step 0/295: loss=0.504053
+  step 1/295: loss=0.504530
+  step 2/295: loss=0.502537
+  step 100/295: loss=0.502182
+  step 200/295: loss=0.504284
+Epoch 78/80: loss=0.503883 lr=0.000002
+  epoch 78: val_acc = 3537/3925 = 90.114650%  top5 = 3877/3925 = 98.777070%  [95% CI 89.14–91.01]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 17524049758757257036)
+  step 0/295: loss=0.501679
+  step 1/295: loss=0.503502
+  step 2/295: loss=0.502992
+  step 100/295: loss=0.501998
+  step 200/295: loss=0.505221
+Epoch 79/80: loss=0.504099 lr=0.000000
+  epoch 79: val_acc = 3542/3925 = 90.242038%  top5 = 3875/3925 = 98.726115%  [95% CI 89.27–91.13]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 5432644199170749045)
+  step 0/295: loss=0.502326
+  step 1/295: loss=0.502562
+  step 2/295: loss=0.503514
+  step 100/295: loss=0.502821
+  step 200/295: loss=0.502695
+Epoch 80/80: loss=0.503662 lr=0.000000
+  epoch 80: val_acc = 3539/3925 = 90.165605%  top5 = 3876/3925 = 98.751592%  [95% CI 89.19–91.06]
+    BN companion -> .lake/build/resnet50_adam_ckpt_iree.bin.bn (53120 floats x 2, hash 8347998150542265176)
+done (trained ResNet-50 (Imagenette) adam + cosine/warmup via packed threading).
