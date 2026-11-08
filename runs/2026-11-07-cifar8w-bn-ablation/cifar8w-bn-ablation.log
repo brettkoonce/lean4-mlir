@@ -1,0 +1,1132 @@
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 17:59:14.471074 39652312 metal_runtime.cc:320] Metal device 0 (Apple M5 Pro): memory budget 32768.0 MB, 49643.6 MB reclaimable now
+I1107 17:59:14.472464 39652309 service.cc:154] XLA service 0x7a055aa920 initialized for platform METAL (this does not guarantee that XLA will be used). Devices:
+I1107 17:59:14.472469 39652309 service.cc:170]   StreamExecutor [0]: Apple M5 Pro, Metal (Driver: 0.0.0; Runtime: 1.3929198374.167101116; Toolkit: 0.0.0; DNN: 0.0.0)
+I1107 17:59:14.473381 39652309 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1107 17:59:14.477411 39652309 se_gpu_pjrt_compiler.cc:390] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_sgd_train_step.mlir (@cifar8w_bn_sgd_train_step, 117 outputs, 1 replica) in 119 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 44 ms
+════════ cifar8w-BN (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_bn_sgd_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_bn_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN sgd (constant lr 0.100000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_bn_sgd_train_step holds 114 parameter tensors (4.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/390: loss=2.412933
+  step 1/390: loss=2.416425
+  step 2/390: loss=2.504714
+  step 100/390: loss=1.920956
+  step 200/390: loss=1.764290
+  step 300/390: loss=1.623441
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/40: loss=1.783173 lr=0.100000
+  epoch 1: test_acc = 4124/10000 = 41.240000%  top5 = 8718/10000 = 87.180000%  [95% CI 40.28–42.21]
+  step 0/390: loss=1.609244
+  step 1/390: loss=1.473015
+  step 2/390: loss=1.364607
+  step 100/390: loss=1.358526
+  step 200/390: loss=1.337559
+  step 300/390: loss=1.352062
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/40: loss=1.393181 lr=0.100000
+  epoch 2: test_acc = 5222/10000 = 52.220000%  top5 = 9361/10000 = 93.610000%  [95% CI 51.24–53.20]
+  step 0/390: loss=1.334029
+  step 1/390: loss=1.385235
+  step 2/390: loss=1.206925
+  step 100/390: loss=1.110960
+  step 200/390: loss=1.300954
+  step 300/390: loss=1.122477
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/40: loss=1.216056 lr=0.100000
+  epoch 3: test_acc = 5557/10000 = 55.570000%  top5 = 9449/10000 = 94.490000%  [95% CI 54.59–56.54]
+  step 0/390: loss=1.319367
+  step 1/390: loss=1.130796
+  step 2/390: loss=1.005451
+  step 100/390: loss=1.076667
+  step 200/390: loss=1.098324
+  step 300/390: loss=1.058222
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/40: loss=1.095051 lr=0.100000
+  epoch 4: test_acc = 6103/10000 = 61.030000%  top5 = 9588/10000 = 95.880000%  [95% CI 60.07–61.98]
+  step 0/390: loss=0.862802
+  step 1/390: loss=1.148102
+  step 2/390: loss=1.298808
+  step 100/390: loss=0.840890
+  step 200/390: loss=1.016801
+  step 300/390: loss=0.876173
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/40: loss=1.009449 lr=0.100000
+  epoch 5: test_acc = 6517/10000 = 65.170000%  top5 = 9648/10000 = 96.480000%  [95% CI 64.23–66.10]
+  step 0/390: loss=1.034646
+  step 1/390: loss=0.848085
+  step 2/390: loss=1.000950
+  step 100/390: loss=0.849068
+  step 200/390: loss=1.115411
+  step 300/390: loss=0.823787
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/40: loss=0.945741 lr=0.100000
+  epoch 6: test_acc = 6453/10000 = 64.530000%  top5 = 9697/10000 = 96.970000%  [95% CI 63.59–65.46]
+  step 0/390: loss=0.816966
+  step 1/390: loss=0.801900
+  step 2/390: loss=0.936928
+  step 100/390: loss=0.790503
+  step 200/390: loss=0.803449
+  step 300/390: loss=0.869970
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/40: loss=0.887483 lr=0.100000
+  epoch 7: test_acc = 6714/10000 = 67.140000%  top5 = 9695/10000 = 96.950000%  [95% CI 66.21–68.05]
+  step 0/390: loss=0.933528
+  step 1/390: loss=0.805826
+  step 2/390: loss=0.601946
+  step 100/390: loss=0.859997
+  step 200/390: loss=0.684136
+  step 300/390: loss=0.755476
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/40: loss=0.846978 lr=0.100000
+  epoch 8: test_acc = 6803/10000 = 68.030000%  top5 = 9679/10000 = 96.790000%  [95% CI 67.11–68.94]
+  step 0/390: loss=0.807172
+  step 1/390: loss=0.740142
+  step 2/390: loss=0.598831
+  step 100/390: loss=0.739742
+  step 200/390: loss=0.780680
+  step 300/390: loss=0.770455
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/40: loss=0.801124 lr=0.100000
+  epoch 9: test_acc = 6674/10000 = 66.740000%  top5 = 9693/10000 = 96.930000%  [95% CI 65.81–67.66]
+  step 0/390: loss=0.867363
+  step 1/390: loss=0.824795
+  step 2/390: loss=0.620099
+  step 100/390: loss=0.773648
+  step 200/390: loss=0.846325
+  step 300/390: loss=0.611666
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/40: loss=0.780020 lr=0.100000
+  epoch 10: test_acc = 6932/10000 = 69.320000%  top5 = 9708/10000 = 97.080000%  [95% CI 68.41–70.22]
+  step 0/390: loss=0.749847
+  step 1/390: loss=0.783830
+  step 2/390: loss=0.817716
+  step 100/390: loss=0.690488
+  step 200/390: loss=0.769063
+  step 300/390: loss=0.690035
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/40: loss=0.749268 lr=0.100000
+  epoch 11: test_acc = 7163/10000 = 71.630000%  top5 = 9773/10000 = 97.730000%  [95% CI 70.74–72.51]
+  step 0/390: loss=0.603863
+  step 1/390: loss=0.621814
+  step 2/390: loss=0.739410
+  step 100/390: loss=0.743947
+  step 200/390: loss=0.664818
+  step 300/390: loss=0.751713
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/40: loss=0.726727 lr=0.100000
+  epoch 12: test_acc = 7108/10000 = 71.080000%  top5 = 9760/10000 = 97.600000%  [95% CI 70.18–71.96]
+  step 0/390: loss=0.676477
+  step 1/390: loss=0.732731
+  step 2/390: loss=0.622887
+  step 100/390: loss=0.772149
+  step 200/390: loss=0.642703
+  step 300/390: loss=0.827063
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/40: loss=0.707732 lr=0.100000
+  epoch 13: test_acc = 7125/10000 = 71.250000%  top5 = 9780/10000 = 97.800000%  [95% CI 70.35–72.13]
+  step 0/390: loss=0.617091
+  step 1/390: loss=0.568805
+  step 2/390: loss=0.667737
+  step 100/390: loss=0.659828
+  step 200/390: loss=0.564688
+  step 300/390: loss=0.806346
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/40: loss=0.682963 lr=0.100000
+  epoch 14: test_acc = 7158/10000 = 71.580000%  top5 = 9791/10000 = 97.910000%  [95% CI 70.69–72.46]
+  step 0/390: loss=0.603028
+  step 1/390: loss=0.699085
+  step 2/390: loss=0.627124
+  step 100/390: loss=0.745894
+  step 200/390: loss=0.633168
+  step 300/390: loss=0.630522
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/40: loss=0.670339 lr=0.100000
+  epoch 15: test_acc = 7200/10000 = 72.000000%  top5 = 9801/10000 = 98.010000%  [95% CI 71.11–72.87]
+  step 0/390: loss=0.452794
+  step 1/390: loss=0.516292
+  step 2/390: loss=0.691976
+  step 100/390: loss=0.525110
+  step 200/390: loss=0.834467
+  step 300/390: loss=0.557951
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/40: loss=0.652908 lr=0.100000
+  epoch 16: test_acc = 7319/10000 = 73.190000%  top5 = 9777/10000 = 97.770000%  [95% CI 72.31–74.05]
+  step 0/390: loss=0.555192
+  step 1/390: loss=0.583040
+  step 2/390: loss=0.776064
+  step 100/390: loss=0.617136
+  step 200/390: loss=0.649455
+  step 300/390: loss=0.792704
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/40: loss=0.637088 lr=0.100000
+  epoch 17: test_acc = 7201/10000 = 72.010000%  top5 = 9790/10000 = 97.900000%  [95% CI 71.12–72.88]
+  step 0/390: loss=0.672116
+  step 1/390: loss=0.619358
+  step 2/390: loss=0.595875
+  step 100/390: loss=0.540891
+  step 200/390: loss=0.540609
+  step 300/390: loss=0.546690
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/40: loss=0.624827 lr=0.100000
+  epoch 18: test_acc = 7245/10000 = 72.450000%  top5 = 9784/10000 = 97.840000%  [95% CI 71.57–73.32]
+  step 0/390: loss=0.672078
+  step 1/390: loss=0.705000
+  step 2/390: loss=0.539106
+  step 100/390: loss=0.705383
+  step 200/390: loss=0.557112
+  step 300/390: loss=0.684509
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/40: loss=0.610157 lr=0.100000
+  epoch 19: test_acc = 7365/10000 = 73.650000%  top5 = 9796/10000 = 97.960000%  [95% CI 72.78–74.50]
+  step 0/390: loss=0.707526
+  step 1/390: loss=0.557047
+  step 2/390: loss=0.506676
+  step 100/390: loss=0.544767
+  step 200/390: loss=0.594167
+  step 300/390: loss=0.593304
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/40: loss=0.594239 lr=0.100000
+  epoch 20: test_acc = 7382/10000 = 73.820000%  top5 = 9809/10000 = 98.090000%  [95% CI 72.95–74.67]
+  step 0/390: loss=0.561189
+  step 1/390: loss=0.575923
+  step 2/390: loss=0.416767
+  step 100/390: loss=0.512921
+  step 200/390: loss=0.629309
+  step 300/390: loss=0.597872
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/40: loss=0.585963 lr=0.100000
+  epoch 21: test_acc = 7368/10000 = 73.680000%  top5 = 9797/10000 = 97.970000%  [95% CI 72.81–74.53]
+  step 0/390: loss=0.447459
+  step 1/390: loss=0.461097
+  step 2/390: loss=0.603984
+  step 100/390: loss=0.667934
+  step 200/390: loss=0.492812
+  step 300/390: loss=0.514229
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/40: loss=0.573281 lr=0.100000
+  epoch 22: test_acc = 7300/10000 = 73.000000%  top5 = 9778/10000 = 97.780000%  [95% CI 72.12–73.86]
+  step 0/390: loss=0.379206
+  step 1/390: loss=0.656110
+  step 2/390: loss=0.536750
+  step 100/390: loss=0.426187
+  step 200/390: loss=0.706189
+  step 300/390: loss=0.552328
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/40: loss=0.555806 lr=0.100000
+  epoch 23: test_acc = 7408/10000 = 74.080000%  top5 = 9797/10000 = 97.970000%  [95% CI 73.21–74.93]
+  step 0/390: loss=0.471942
+  step 1/390: loss=0.507825
+  step 2/390: loss=0.537440
+  step 100/390: loss=0.473187
+  step 200/390: loss=0.443853
+  step 300/390: loss=0.686314
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/40: loss=0.548685 lr=0.100000
+  epoch 24: test_acc = 7239/10000 = 72.390000%  top5 = 9765/10000 = 97.650000%  [95% CI 71.51–73.26]
+  step 0/390: loss=0.497857
+  step 1/390: loss=0.479049
+  step 2/390: loss=0.509683
+  step 100/390: loss=0.700282
+  step 200/390: loss=0.608069
+  step 300/390: loss=0.494600
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/40: loss=0.540665 lr=0.100000
+  epoch 25: test_acc = 7277/10000 = 72.770000%  top5 = 9764/10000 = 97.640000%  [95% CI 71.89–73.63]
+  step 0/390: loss=0.511985
+  step 1/390: loss=0.570139
+  step 2/390: loss=0.575349
+  step 100/390: loss=0.567806
+  step 200/390: loss=0.500425
+  step 300/390: loss=0.610155
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 26/40: loss=0.530157 lr=0.100000
+  epoch 26: test_acc = 7346/10000 = 73.460000%  top5 = 9793/10000 = 97.930000%  [95% CI 72.59–74.32]
+  step 0/390: loss=0.494823
+  step 1/390: loss=0.564418
+  step 2/390: loss=0.561677
+  step 100/390: loss=0.552394
+  step 200/390: loss=0.541052
+  step 300/390: loss=0.398109
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 27/40: loss=0.515220 lr=0.100000
+  epoch 27: test_acc = 7422/10000 = 74.220000%  top5 = 9781/10000 = 97.810000%  [95% CI 73.35–75.07]
+  step 0/390: loss=0.506162
+  step 1/390: loss=0.516890
+  step 2/390: loss=0.489588
+  step 100/390: loss=0.550433
+  step 200/390: loss=0.363498
+  step 300/390: loss=0.541782
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 28/40: loss=0.509632 lr=0.100000
+  epoch 28: test_acc = 7334/10000 = 73.340000%  top5 = 9801/10000 = 98.010000%  [95% CI 72.46–74.20]
+  step 0/390: loss=0.562251
+  step 1/390: loss=0.489103
+  step 2/390: loss=0.480971
+  step 100/390: loss=0.472424
+  step 200/390: loss=0.384769
+  step 300/390: loss=0.500057
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 29/40: loss=0.507908 lr=0.100000
+  epoch 29: test_acc = 7419/10000 = 74.190000%  top5 = 9805/10000 = 98.050000%  [95% CI 73.32–75.04]
+  step 0/390: loss=0.414381
+  step 1/390: loss=0.565097
+  step 2/390: loss=0.542044
+  step 100/390: loss=0.292844
+  step 200/390: loss=0.521631
+  step 300/390: loss=0.411219
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 30/40: loss=0.490397 lr=0.100000
+  epoch 30: test_acc = 7460/10000 = 74.600000%  top5 = 9814/10000 = 98.140000%  [95% CI 73.74–75.44]
+  step 0/390: loss=0.348287
+  step 1/390: loss=0.565541
+  step 2/390: loss=0.484973
+  step 100/390: loss=0.603444
+  step 200/390: loss=0.421523
+  step 300/390: loss=0.417057
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 31/40: loss=0.479392 lr=0.100000
+  epoch 31: test_acc = 7444/10000 = 74.440000%  top5 = 9796/10000 = 97.960000%  [95% CI 73.58–75.29]
+  step 0/390: loss=0.377749
+  step 1/390: loss=0.436522
+  step 2/390: loss=0.516993
+  step 100/390: loss=0.435216
+  step 200/390: loss=0.514018
+  step 300/390: loss=0.351040
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 32/40: loss=0.477706 lr=0.100000
+  epoch 32: test_acc = 7461/10000 = 74.610000%  top5 = 9802/10000 = 98.020000%  [95% CI 73.75–75.45]
+  step 0/390: loss=0.449303
+  step 1/390: loss=0.461376
+  step 2/390: loss=0.520834
+  step 100/390: loss=0.553398
+  step 200/390: loss=0.477730
+  step 300/390: loss=0.805183
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 33/40: loss=0.470962 lr=0.100000
+  epoch 33: test_acc = 7385/10000 = 73.850000%  top5 = 9784/10000 = 97.840000%  [95% CI 72.98–74.70]
+  step 0/390: loss=0.450706
+  step 1/390: loss=0.414298
+  step 2/390: loss=0.416738
+  step 100/390: loss=0.461404
+  step 200/390: loss=0.537142
+  step 300/390: loss=0.475394
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 34/40: loss=0.463935 lr=0.100000
+  epoch 34: test_acc = 7443/10000 = 74.430000%  top5 = 9825/10000 = 98.250000%  [95% CI 73.57–75.28]
+  step 0/390: loss=0.399197
+  step 1/390: loss=0.425433
+  step 2/390: loss=0.470981
+  step 100/390: loss=0.372289
+  step 200/390: loss=0.377533
+  step 300/390: loss=0.512798
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 35/40: loss=0.450036 lr=0.100000
+  epoch 35: test_acc = 7400/10000 = 74.000000%  top5 = 9775/10000 = 97.750000%  [95% CI 73.13–74.85]
+  step 0/390: loss=0.442141
+  step 1/390: loss=0.404774
+  step 2/390: loss=0.458704
+  step 100/390: loss=0.453188
+  step 200/390: loss=0.374279
+  step 300/390: loss=0.569416
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 36/40: loss=0.441678 lr=0.100000
+  epoch 36: test_acc = 7412/10000 = 74.120000%  top5 = 9799/10000 = 97.990000%  [95% CI 73.25–74.97]
+  step 0/390: loss=0.446903
+  step 1/390: loss=0.388462
+  step 2/390: loss=0.500606
+  step 100/390: loss=0.455316
+  step 200/390: loss=0.519380
+  step 300/390: loss=0.363909
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 37/40: loss=0.436807 lr=0.100000
+  epoch 37: test_acc = 7374/10000 = 73.740000%  top5 = 9797/10000 = 97.970000%  [95% CI 72.87–74.59]
+  step 0/390: loss=0.440154
+  step 1/390: loss=0.574688
+  step 2/390: loss=0.455167
+  step 100/390: loss=0.458546
+  step 200/390: loss=0.426698
+  step 300/390: loss=0.453850
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 38/40: loss=0.434210 lr=0.100000
+  epoch 38: test_acc = 7402/10000 = 74.020000%  top5 = 9790/10000 = 97.900000%  [95% CI 73.15–74.87]
+  step 0/390: loss=0.323546
+  step 1/390: loss=0.518012
+  step 2/390: loss=0.372321
+  step 100/390: loss=0.250762
+  step 200/390: loss=0.558517
+  step 300/390: loss=0.434374
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 39/40: loss=0.428028 lr=0.100000
+  epoch 39: test_acc = 7392/10000 = 73.920000%  top5 = 9784/10000 = 97.840000%  [95% CI 73.05–74.77]
+  step 0/390: loss=0.386783
+  step 1/390: loss=0.408515
+  step 2/390: loss=0.370092
+  step 100/390: loss=0.430841
+  step 200/390: loss=0.474004
+  step 300/390: loss=0.444965
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 40/40: loss=0.418541 lr=0.100000
+  epoch 40: test_acc = 7389/10000 = 73.890000%  top5 = 9805/10000 = 98.050000%  [95% CI 73.02–74.74]
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 18:00:50.711935 39652309 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_mom_train_step.mlir (@cifar8w_bn_mom_train_step, 117 outputs, 1 replica) in 131 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 47 ms
+done (trained CIFAR-CNN8-wide-BN sgd + constant lr via packed threading).
+════════ cifar8w-BN (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_bn_mom_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_bn_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN mom (constant lr 0.020000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_bn_mom_train_step holds 114 parameter tensors (4.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/390: loss=2.412933
+  step 1/390: loss=2.339143
+  step 2/390: loss=2.351386
+  step 100/390: loss=1.637003
+  step 200/390: loss=1.488618
+  step 300/390: loss=1.564738
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/40: loss=1.619458 lr=0.020000
+  epoch 1: test_acc = 5113/10000 = 51.130000%  top5 = 9289/10000 = 92.890000%  [95% CI 50.15–52.11]
+  step 0/390: loss=1.279779
+  step 1/390: loss=1.351978
+  step 2/390: loss=1.195862
+  step 100/390: loss=1.279245
+  step 200/390: loss=1.176167
+  step 300/390: loss=1.139072
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/40: loss=1.194669 lr=0.020000
+  epoch 2: test_acc = 6058/10000 = 60.580000%  top5 = 9579/10000 = 95.790000%  [95% CI 59.62–61.53]
+  step 0/390: loss=1.140103
+  step 1/390: loss=1.159070
+  step 2/390: loss=1.014182
+  step 100/390: loss=0.983151
+  step 200/390: loss=1.151794
+  step 300/390: loss=0.911397
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/40: loss=1.020272 lr=0.020000
+  epoch 3: test_acc = 6427/10000 = 64.270000%  top5 = 9679/10000 = 96.790000%  [95% CI 63.33–65.20]
+  step 0/390: loss=1.044041
+  step 1/390: loss=0.984101
+  step 2/390: loss=0.756497
+  step 100/390: loss=0.877349
+  step 200/390: loss=0.951964
+  step 300/390: loss=0.933292
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/40: loss=0.917565 lr=0.020000
+  epoch 4: test_acc = 6628/10000 = 66.280000%  top5 = 9718/10000 = 97.180000%  [95% CI 65.35–67.20]
+  step 0/390: loss=0.853047
+  step 1/390: loss=1.089146
+  step 2/390: loss=0.907385
+  step 100/390: loss=0.794673
+  step 200/390: loss=0.771735
+  step 300/390: loss=0.736403
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/40: loss=0.847964 lr=0.020000
+  epoch 5: test_acc = 6850/10000 = 68.500000%  top5 = 9756/10000 = 97.560000%  [95% CI 67.58–69.40]
+  step 0/390: loss=0.891304
+  step 1/390: loss=0.681022
+  step 2/390: loss=1.009176
+  step 100/390: loss=0.708333
+  step 200/390: loss=0.998342
+  step 300/390: loss=0.694018
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/40: loss=0.795576 lr=0.020000
+  epoch 6: test_acc = 7012/10000 = 70.120000%  top5 = 9755/10000 = 97.550000%  [95% CI 69.22–71.01]
+  step 0/390: loss=0.745104
+  step 1/390: loss=0.777617
+  step 2/390: loss=0.822436
+  step 100/390: loss=0.743307
+  step 200/390: loss=0.738634
+  step 300/390: loss=0.841714
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/40: loss=0.755813 lr=0.020000
+  epoch 7: test_acc = 7148/10000 = 71.480000%  top5 = 9770/10000 = 97.700000%  [95% CI 70.59–72.36]
+  step 0/390: loss=0.799050
+  step 1/390: loss=0.729033
+  step 2/390: loss=0.568052
+  step 100/390: loss=0.709425
+  step 200/390: loss=0.639877
+  step 300/390: loss=0.689183
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/40: loss=0.720102 lr=0.020000
+  epoch 8: test_acc = 7219/10000 = 72.190000%  top5 = 9787/10000 = 97.870000%  [95% CI 71.30–73.06]
+  step 0/390: loss=0.643056
+  step 1/390: loss=0.529459
+  step 2/390: loss=0.532719
+  step 100/390: loss=0.604025
+  step 200/390: loss=0.575203
+  step 300/390: loss=0.679682
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/40: loss=0.692732 lr=0.020000
+  epoch 9: test_acc = 7157/10000 = 71.570000%  top5 = 9775/10000 = 97.750000%  [95% CI 70.68–72.45]
+  step 0/390: loss=0.717432
+  step 1/390: loss=0.658608
+  step 2/390: loss=0.572677
+  step 100/390: loss=0.649797
+  step 200/390: loss=0.813974
+  step 300/390: loss=0.567281
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/40: loss=0.667424 lr=0.020000
+  epoch 10: test_acc = 7225/10000 = 72.250000%  top5 = 9792/10000 = 97.920000%  [95% CI 71.36–73.12]
+  step 0/390: loss=0.682199
+  step 1/390: loss=0.669222
+  step 2/390: loss=0.696593
+  step 100/390: loss=0.577291
+  step 200/390: loss=0.688863
+  step 300/390: loss=0.621849
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/40: loss=0.647024 lr=0.020000
+  epoch 11: test_acc = 7366/10000 = 73.660000%  top5 = 9811/10000 = 98.110000%  [95% CI 72.79–74.51]
+  step 0/390: loss=0.569880
+  step 1/390: loss=0.595960
+  step 2/390: loss=0.625029
+  step 100/390: loss=0.641464
+  step 200/390: loss=0.620495
+  step 300/390: loss=0.684522
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/40: loss=0.628855 lr=0.020000
+  epoch 12: test_acc = 7390/10000 = 73.900000%  top5 = 9802/10000 = 98.020000%  [95% CI 73.03–74.75]
+  step 0/390: loss=0.604440
+  step 1/390: loss=0.672336
+  step 2/390: loss=0.565249
+  step 100/390: loss=0.631462
+  step 200/390: loss=0.616007
+  step 300/390: loss=0.592109
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/40: loss=0.609109 lr=0.020000
+  epoch 13: test_acc = 7473/10000 = 74.730000%  top5 = 9815/10000 = 98.150000%  [95% CI 73.87–75.57]
+  step 0/390: loss=0.565277
+  step 1/390: loss=0.496696
+  step 2/390: loss=0.726857
+  step 100/390: loss=0.576150
+  step 200/390: loss=0.480930
+  step 300/390: loss=0.683467
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/40: loss=0.593899 lr=0.020000
+  epoch 14: test_acc = 7433/10000 = 74.330000%  top5 = 9826/10000 = 98.260000%  [95% CI 73.46–75.18]
+  step 0/390: loss=0.498709
+  step 1/390: loss=0.604670
+  step 2/390: loss=0.692292
+  step 100/390: loss=0.620170
+  step 200/390: loss=0.541731
+  step 300/390: loss=0.481098
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/40: loss=0.573352 lr=0.020000
+  epoch 15: test_acc = 7425/10000 = 74.250000%  top5 = 9794/10000 = 97.940000%  [95% CI 73.38–75.10]
+  step 0/390: loss=0.513472
+  step 1/390: loss=0.437769
+  step 2/390: loss=0.587331
+  step 100/390: loss=0.494874
+  step 200/390: loss=0.670135
+  step 300/390: loss=0.566729
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/40: loss=0.564187 lr=0.020000
+  epoch 16: test_acc = 7500/10000 = 75.000000%  top5 = 9818/10000 = 98.180000%  [95% CI 74.14–75.84]
+  step 0/390: loss=0.518134
+  step 1/390: loss=0.475706
+  step 2/390: loss=0.579611
+  step 100/390: loss=0.598530
+  step 200/390: loss=0.612328
+  step 300/390: loss=0.568759
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/40: loss=0.547490 lr=0.020000
+  epoch 17: test_acc = 7545/10000 = 75.450000%  top5 = 9818/10000 = 98.180000%  [95% CI 74.60–76.28]
+  step 0/390: loss=0.511748
+  step 1/390: loss=0.479935
+  step 2/390: loss=0.482735
+  step 100/390: loss=0.614790
+  step 200/390: loss=0.595224
+  step 300/390: loss=0.579361
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/40: loss=0.538548 lr=0.020000
+  epoch 18: test_acc = 7505/10000 = 75.050000%  top5 = 9804/10000 = 98.040000%  [95% CI 74.19–75.89]
+  step 0/390: loss=0.555171
+  step 1/390: loss=0.592763
+  step 2/390: loss=0.462277
+  step 100/390: loss=0.617388
+  step 200/390: loss=0.403613
+  step 300/390: loss=0.526677
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/40: loss=0.525328 lr=0.020000
+  epoch 19: test_acc = 7583/10000 = 75.830000%  top5 = 9839/10000 = 98.390000%  [95% CI 74.98–76.66]
+  step 0/390: loss=0.675390
+  step 1/390: loss=0.581282
+  step 2/390: loss=0.466239
+  step 100/390: loss=0.575679
+  step 200/390: loss=0.499005
+  step 300/390: loss=0.421792
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/40: loss=0.514466 lr=0.020000
+  epoch 20: test_acc = 7571/10000 = 75.710000%  top5 = 9821/10000 = 98.210000%  [95% CI 74.86–76.54]
+  step 0/390: loss=0.553587
+  step 1/390: loss=0.550027
+  step 2/390: loss=0.453708
+  step 100/390: loss=0.349709
+  step 200/390: loss=0.522325
+  step 300/390: loss=0.454666
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/40: loss=0.507247 lr=0.020000
+  epoch 21: test_acc = 7606/10000 = 76.060000%  top5 = 9816/10000 = 98.160000%  [95% CI 75.21–76.89]
+  step 0/390: loss=0.410802
+  step 1/390: loss=0.429233
+  step 2/390: loss=0.541457
+  step 100/390: loss=0.656467
+  step 200/390: loss=0.456900
+  step 300/390: loss=0.436760
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/40: loss=0.494044 lr=0.020000
+  epoch 22: test_acc = 7593/10000 = 75.930000%  top5 = 9820/10000 = 98.200000%  [95% CI 75.08–76.76]
+  step 0/390: loss=0.435706
+  step 1/390: loss=0.571602
+  step 2/390: loss=0.409161
+  step 100/390: loss=0.386166
+  step 200/390: loss=0.526137
+  step 300/390: loss=0.473819
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/40: loss=0.486493 lr=0.020000
+  epoch 23: test_acc = 7596/10000 = 75.960000%  top5 = 9820/10000 = 98.200000%  [95% CI 75.11–76.79]
+  step 0/390: loss=0.474297
+  step 1/390: loss=0.431602
+  step 2/390: loss=0.434282
+  step 100/390: loss=0.386934
+  step 200/390: loss=0.432359
+  step 300/390: loss=0.544465
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/40: loss=0.470256 lr=0.020000
+  epoch 24: test_acc = 7557/10000 = 75.570000%  top5 = 9819/10000 = 98.190000%  [95% CI 74.72–76.40]
+  step 0/390: loss=0.473941
+  step 1/390: loss=0.553583
+  step 2/390: loss=0.423498
+  step 100/390: loss=0.593793
+  step 200/390: loss=0.516528
+  step 300/390: loss=0.470333
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/40: loss=0.469990 lr=0.020000
+  epoch 25: test_acc = 7595/10000 = 75.950000%  top5 = 9824/10000 = 98.240000%  [95% CI 75.10–76.78]
+  step 0/390: loss=0.371182
+  step 1/390: loss=0.474000
+  step 2/390: loss=0.530327
+  step 100/390: loss=0.423953
+  step 200/390: loss=0.386873
+  step 300/390: loss=0.475565
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 26/40: loss=0.456875 lr=0.020000
+  epoch 26: test_acc = 7636/10000 = 76.360000%  top5 = 9827/10000 = 98.270000%  [95% CI 75.52–77.18]
+  step 0/390: loss=0.439087
+  step 1/390: loss=0.374569
+  step 2/390: loss=0.552819
+  step 100/390: loss=0.517253
+  step 200/390: loss=0.403970
+  step 300/390: loss=0.375693
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 27/40: loss=0.445096 lr=0.020000
+  epoch 27: test_acc = 7580/10000 = 75.800000%  top5 = 9824/10000 = 98.240000%  [95% CI 74.95–76.63]
+  step 0/390: loss=0.405506
+  step 1/390: loss=0.498600
+  step 2/390: loss=0.431159
+  step 100/390: loss=0.452937
+  step 200/390: loss=0.449276
+  step 300/390: loss=0.465083
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 28/40: loss=0.441773 lr=0.020000
+  epoch 28: test_acc = 7642/10000 = 76.420000%  top5 = 9811/10000 = 98.110000%  [95% CI 75.58–77.24]
+  step 0/390: loss=0.479878
+  step 1/390: loss=0.379078
+  step 2/390: loss=0.377996
+  step 100/390: loss=0.381132
+  step 200/390: loss=0.347477
+  step 300/390: loss=0.394146
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 29/40: loss=0.433562 lr=0.020000
+  epoch 29: test_acc = 7577/10000 = 75.770000%  top5 = 9818/10000 = 98.180000%  [95% CI 74.92–76.60]
+  step 0/390: loss=0.402688
+  step 1/390: loss=0.477729
+  step 2/390: loss=0.473521
+  step 100/390: loss=0.377493
+  step 200/390: loss=0.376479
+  step 300/390: loss=0.349410
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 30/40: loss=0.423844 lr=0.020000
+  epoch 30: test_acc = 7583/10000 = 75.830000%  top5 = 9822/10000 = 98.220000%  [95% CI 74.98–76.66]
+  step 0/390: loss=0.286837
+  step 1/390: loss=0.426352
+  step 2/390: loss=0.432229
+  step 100/390: loss=0.438042
+  step 200/390: loss=0.364338
+  step 300/390: loss=0.398296
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 31/40: loss=0.416280 lr=0.020000
+  epoch 31: test_acc = 7579/10000 = 75.790000%  top5 = 9800/10000 = 98.000000%  [95% CI 74.94–76.62]
+  step 0/390: loss=0.409437
+  step 1/390: loss=0.436896
+  step 2/390: loss=0.346349
+  step 100/390: loss=0.279221
+  step 200/390: loss=0.428590
+  step 300/390: loss=0.264476
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 32/40: loss=0.402781 lr=0.020000
+  epoch 32: test_acc = 7505/10000 = 75.050000%  top5 = 9804/10000 = 98.040000%  [95% CI 74.19–75.89]
+  step 0/390: loss=0.444815
+  step 1/390: loss=0.493356
+  step 2/390: loss=0.469860
+  step 100/390: loss=0.460138
+  step 200/390: loss=0.348801
+  step 300/390: loss=0.588368
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 33/40: loss=0.402002 lr=0.020000
+  epoch 33: test_acc = 7552/10000 = 75.520000%  top5 = 9800/10000 = 98.000000%  [95% CI 74.67–76.35]
+  step 0/390: loss=0.406725
+  step 1/390: loss=0.396732
+  step 2/390: loss=0.337734
+  step 100/390: loss=0.352611
+  step 200/390: loss=0.510895
+  step 300/390: loss=0.428178
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 34/40: loss=0.392158 lr=0.020000
+  epoch 34: test_acc = 7624/10000 = 76.240000%  top5 = 9808/10000 = 98.080000%  [95% CI 75.40–77.06]
+  step 0/390: loss=0.350351
+  step 1/390: loss=0.407901
+  step 2/390: loss=0.363513
+  step 100/390: loss=0.351173
+  step 200/390: loss=0.265065
+  step 300/390: loss=0.378828
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 35/40: loss=0.384759 lr=0.020000
+  epoch 35: test_acc = 7606/10000 = 76.060000%  top5 = 9808/10000 = 98.080000%  [95% CI 75.21–76.89]
+  step 0/390: loss=0.433377
+  step 1/390: loss=0.317288
+  step 2/390: loss=0.400328
+  step 100/390: loss=0.378540
+  step 200/390: loss=0.477814
+  step 300/390: loss=0.556652
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 36/40: loss=0.380528 lr=0.020000
+  epoch 36: test_acc = 7562/10000 = 75.620000%  top5 = 9814/10000 = 98.140000%  [95% CI 74.77–76.45]
+  step 0/390: loss=0.402503
+  step 1/390: loss=0.286213
+  step 2/390: loss=0.443511
+  step 100/390: loss=0.376747
+  step 200/390: loss=0.333936
+  step 300/390: loss=0.403754
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 37/40: loss=0.374591 lr=0.020000
+  epoch 37: test_acc = 7599/10000 = 75.990000%  top5 = 9812/10000 = 98.120000%  [95% CI 75.14–76.82]
+  step 0/390: loss=0.322732
+  step 1/390: loss=0.517352
+  step 2/390: loss=0.328684
+  step 100/390: loss=0.375485
+  step 200/390: loss=0.267467
+  step 300/390: loss=0.389781
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 38/40: loss=0.367374 lr=0.020000
+  epoch 38: test_acc = 7666/10000 = 76.660000%  top5 = 9819/10000 = 98.190000%  [95% CI 75.82–77.48]
+  step 0/390: loss=0.346342
+  step 1/390: loss=0.460971
+  step 2/390: loss=0.357047
+  step 100/390: loss=0.241221
+  step 200/390: loss=0.407561
+  step 300/390: loss=0.302168
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 39/40: loss=0.359350 lr=0.020000
+  epoch 39: test_acc = 7643/10000 = 76.430000%  top5 = 9819/10000 = 98.190000%  [95% CI 75.59–77.25]
+  step 0/390: loss=0.294319
+  step 1/390: loss=0.304929
+  step 2/390: loss=0.302132
+  step 100/390: loss=0.318058
+  step 200/390: loss=0.376998
+  step 300/390: loss=0.359813
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 40/40: loss=0.354301 lr=0.020000
+  epoch 40: test_acc = 7596/10000 = 75.960000%  top5 = 9820/10000 = 98.200000%  [95% CI 75.11–76.79]
+[pjrt_ffi] allocator: 5 create option(s), memory_fraction=1.000, allocator=platform, platform_name=METAL
+I1107 18:02:27.426772 39652309 se_gpu_pjrt_client.cc:1369] Using platform (synchronous passthrough) allocator.
+[pjrt_ffi] XLA backend: PJRT 0.115, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_adam_train_step.mlir (@cifar8w_bn_adam_train_step, 117 outputs, 1 replica) in 182 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 43 ms
+done (trained CIFAR-CNN8-wide-BN mom + constant lr via packed threading).
+════════ cifar8w-BN (wide head) — AdamW (lr 1e-3) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_bn_adam_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_bn_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN adam (constant lr 0.001000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_bn_adam_train_step holds 114 parameter tensors (4.3 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+  step 0/390: loss=2.412933
+  step 1/390: loss=2.427090
+  step 2/390: loss=2.404229
+  step 100/390: loss=1.813909
+  step 200/390: loss=1.567204
+  step 300/390: loss=1.569224
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 1/40: loss=1.650545 lr=0.001000
+  epoch 1: test_acc = 4927/10000 = 49.270000%  top5 = 9225/10000 = 92.250000%  [95% CI 48.29–50.25]
+  step 0/390: loss=1.314544
+  step 1/390: loss=1.445655
+  step 2/390: loss=1.289301
+  step 100/390: loss=1.307023
+  step 200/390: loss=1.277392
+  step 300/390: loss=1.380294
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 2/40: loss=1.274130 lr=0.001000
+  epoch 2: test_acc = 5857/10000 = 58.570000%  top5 = 9521/10000 = 95.210000%  [95% CI 57.60–59.53]
+  step 0/390: loss=1.190926
+  step 1/390: loss=1.272466
+  step 2/390: loss=1.175457
+  step 100/390: loss=1.007137
+  step 200/390: loss=1.074967
+  step 300/390: loss=0.993280
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 3/40: loss=1.110799 lr=0.001000
+  epoch 3: test_acc = 6167/10000 = 61.670000%  top5 = 9578/10000 = 95.780000%  [95% CI 60.71–62.62]
+  step 0/390: loss=1.183726
+  step 1/390: loss=0.985536
+  step 2/390: loss=0.831980
+  step 100/390: loss=0.953013
+  step 200/390: loss=0.984853
+  step 300/390: loss=1.028270
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 4/40: loss=1.007647 lr=0.001000
+  epoch 4: test_acc = 6404/10000 = 64.040000%  top5 = 9632/10000 = 96.320000%  [95% CI 63.09–64.97]
+  step 0/390: loss=0.941866
+  step 1/390: loss=1.061074
+  step 2/390: loss=1.011431
+  step 100/390: loss=0.803883
+  step 200/390: loss=0.847536
+  step 300/390: loss=0.774311
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 5/40: loss=0.933060 lr=0.001000
+  epoch 5: test_acc = 6564/10000 = 65.640000%  top5 = 9670/10000 = 96.700000%  [95% CI 64.70–66.56]
+  step 0/390: loss=0.916497
+  step 1/390: loss=0.879190
+  step 2/390: loss=1.077417
+  step 100/390: loss=0.803561
+  step 200/390: loss=1.031217
+  step 300/390: loss=0.850022
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 6/40: loss=0.881128 lr=0.001000
+  epoch 6: test_acc = 6782/10000 = 67.820000%  top5 = 9723/10000 = 97.230000%  [95% CI 66.90–68.73]
+  step 0/390: loss=0.853310
+  step 1/390: loss=0.695905
+  step 2/390: loss=0.945471
+  step 100/390: loss=0.873726
+  step 200/390: loss=0.831750
+  step 300/390: loss=0.919812
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 7/40: loss=0.832234 lr=0.001000
+  epoch 7: test_acc = 6922/10000 = 69.220000%  top5 = 9741/10000 = 97.410000%  [95% CI 68.31–70.12]
+  step 0/390: loss=0.844354
+  step 1/390: loss=0.790321
+  step 2/390: loss=0.633001
+  step 100/390: loss=0.660016
+  step 200/390: loss=0.754053
+  step 300/390: loss=0.864273
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 8/40: loss=0.800212 lr=0.001000
+  epoch 8: test_acc = 6851/10000 = 68.510000%  top5 = 9716/10000 = 97.160000%  [95% CI 67.59–69.41]
+  step 0/390: loss=0.802227
+  step 1/390: loss=0.763972
+  step 2/390: loss=0.633016
+  step 100/390: loss=0.656841
+  step 200/390: loss=0.714787
+  step 300/390: loss=0.773980
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 9/40: loss=0.762416 lr=0.001000
+  epoch 9: test_acc = 6993/10000 = 69.930000%  top5 = 9753/10000 = 97.530000%  [95% CI 69.02–70.82]
+  step 0/390: loss=0.754031
+  step 1/390: loss=0.682324
+  step 2/390: loss=0.671938
+  step 100/390: loss=0.661889
+  step 200/390: loss=0.914738
+  step 300/390: loss=0.597941
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 10/40: loss=0.738279 lr=0.001000
+  epoch 10: test_acc = 7129/10000 = 71.290000%  top5 = 9766/10000 = 97.660000%  [95% CI 70.40–72.17]
+  step 0/390: loss=0.678508
+  step 1/390: loss=0.678735
+  step 2/390: loss=0.815618
+  step 100/390: loss=0.772705
+  step 200/390: loss=0.764471
+  step 300/390: loss=0.738979
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 11/40: loss=0.712031 lr=0.001000
+  epoch 11: test_acc = 7187/10000 = 71.870000%  top5 = 9766/10000 = 97.660000%  [95% CI 70.98–72.74]
+  step 0/390: loss=0.657871
+  step 1/390: loss=0.687863
+  step 2/390: loss=0.608370
+  step 100/390: loss=0.702134
+  step 200/390: loss=0.644355
+  step 300/390: loss=0.686476
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 12/40: loss=0.692644 lr=0.001000
+  epoch 12: test_acc = 7211/10000 = 72.110000%  top5 = 9775/10000 = 97.750000%  [95% CI 71.22–72.98]
+  step 0/390: loss=0.749291
+  step 1/390: loss=0.800004
+  step 2/390: loss=0.550900
+  step 100/390: loss=0.860167
+  step 200/390: loss=0.722975
+  step 300/390: loss=0.699861
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 13/40: loss=0.672074 lr=0.001000
+  epoch 13: test_acc = 7168/10000 = 71.680000%  top5 = 9782/10000 = 97.820000%  [95% CI 70.79–72.55]
+  step 0/390: loss=0.670287
+  step 1/390: loss=0.630091
+  step 2/390: loss=0.770407
+  step 100/390: loss=0.628942
+  step 200/390: loss=0.618263
+  step 300/390: loss=0.788243
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 14/40: loss=0.655469 lr=0.001000
+  epoch 14: test_acc = 7296/10000 = 72.960000%  top5 = 9777/10000 = 97.770000%  [95% CI 72.08–73.82]
+  step 0/390: loss=0.616810
+  step 1/390: loss=0.598225
+  step 2/390: loss=0.652033
+  step 100/390: loss=0.665751
+  step 200/390: loss=0.763820
+  step 300/390: loss=0.620785
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 15/40: loss=0.637171 lr=0.001000
+  epoch 15: test_acc = 7304/10000 = 73.040000%  top5 = 9789/10000 = 97.890000%  [95% CI 72.16–73.90]
+  step 0/390: loss=0.565755
+  step 1/390: loss=0.465823
+  step 2/390: loss=0.578356
+  step 100/390: loss=0.547248
+  step 200/390: loss=0.653528
+  step 300/390: loss=0.642424
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 16/40: loss=0.615926 lr=0.001000
+  epoch 16: test_acc = 7336/10000 = 73.360000%  top5 = 9783/10000 = 97.830000%  [95% CI 72.48–74.22]
+  step 0/390: loss=0.553996
+  step 1/390: loss=0.484179
+  step 2/390: loss=0.715659
+  step 100/390: loss=0.687132
+  step 200/390: loss=0.613382
+  step 300/390: loss=0.656334
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 17/40: loss=0.604899 lr=0.001000
+  epoch 17: test_acc = 7368/10000 = 73.680000%  top5 = 9797/10000 = 97.970000%  [95% CI 72.81–74.53]
+  step 0/390: loss=0.584150
+  step 1/390: loss=0.568863
+  step 2/390: loss=0.465614
+  step 100/390: loss=0.611864
+  step 200/390: loss=0.596741
+  step 300/390: loss=0.604988
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 18/40: loss=0.589334 lr=0.001000
+  epoch 18: test_acc = 7417/10000 = 74.170000%  top5 = 9808/10000 = 98.080000%  [95% CI 73.30–75.02]
+  step 0/390: loss=0.603487
+  step 1/390: loss=0.738276
+  step 2/390: loss=0.501325
+  step 100/390: loss=0.757680
+  step 200/390: loss=0.514588
+  step 300/390: loss=0.492257
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 19/40: loss=0.582347 lr=0.001000
+  epoch 19: test_acc = 7411/10000 = 74.110000%  top5 = 9786/10000 = 97.860000%  [95% CI 73.24–74.96]
+  step 0/390: loss=0.603693
+  step 1/390: loss=0.481165
+  step 2/390: loss=0.531934
+  step 100/390: loss=0.531936
+  step 200/390: loss=0.567703
+  step 300/390: loss=0.534167
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 20/40: loss=0.560377 lr=0.001000
+  epoch 20: test_acc = 7385/10000 = 73.850000%  top5 = 9809/10000 = 98.090000%  [95% CI 72.98–74.70]
+  step 0/390: loss=0.477139
+  step 1/390: loss=0.572820
+  step 2/390: loss=0.394983
+  step 100/390: loss=0.556357
+  step 200/390: loss=0.513224
+  step 300/390: loss=0.500015
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 21/40: loss=0.557067 lr=0.001000
+  epoch 21: test_acc = 7412/10000 = 74.120000%  top5 = 9813/10000 = 98.130000%  [95% CI 73.25–74.97]
+  step 0/390: loss=0.378778
+  step 1/390: loss=0.379890
+  step 2/390: loss=0.577846
+  step 100/390: loss=0.658355
+  step 200/390: loss=0.536288
+  step 300/390: loss=0.590336
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 22/40: loss=0.541141 lr=0.001000
+  epoch 22: test_acc = 7361/10000 = 73.610000%  top5 = 9812/10000 = 98.120000%  [95% CI 72.74–74.46]
+  step 0/390: loss=0.484890
+  step 1/390: loss=0.556174
+  step 2/390: loss=0.493430
+  step 100/390: loss=0.366768
+  step 200/390: loss=0.556397
+  step 300/390: loss=0.628022
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 23/40: loss=0.530494 lr=0.001000
+  epoch 23: test_acc = 7467/10000 = 74.670000%  top5 = 9806/10000 = 98.060000%  [95% CI 73.81–75.51]
+  step 0/390: loss=0.521058
+  step 1/390: loss=0.499189
+  step 2/390: loss=0.453825
+  step 100/390: loss=0.547099
+  step 200/390: loss=0.529607
+  step 300/390: loss=0.720780
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 24/40: loss=0.516964 lr=0.001000
+  epoch 24: test_acc = 7402/10000 = 74.020000%  top5 = 9808/10000 = 98.080000%  [95% CI 73.15–74.87]
+  step 0/390: loss=0.593313
+  step 1/390: loss=0.525396
+  step 2/390: loss=0.477980
+  step 100/390: loss=0.617275
+  step 200/390: loss=0.602125
+  step 300/390: loss=0.452080
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 25/40: loss=0.507972 lr=0.001000
+  epoch 25: test_acc = 7459/10000 = 74.590000%  top5 = 9795/10000 = 97.950000%  [95% CI 73.73–75.43]
+  step 0/390: loss=0.412550
+  step 1/390: loss=0.626482
+  step 2/390: loss=0.494678
+  step 100/390: loss=0.480820
+  step 200/390: loss=0.471860
+  step 300/390: loss=0.446658
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 26/40: loss=0.494802 lr=0.001000
+  epoch 26: test_acc = 7408/10000 = 74.080000%  top5 = 9789/10000 = 97.890000%  [95% CI 73.21–74.93]
+  step 0/390: loss=0.547736
+  step 1/390: loss=0.395748
+  step 2/390: loss=0.486435
+  step 100/390: loss=0.569490
+  step 200/390: loss=0.505254
+  step 300/390: loss=0.387738
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 27/40: loss=0.486474 lr=0.001000
+  epoch 27: test_acc = 7446/10000 = 74.460000%  top5 = 9790/10000 = 97.900000%  [95% CI 73.60–75.31]
+  step 0/390: loss=0.421744
+  step 1/390: loss=0.625146
+  step 2/390: loss=0.517551
+  step 100/390: loss=0.526126
+  step 200/390: loss=0.338053
+  step 300/390: loss=0.474817
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 28/40: loss=0.480383 lr=0.001000
+  epoch 28: test_acc = 7489/10000 = 74.890000%  top5 = 9801/10000 = 98.010000%  [95% CI 74.03–75.73]
+  step 0/390: loss=0.554921
+  step 1/390: loss=0.431650
+  step 2/390: loss=0.384761
+  step 100/390: loss=0.393719
+  step 200/390: loss=0.416634
+  step 300/390: loss=0.520657
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 29/40: loss=0.471388 lr=0.001000
+  epoch 29: test_acc = 7475/10000 = 74.750000%  top5 = 9799/10000 = 97.990000%  [95% CI 73.89–75.59]
+  step 0/390: loss=0.459218
+  step 1/390: loss=0.517153
+  step 2/390: loss=0.521552
+  step 100/390: loss=0.352115
+  step 200/390: loss=0.599418
+  step 300/390: loss=0.335237
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 30/40: loss=0.465110 lr=0.001000
+  epoch 30: test_acc = 7448/10000 = 74.480000%  top5 = 9808/10000 = 98.080000%  [95% CI 73.62–75.32]
+  step 0/390: loss=0.407485
+  step 1/390: loss=0.461496
+  step 2/390: loss=0.364769
+  step 100/390: loss=0.505823
+  step 200/390: loss=0.460154
+  step 300/390: loss=0.515913
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 31/40: loss=0.448012 lr=0.001000
+  epoch 31: test_acc = 7403/10000 = 74.030000%  top5 = 9790/10000 = 97.900000%  [95% CI 73.16–74.88]
+  step 0/390: loss=0.512693
+  step 1/390: loss=0.403300
+  step 2/390: loss=0.412150
+  step 100/390: loss=0.411425
+  step 200/390: loss=0.474419
+  step 300/390: loss=0.349510
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 32/40: loss=0.443713 lr=0.001000
+  epoch 32: test_acc = 7511/10000 = 75.110000%  top5 = 9798/10000 = 97.980000%  [95% CI 74.25–75.95]
+  step 0/390: loss=0.303727
+  step 1/390: loss=0.438650
+  step 2/390: loss=0.536644
+  step 100/390: loss=0.667206
+  step 200/390: loss=0.430651
+  step 300/390: loss=0.547202
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 33/40: loss=0.432787 lr=0.001000
+  epoch 33: test_acc = 7339/10000 = 73.390000%  top5 = 9786/10000 = 97.860000%  [95% CI 72.51–74.25]
+  step 0/390: loss=0.453741
+  step 1/390: loss=0.377951
+  step 2/390: loss=0.294752
+  step 100/390: loss=0.384652
+  step 200/390: loss=0.504325
+  step 300/390: loss=0.434272
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 34/40: loss=0.420644 lr=0.001000
+  epoch 34: test_acc = 7395/10000 = 73.950000%  top5 = 9795/10000 = 97.950000%  [95% CI 73.08–74.80]
+  step 0/390: loss=0.507957
+  step 1/390: loss=0.406363
+  step 2/390: loss=0.377754
+  step 100/390: loss=0.371504
+  step 200/390: loss=0.275946
+  step 300/390: loss=0.447091
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 35/40: loss=0.416697 lr=0.001000
+  epoch 35: test_acc = 7442/10000 = 74.420000%  top5 = 9776/10000 = 97.760000%  [95% CI 73.56–75.27]
+  step 0/390: loss=0.306072
+  step 1/390: loss=0.374721
+  step 2/390: loss=0.457461
+  step 100/390: loss=0.430500
+  step 200/390: loss=0.453323
+  step 300/390: loss=0.406161
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 36/40: loss=0.406032 lr=0.001000
+  epoch 36: test_acc = 7497/10000 = 74.970000%  top5 = 9776/10000 = 97.760000%  [95% CI 74.11–75.81]
+  step 0/390: loss=0.301524
+  step 1/390: loss=0.302476
+  step 2/390: loss=0.474282
+  step 100/390: loss=0.503958
+  step 200/390: loss=0.385412
+  step 300/390: loss=0.436690
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 37/40: loss=0.408780 lr=0.001000
+  epoch 37: test_acc = 7450/10000 = 74.500000%  top5 = 9760/10000 = 97.600000%  [95% CI 73.64–75.34]
+  step 0/390: loss=0.343870
+  step 1/390: loss=0.518291
+  step 2/390: loss=0.309109
+  step 100/390: loss=0.558506
+  step 200/390: loss=0.450017
+  step 300/390: loss=0.493010
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 38/40: loss=0.391492 lr=0.001000
+  epoch 38: test_acc = 7467/10000 = 74.670000%  top5 = 9760/10000 = 97.600000%  [95% CI 73.81–75.51]
+  step 0/390: loss=0.267223
+  step 1/390: loss=0.509660
+  step 2/390: loss=0.331012
+  step 100/390: loss=0.311012
+  step 200/390: loss=0.308377
+  step 300/390: loss=0.473497
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 39/40: loss=0.382042 lr=0.001000
+  epoch 39: test_acc = 7422/10000 = 74.220000%  top5 = 9765/10000 = 97.650000%  [95% CI 73.35–75.07]
+  step 0/390: loss=0.335778
+  step 1/390: loss=0.356540
+  step 2/390: loss=0.451916
+  step 100/390: loss=0.298022
+  step 200/390: loss=0.393698
+  step 300/390: loss=0.321392
+[pjrt_ffi] RESIDENT: @cifar8w_bn_fwd holds 38 parameter tensors (1.4 MB) on 1 device; they stop being re-uploaded every step (unified memory)
+Epoch 40/40: loss=0.374506 lr=0.001000
+  epoch 40: test_acc = 7504/10000 = 75.040000%  top5 = 9774/10000 = 97.740000%  [95% CI 74.18–75.88]
+done (trained CIFAR-CNN8-wide-BN adam + constant lr via packed threading).

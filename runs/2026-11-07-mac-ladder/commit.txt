@@ -1,2 +1,3 @@
-a42a6af1 deploy(mac): mac_bench.sh and MAC_HANDOFF.md — the eight train steps timed on synthetic data and the hours estimated from them, and the turnkey list for a second Mac
- M PLATFORMS.md
+77b3504c runs(mac M5 Pro): ViT-Tiny on Imagenette, 80 epochs from scratch — 68.56 % top-1 in 32.6 min
+ M runs/2026-11-07-mac-ladder/commit.txt
+ M runs/2026-11-07-mac-ladder/ladder.log
