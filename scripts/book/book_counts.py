@@ -43,7 +43,7 @@ def main():
                 bad.append(f'{what}: the book says {h!r}, the tree has {actual}')
 
     n_bestiary = len(glob.glob('Bestiary/*.lean'))
-    expect(r'\\textbf\{Part 2: The bestiary \(Chapters 10--13\)\.\} ([A-Za-z-]+) further\s+architectures', n_bestiary, 'bestiary count (Part 2 blurb)')
+    expect(r'\\textbf\{Part 2: The bestiary \(Chapters[^)]*\)\.\} ([A-Za-z-]+) further\s+architectures', n_bestiary, 'bestiary count (Part 2 blurb)')
     expect(r"bestiary's (\d+) architecture families", n_bestiary, 'bestiary count (appendix)')
 
     n_demo = len(re.findall(r'^\\section\{[^\n]*--- demo:', tex, re.M))

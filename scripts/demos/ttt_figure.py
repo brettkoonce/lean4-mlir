@@ -147,5 +147,8 @@ ax.set_xlabel("exact value for the mover (the theorem)"); ax.set_ylabel("the net
 ax.set_title("value head vs the theorem (3×3, all 4,520)")
 ax.spines[["top", "right"]].set_visible(False)
 
-fig.savefig(out, dpi=150)
+# bbox_inches="tight": the two left-panel titles are wider than their axes, and
+# constrained_layout does not grow the canvas for title overhang, so without it
+# the leading "3×3" / "5×5" was clipped at the figure's left edge.
+fig.savefig(out, dpi=150, bbox_inches="tight", pad_inches=0.15)
 print(f"wrote {out}")

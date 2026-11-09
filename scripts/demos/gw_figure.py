@@ -13,7 +13,7 @@ placeholder; every curve here is measured.
   (d) the same in real O3a noise
 
   .venv-gw/bin/python scripts/demos/gw_figure.py <table_val.json> [out.png] [--data=data/gw]
-                                           [--cnn-real=<table_val.json>] [--net=B0|CNN]
+                                           [--cnn-real=<table_val.json>] [--net=<CNN legend label>]
                                            # keep --net short (<= ~14 chars): it is a
                                            # legend label, and panel (d)'s clear wedge
                                            # is narrow -- see the placement note below
@@ -42,7 +42,9 @@ BAND = (20.0, 500.0)
 def main():
     table = sys.argv[1]
     out = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else "gw_detect.png"
-    data, events, cnn_real, net = "data/gw", None, None, "B0"
+    # The CNN legend label names the net, not a chapter: the book moved its
+    # chapter numbers to \ref, so nothing baked into the PNG may carry one.
+    data, events, cnn_real, net = "data/gw", None, None, "CIFAR CNN"
     for a in sys.argv[2:]:
         if a.startswith("--data="):
             data = a.split("=", 1)[1]
