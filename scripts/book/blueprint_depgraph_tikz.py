@@ -6,7 +6,7 @@ blueprint/src/content.tex:
 Re-run after `scripts/book/blueprint_uses.py --fix` changes an edge or a statement moves;
 the files are committed (the layout needs graphviz via pygraphviz, which CI does not
 have). One figure per chapter (per section when a chapter's
-statements span several; a section may be cut once more at a named node), from
+statements span several; a section may be cut once more at named nodes), from
 blueprint/src/content.tex — the print twin of templates/dep_graph.html. Within a
 figure: its statements and the edges between them; a dependency outside the figure
 is a dashed portal naming where it lives ("ch 4", "above", "below"); a statement used
@@ -24,9 +24,16 @@ import pygraphviz as pgv
 
 AMBIENT = 4
 ENVS = ("theorem", "lemma", "definition", "axiom")
-# A section too deep for one page is cut at these nodes: the node and everything
-# downstream of it (within the section) become the second figure.
-CUTS = {"Attention proofs": ["ax:mhsaHasVJPMat"]}
+# A section too deep for one page, or too wide to read, is cut at these nodes: the
+# nodes and everything downstream of them (within the section) become the second
+# figure. A cut applies to the one section that holds its nodes; the attention proofs
+# split at multi-head attention, the BatchNorm chapter between the normalization
+# lemmas with the certificates that stand on them and the CIFAR step ties, which
+# stand on chapter 3 (as one figure the two clusters set each other's scale, 5.2 pt).
+CUTS = [["ax:mhsaHasVJPMat"],
+        ["thm:cifar_fold", "thm:cifar_loss_grad", "thm:cifar_bn_fold", "thm:cifar8_step_tie",
+         "thm:cifar8_step_tieG", "thm:cifar8bbn_step_tie", "thm:cifar8_sgd_descends",
+         "thm:optimizer_tails_faithful"]]
 BASE = 7.0          # label font size at scale 1, points (portals 5.5)
 HUB = 8             # a source feeding this many boxes of its own figure keeps its box, drops its arrows
 
@@ -61,8 +68,9 @@ def units(nodes, edges):
         for s in secs[ch]:
             sec = s if len(secs[ch]) > 1 else ''
             mine = [l for l in nodes if nodes[l]['ch'] == ch and nodes[l]['sec'] == s]
-            if s in CUTS:
-                down = set(CUTS[s]); grew = True
+            cut = next((c for c in CUTS if set(c) <= set(mine)), None)
+            if cut:
+                down = set(cut); grew = True
                 while grew:
                     grew = False
                     for a, b in edges:
