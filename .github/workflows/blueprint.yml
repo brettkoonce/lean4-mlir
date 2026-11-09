@@ -473,6 +473,29 @@ jobs:
           fi
           exit 0
 
+      # The typeset book goes to a private GCS bucket, not the site. Workload Identity
+      # Federation, no stored key: the pool's provider admits this repo's main branch
+      # (attribute.repository == brettkoonce/lean4-mlir, attribute.ref == refs/heads/main) and the
+      # service account it impersonates holds objectUser on the bucket (latest.pdf is overwritten each run). The three knobs are
+      # repository VARIABLES, not secrets (none is sensitive): PDF_BUCKET (bucket name),
+      # GCP_WIF_PROVIDER (projects/N/locations/global/workloadIdentityPools/P/providers/Q) and
+      # GCP_PDF_SA (the service account's email); unset, the step is skipped and the job summary
+      # says so. Two objects a run: blueprint/<sha>.pdf and blueprint/latest.pdf.
+      - name: Authenticate to GCP for the PDF bucket
+        id: pdf_bucket
+        if: ${{ github.event_name != 'pull_request' && vars.PDF_BUCKET != '' && vars.GCP_WIF_PROVIDER != '' && vars.GCP_PDF_SA != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_PDF_SA }}
+      - name: Copy the PDF into the bucket
+        if: ${{ steps.pdf_bucket.outcome == 'success' }}
+        run: |
+          test -f blueprint/print/print.pdf || { echo "::error::no PDF to upload"; exit 1; }
+          gcloud storage cp blueprint/print/print.pdf "gs://${{ vars.PDF_BUCKET }}/blueprint/${GITHUB_SHA}.pdf"
+          gcloud storage cp blueprint/print/print.pdf "gs://${{ vars.PDF_BUCKET }}/blueprint/latest.pdf"
+          echo "uploaded gs://${{ vars.PDF_BUCKET }}/blueprint/{${GITHUB_SHA::8}…,latest}.pdf"
+
       - name: Assemble public/ directory for Pages
         run: |
           mkdir -p public
@@ -543,20 +566,9 @@ jobs:
               | xargs -r sed -i "s|declaration-data\.bmp|declaration-data.bmp?v=$v|g"
             echo "declaration index versioned as ?v=$v in $(grep -rl --include='*.html' --include='*.js' "declaration-data.bmp?v=$v" public/docs | wc -l) files"
           fi
-          # Blueprint PDF — try multiple known paths, log what we find.
-          if [ -f blueprint/print/print.pdf ]; then
-            cp blueprint/print/print.pdf public/blueprint.pdf
-            echo "Copied PDF from blueprint/print/print.pdf"
-          elif [ -f blueprint/print.pdf ]; then
-            cp blueprint/print.pdf public/blueprint.pdf
-            echo "Copied PDF from blueprint/print.pdf"
-          elif [ -f blueprint/src/print.pdf ]; then
-            cp blueprint/src/print.pdf public/blueprint.pdf
-            echo "Copied PDF from blueprint/src/print.pdf"
-          else
-            echo "::warning::No PDF found at any expected path; blueprint.pdf will 404."
-            find blueprint -name "*.pdf" -maxdepth 3 2>/dev/null || true
-          fi
+          # The PDF is not published: the site carries the web blueprint and the API docs only
+          # (the typeset book is the publisher's). The build above stays as the LaTeX gate, and
+          # the PDF comes down with the run's downloadable artifact below.
           # Ship latex diagnostic artifacts so we can curl them from the
           # deployed Pages site without needing repo-admin log access.
           mkdir -p public/build-logs
@@ -632,10 +644,10 @@ jobs:
           docrefs="$(grep -oE 'docstring citations checked: [0-9]+ across [0-9]+ file\(s\); file citations checked: [0-9]+' \
                        "$RUNNER_TEMP/docstring-checkrefs.log" 2>/dev/null \
                      | sed -E 's/docstring citations checked: ([0-9]+) across ([0-9]+) file\(s\); file citations checked: ([0-9]+)/\1 identifiers across \2 files, \3 file links/')"
-          if [ -f public/blueprint.pdf ]; then
+          if [ -f blueprint/print/print.pdf ]; then
             # LaTeX wraps its log at 79 columns (the path splits mid-line), so join first.
             pages="$(cat blueprint/print/*.log 2>/dev/null | tr -d '\n' | grep -oE 'Output written on [^(]*\([0-9]+ pages' | grep -oE '[0-9]+ pages' | tail -1)"
-            pdf="✅ ${pages:-built} ($(du -h public/blueprint.pdf | cut -f1))"
+            pdf="✅ ${pages:-built} ($(du -h blueprint/print/print.pdf | cut -f1)); not on the site — ${{ steps.pdf_bucket.outcome == 'success' && 'in the private bucket' || steps.pdf_bucket.outcome == 'skipped' && 'bucket upload skipped (PDF_BUCKET / GCP_WIF_PROVIDER / GCP_PDF_SA variables unset)' || 'bucket upload FAILED' }}"
           elif [ "${{ job.status }}" != "success" ]; then
             # An earlier step failed, so the PDF step never ran AND nothing deploys: `Upload Pages
             # artifact` has no always(), and `deploy_pages` needs this job. Saying "the web version
@@ -675,7 +687,7 @@ jobs:
       # `if: always()` is the point of the first one: when the LaTeX or doc-gen4 step fails,
       # Pages never deploys, so the logs that would explain the failure were exactly the
       # thing you could not get at. Now they come down with the run.
-      - name: Upload downloadable outputs (PDF + blueprint web + build logs)
+      - name: Upload downloadable outputs (blueprint web + build logs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -683,7 +695,6 @@ jobs:
           # NOT public/docs — it falls back to a full local Mathlib corpus when the hosted
           # index is unreachable (see the assemble step). Opt into it below.
           path: |
-            public/blueprint.pdf
             public/blueprint/**
             public/build-logs/**
           if-no-files-found: warn

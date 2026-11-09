@@ -1,9 +1,8 @@
 # Lean 4 → MLIR → GPU
 
-**The book: [Verified Deep Learning with Lean 4](https://lean.brettkoonce.com/blueprint/)**
-([PDF](https://lean.brettkoonce.com/blueprint.pdf)) — the interactive proof blueprint
-*is* the book: every theorem clickable, from the `pdiv` primitives to the whole-network backward
-passes.
+**The book: [Verified Deep Learning with Lean 4](https://lean.brettkoonce.com/blueprint/)** —
+the interactive proof blueprint *is* the book: every theorem clickable, from the `pdiv`
+primitives to the whole-network backward passes.
 
 Lean 4 as a specification language for neural networks. Declare the architecture in Lean, render
 one StableHLO graph — forward, loss, backward and optimizer fused — from proofs that the backward
@@ -26,7 +25,7 @@ Nature) as the follow-up to
 
 | to | do this | needs |
 |---|---|---|
-| read it | the [book](https://lean.brettkoonce.com/blueprint/) ([PDF](https://lean.brettkoonce.com/blueprint.pdf)), or the [API docs](https://lean.brettkoonce.com/docs/) | a browser |
+| read it | the [book](https://lean.brettkoonce.com/blueprint/), or the [API docs](https://lean.brettkoonce.com/docs/) | a browser |
 | check the proofs | `lake exe cache get && lake build ProofsMinimal` (~1 min), then `lake build Certs` for all of them; [The proofs](#the-proofs) below | Lean 4, no GPU |
 | train a net | the four setup lines in [the tour](#the-tour), then `lake run mnist` (~1 min) | an NVIDIA, AMD, Intel or Apple Silicon GPU |
 

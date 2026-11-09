@@ -40,15 +40,13 @@ SKIP_FILES = {"404.html"}
 MAX_URLS = 50_000        # sitemap protocol hard cap
 WARN_URLS = 45_000       # leave headroom before the cap bites
 
-INDEXABLE = {".html", ".pdf"}
+INDEXABLE = {".html"}
 
 
 def priority_for(rel: str) -> tuple[str, str]:
     """(priority, changefreq) — a crawl hint, not a ranking lever."""
     if rel == "":                       # site root
         return "1.0", "weekly"
-    if rel == "blueprint.pdf":
-        return "0.9", "weekly"
     if rel.startswith("blueprint/"):
         return "0.8", "weekly"
     if rel.startswith("docs/"):
