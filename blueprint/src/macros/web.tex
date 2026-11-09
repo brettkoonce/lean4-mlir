@@ -22,6 +22,12 @@
 % a normal \section*.
 \newcommand{\prosesection}[1]{\par\bigskip\noindent{\large\bfseries #1}\par\nopagebreak\smallskip}
 
+% \proseparagraph: the run-in bold heading of a demo's sub-steps ("Scored per patient.").
+% Print makes it a \paragraph; here it is bold text and not a sectioning command, so the
+% web index lists chapters, sections and the bestiary's per-network subsections and no
+% fifth level -- plasTeX keeps its own \paragraph, a \renewcommand of it changes nothing.
+\newcommand{\proseparagraph}[1]{\par\medskip\noindent\textbf{#1}\ }
+
 % \cellleft: see macros/print.tex. HTML table cells are already ragged right.
 \newcommand{\cellleft}{}
 

@@ -342,7 +342,7 @@ groups carry a demo trained on data from that field: recognition in
 Chapter~\ref{chap:bestiary_nets}, everything else in
 Chapter~\ref{chap:bestiary_beyond}. A closing chapter on game theory
 trains Pong, Leduc poker and tic-tac-toe against their exact solutions,
-with the AlphaGo family and Deep CFR as its catalog.
+each section closing on the paper's network at the scale that made it famous.
 
 \textbf{Appendices.} The rest of the toolchain and the GPU platforms
 (A), how every claim is checked, with the tally of what each chapter
@@ -954,7 +954,7 @@ chapter network's certificate through all of them.}
 
 {\noindent\small \depgraphlegend{}\par}
 
-\paragraph{How the proofs are written.}
+\proseparagraph{How the proofs are written.}
 The proofs in this book follow Lamport's structured style
 (\href{https://lamport.azurewebsites.net/pubs/proof.pdf}{\emph{How to
 Write a 21\textsuperscript{st} Century Proof}}).
@@ -1899,7 +1899,7 @@ in seconds. Figure~\ref{fig:mnist_linear_arch} is the whole network.
 \label{fig:mnist_linear_arch}
 \end{figure}
 
-\paragraph{The forward pass and loss, in math.}
+\proseparagraph{The forward pass and loss, in math.}
 For an input image \(x \in \R^{784}\) and true class index
 \(t \in \{0, \dots, 9\}\):
 \begin{align*}
@@ -1913,7 +1913,7 @@ For an input image \(x \in \R^{784}\) and true class index
 The trainable parameters are \(W\) and \(b\), which is 7,850 floats
 in total.
 
-\paragraph{The same thing, as a \texttt{VerifiedNetSpec}.}
+\proseparagraph{The same thing, as a \texttt{VerifiedNetSpec}.}
 \begin{verbatim}
 def linearVerified : VerifiedNetSpec where
   name     := "MNIST-Linear"
@@ -1936,7 +1936,7 @@ the chapter compiled. The \texttt{blurb} is the banner the run prints
 before its first epoch, \texttt{\%LOWERER\%} filled in with whichever
 lowerer was selected; it is one line in the source and wrapped here.
 
-\paragraph{What \texttt{.dense 784 10} contributes.} Layers are
+\proseparagraph{What \texttt{.dense 784 10} contributes.} Layers are
 constructors of a \texttt{VLayer} inductive, and one function,
 \texttt{toSpecs}, says what each contributes to the parameter list as
 \texttt{(dims, initKind)} pairs --- \texttt{0} is He(fan-in), \texttt{1}
@@ -1977,7 +1977,7 @@ Read the type. The VJP is proved for the denotation of
 reads to build its graph. Copy the layer list into a second definition
 and the proof would be about a different network than the one that runs.
 
-\paragraph{The whole program.}
+\proseparagraph{The whole program.}
 The trainer is 58 lines including its docstring and module header, so here
 it is entire, with the comments and the header stripped:
 
@@ -2004,7 +2004,7 @@ The real rate is baked into
 recipe that trains is the recipe the proofs describe, and the two cannot
 drift apart.
 
-\paragraph{The gradient, in math.}
+\proseparagraph{The gradient, in math.}
 Backpropagation through this network produces a single outer
 product:
 \[
@@ -2020,7 +2020,7 @@ verified renderer emits exactly these as fused StableHLO, and that
 rendering is \texttt{verified\_mlir/linear\_train\_step.mlir}, the file
 the run at the top of the chapter compiled.
 
-\paragraph{Results.}
+\proseparagraph{Results.}
 The run at the top of this chapter is this network. Accuracy climbs from
 89.77\% after one epoch to 92.10\% after twelve, and the curve is
 essentially flat from epoch~9 on, which is what a model with no hidden
@@ -2028,7 +2028,7 @@ layer looks like once it has learned everything it can. Adding hidden layers and
 dataset and the same recipe to 97.81\% (\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}). That gap of about 5.7 points is the value of
 non-linearity on this task.
 
-\paragraph{Where this goes.}
+\proseparagraph{Where this goes.}
 Every architecture in Part~1 extends this template the same way, one
 new primitive at a time:
 
@@ -2069,7 +2069,7 @@ there is no magic underneath it. The driver is ordinary Lean in
 \texttt{LeanMlir/Verified/Train.lean}, and the interesting thing about it
 is how little it does.
 
-\paragraph{The training loop, the way a math book would write it.}
+\proseparagraph{The training loop, the way a math book would write it.}
 \begin{verbatim}
 Algorithm: Mini-batch SGD, with the step compiled into the graph
 Input:  net (a VerifiedNetSpec), cfg (epochs, batch size),
@@ -2095,7 +2095,7 @@ for epoch = 1 to cfg.epochs:
     eval(fwd, W, b, Xt, yt)
 \end{verbatim}
 
-\paragraph{The same loop, in Lean.}
+\proseparagraph{The same loop, in Lean.}
 Here is \texttt{VerifiedNet.trainLinear}, the driver that produced the
 run at the top of this chapter. Three things are left out: the
 \texttt{IO.getStdout} flushes, two environment overrides (one displaces
@@ -2868,7 +2868,7 @@ depends on it. The six parameter outputs are the proved ones ---
 \texttt{MlpFold} shows each denotes the certified gradient-descent
 step derived from the Mathlib \(\fderiv\) math.
 
-\paragraph{What \texttt{.relu} contributes.} Nothing:
+\proseparagraph{What \texttt{.relu} contributes.} Nothing:
 
 \begin{verbatim}
   | relu => #[]
@@ -3960,7 +3960,7 @@ trained at another.
 chapter. \texttt{cnnVerified.toNet.train cnnConfig} replaces
 \texttt{mlpVerified.toNet.train mlpConfig}. That's the whole diff.
 
-\paragraph{What \texttt{.conv}, \texttt{.maxPool} and \texttt{.flatten}
+\proseparagraph{What \texttt{.conv}, \texttt{.maxPool} and \texttt{.flatten}
 contribute.} Three more arms on Chapter~\ref{chap:tensor}'s
 \texttt{toSpecs}, and only one of them carries parameters:
 
@@ -5508,7 +5508,7 @@ is \texttt{runningBN}: the group each of those eight normalizes over, and
 whether the net keeps running statistics. The dense head, the max-pools,
 and the training config are all identical.
 
-\paragraph{What \texttt{.bnPerChannel} contributes.} One arm, and the
+\proseparagraph{What \texttt{.bnPerChannel} contributes.} One arm, and the
 only new one this chapter needs --- \texttt{.conv}, \texttt{.maxPool},
 \texttt{.flatten}, \texttt{.dense} and \texttt{.relu} are all
 Chapter~\ref{chap:cnn}'s, unchanged:
@@ -6276,7 +6276,7 @@ Figure~\ref{fig:depgraph_residual} is the dependency graph of this section.
 \end{enumerate}
 \end{proof}
 
-\paragraph{The ladder.}
+\proseparagraph{The ladder.}
 From here every ImageNet chapter proves the same six statements about its
 network, and this is the first time all six appear. (i) The whole network at
 batch \(N\) has a VJP: the backward composed from the stages' backwards is the
@@ -14827,7 +14827,7 @@ is Part 2: a catalog of famous architectures expressed as pure
 chapter nets and the four codegen-backed primitives of
 \S\ref{sec:bestiary_primitives}.
 
-\paragraph*{What ``\(N\) new primitives'' means.}
+\proseparagraph{What ``\(N\) new primitives'' means.}
 Every bestiary entry leads with how many new \texttt{Layer}
 constructors it asks the reader to absorb on top of the
 primary-sequence toolbox.
@@ -15966,7 +15966,7 @@ $34.9\%$ of them and is not the benchmark's protocol --- and every row of this
 stack is scored under one decode, the multilabel one: up to three classes per anchor
 cell, $3{,}000$ boxes an image.
 
-\paragraph{The working detector.}
+\proseparagraph{The working detector.}
 A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
 top-down neck into three anchor heads at strides $8/16/32$; DIoU box loss,
 focal objectness, focal class CE; $448$\,px input, 30 epochs, HSV jitter,
@@ -16736,7 +16736,7 @@ Pixel-level labeling. Symmetric encoder/decoder with skip connections
 is the recurring pattern; UNet is the canonical instance, and the same
 shape later became the diffusion-model backbone.
 
-\paragraph{A ResNet-34 UNet on BraTS.} The question is what a slice
+\proseparagraph{A ResNet-34 UNet on BraTS.} The question is what a slice
 segmenter built from the Part~1 kit scores on brain-tumor MRI, and what its
 two borrowed parts --- the ImageNet encoder and the decoder's skip
 connections --- each contribute. The
@@ -16840,7 +16840,7 @@ classifiers of Part~1:
     and nothing else: the trainer's artifact plus a colormap routine.
 \end{itemize}
 
-\paragraph{What the skips contribute, measured.} The second bullet is the
+\proseparagraph{What the skips contribute, measured.} The second bullet is the
 one claim in this section that is cheap to test. The same backbone, data and
 schedule with the decoder's skip connections removed --- upsample and
 convolve, never concatenate the encoder feature --- isolates what they
@@ -16871,7 +16871,7 @@ is its last on every seed; it is still improving when the schedule ends. It
 is visible in the renders as well: the thin enhancing rim around the necrotic
 core is resolved with skips and smeared into the core without them.
 
-\paragraph{Scored per patient.} Tables~\ref{tab:brats_dice} and
+\proseparagraph{Scored per patient.} Tables~\ref{tab:brats_dice} and
 \ref{tab:brats_skips} pool every pixel of every
 tumor-bearing slice into one Dice. The literature does something else: one
 Dice per patient volume, over all of its slices including the tumor-free
@@ -16915,7 +16915,7 @@ are the numbers scored the way published BraTS work scores, and they are
 still not comparable to its tables: the 484-case MSD Task01 is not the
 1{,}251-case BraTS~2021 set, and the split is this book's own.
 
-\paragraph{Through-plane context.} A slice model never sees the slice above or
+\proseparagraph{Through-plane context.} A slice model never sees the slice above or
 below. The last two rows measure what that costs, two ways. \texttt{unet-brats-r34
 ctx=1} is the same net with the two neighboring slices fed in as eight extra
 input channels (a 2.5D build from \texttt{preprocess\_brats.py --context 1};
@@ -16961,7 +16961,7 @@ by less than the two 3D seeds differ from each other. The 3D step runs at roughl
 the 2D per-voxel rate through XLA on this card, so the port is affordable;
 it is not built, and this section's Lean trainer is the slice model.
 
-\paragraph{Pairing a decoder to a backbone that has no \texttt{unetDown}.} The
+\proseparagraph{Pairing a decoder to a backbone that has no \texttt{unetDown}.} The
 catalog UNet pairs skips implicitly --- $i$-th \texttt{unetUp} from the
 bottom with $i$-th \texttt{unetDown} from the top --- which a ResNet encoder
 cannot satisfy. So \texttt{unetUp} also pairs \textbf{by shape}, with a
@@ -17532,7 +17532,7 @@ noise schedule and the sampling loop, not a layer. Two questions a grid of sampl
 cannot answer: \emph{how good are the samples, measured, and which sampler should
 run on the trained weights?}
 
-\paragraph{DDPM on MNIST.} The \texttt{demos/MainMnistDdpmTrain.lean} trainer
+\proseparagraph{DDPM on MNIST.} The \texttt{demos/MainMnistDdpmTrain.lean} trainer
 is a timestep-conditioned UNet trained to predict the Gaussian noise added to an
 image; \texttt{mnist-ddpm-sample} runs the reverse loop and writes a grid. The
 backbone is literally the segmentation UNet of
@@ -17556,7 +17556,7 @@ change relative to the classifiers, segmentation nets and detectors so far:
     loop costs is Table~\ref{tab:ddpm_samplers}.
 \end{itemize}
 
-\paragraph{Scoring it needs an instrument, not an eye.} Unconditional image
+\proseparagraph{Scoring it needs an instrument, not an eye.} Unconditional image
 generation is the only demo in this book whose success criterion is ``does that
 look like a digit to you.'' It does not have to be: Chapter~\ref{chap:cnn}'s
 verified CNN maps an image to ten numbers, and in that space the usual
@@ -17588,7 +17588,7 @@ $\triangleright$ And read the confidence column against the others: noise still
 scores $58\%$, so the usable range is $58$--$99$ rather than $0$--$100$, and on
 its own it is the metric most likely to mislead.
 
-\paragraph{The continuous-time view, and which solver to use.} The trainer and
+\proseparagraph{The continuous-time view, and which solver to use.} The trainer and
 the two samplers of Table~\ref{tab:ddpm_scores} are discrete: a schedule tabulated
 at $t = 0 \dots T{-}1$ and a fixed reverse recipe. Score-SDE (Song et al.\ 2021,
 \href{https://arxiv.org/abs/2011.13456}{arXiv:2011.13456}) reads the same object as a stochastic
@@ -18134,7 +18134,7 @@ small --- an MLP, or a ViT with a Fourier mixer where its attention would be
 --- and the novelty lives in what the model is asked to produce and in what
 is done with it afterwards.
 
-\paragraph{A Boltzmann generator.} The target is not a dataset. It is a
+\proseparagraph{A Boltzmann generator.} The target is not a dataset. It is a
 density, $\exp(-U/kT)$ on the three-well surface M\"uller and Brown proposed
 in 1979 as the test case for reaction paths, and the training set is whatever
 overdamped Langevin manages to produce at $kT = 20$ in a fixed budget: eight
@@ -18191,7 +18191,7 @@ populations to within $0.001$.}
 \label{fig:boltzmann_mb}
 \end{figure}
 
-\paragraph{Scored by quadrature, not by eye.} $kT = 20$, $2{,}048$ samples per
+\proseparagraph{Scored by quadrature, not by eye.} $kT = 20$, $2{,}048$ samples per
 row, the energy distance against an independent exact draw as a multiple of
 the exact-against-exact floor. The DDPM row is the same network, loss and
 budget with the cosine-schedule interpolant and DDIM in place of Euler:
@@ -18225,7 +18225,7 @@ training seeds (Table~\ref{tab:boltzmann_seeds}), and $\langle U \rangle$ to
 about a unit. At NFE 2 well B empties while the populations still look
 plausible, which is why $\langle U \rangle$ and $\Delta F$ are columns.
 
-\paragraph{Four seeds of the flow.} Table~\ref{tab:boltzmann_kt20} is one
+\proseparagraph{Four seeds of the flow.} Table~\ref{tab:boltzmann_kt20} is one
 checkpoint. Three more trainings of the flow arm under seeds 1--3 --- the seed
 moves the He initialization and the sampling noise; 33 seconds each on one
 card --- sampled at NFE 50 and scored the same way are
@@ -18260,7 +18260,7 @@ sample size of $1{,}740$--$1{,}895$ of $2{,}048$. The sampler-quality claim
 rests on that row. Tables~\ref{tab:boltzmann_reweight} and
 \ref{tab:boltzmann_reflow} read the seed-0 checkpoint only.
 
-\paragraph{MCMC stalls below the barrier; the generator does not.} The
+\proseparagraph{MCMC stalls below the barrier; the generator does not.} The
 $kT = 20$ samples reweighted to $kT' = 12$ and $8$, naively and with the
 model's density in the weight, against a Langevin chain of $2 \times 10^5$
 steps started in well B:
@@ -18291,7 +18291,7 @@ crossed. The naive weights carry the model's bias in full; with $1/p_\theta$
 in them, samples drawn once at $kT = 20$ come within 0.3 of quadrature at both
 temperatures. That is the paper's claim, and it is the density that makes it.
 
-\paragraph{Straightening the paths.} Rectified flow (Liu, Gong \& Liu 2022,
+\proseparagraph{Straightening the paths.} Rectified flow (Liu, Gong \& Liu 2022,
 \href{https://arxiv.org/abs/2209.03003}{arXiv:2209.03003}) retrains on the
 trained flow's own (noise, sample) pairs; minibatch optimal-transport
 coupling (Tong et al.\ 2023,
@@ -18481,7 +18481,7 @@ each panel is the arm trained on the noise that panel tests it in.}
 \label{fig:gw_detect}
 \end{figure}
 
-\paragraph{A CNN against the matched filter on LIGO strain.} This demo
+\proseparagraph{A CNN against the matched filter on LIGO strain.} This demo
 has a theorem for a ceiling the way Leduc poker has its best response
 (\S\ref{sec:game_leduc}) and the Boltzmann generator has quadrature. Advanced LIGO's strain
 is a time series at audio rates, and a binary-black-hole merger is a chirp
@@ -18533,7 +18533,7 @@ Three things change relative to the CIFAR demo:
     same net.
 \end{itemize}
 
-\paragraph{Scored against the theorem.} Detection probability by injected
+\proseparagraph{Scored against the theorem.} Detection probability by injected
 network SNR on the Gaussian set, $12{,}228$ validation windows, every
 threshold set on the $8{,}177$ noise-only windows so that one in a hundred
 exceeds it. The last column of Table~\ref{tab:gw_gaussian} is the SNR at which
@@ -18567,7 +18567,7 @@ training set. One reading is that a log-power spectrogram discards the phase
 the filter integrates; the demo did not test it, and this is the demo's
 number, not the architecture's ceiling.
 
-\paragraph{Real noise hurts the filter, not the network.} LIGO noise is
+\proseparagraph{Real noise hurts the filter, not the network.} LIGO noise is
 neither stationary nor Gaussian, and the production search adds a $\chi^2$
 veto for exactly that reason. Table~\ref{tab:gw_real} is the same rows on the
 strain itself, with each model trained on one noise set and scored on both.
@@ -18669,7 +18669,7 @@ dataset at all and the ceiling is a solved model; the entries after it
 --- several have essentially no architectural novelty, and the interesting
 work lives in the data, loss, or training procedure.
 
-\paragraph{A transformer as a wavefunction.} Take a ring of $N$ spins, each
+\proseparagraph{A transformer as a wavefunction.} Take a ring of $N$ spins, each
 up or down. Neighbors want to agree, with strength $J$; a field $h$ wants
 each spin to point sideways, which in quantum mechanics means to be up and
 down at once. That is the transverse-field Ising chain,
@@ -18754,7 +18754,7 @@ sample energy.}
 \label{fig:nqs_ising}
 \end{figure}
 
-\paragraph{The ladder at the critical point.} $h = J$, Adam with cosine
+\proseparagraph{The ladder at the critical point.} $h = J$, Adam with cosine
 decay, $4{,}000$ steps at $N = 12$ and $2{,}000$ at $N = 64$, one RTX 4060
 Ti: 50\,s to 330\,s per row at $N = 12$ with the XLA compile included and
 about twenty minutes at $N = 64$. The $N = 64$ energies are means over the
@@ -18804,7 +18804,7 @@ stochastic reconfiguration (Sorella 1998,
 \href{https://doi.org/10.1103/PhysRevLett.80.4558}{PRL 80, 4558}) exists
 for; nothing at $N = 12$ needed it.
 
-\paragraph{Three things the sweep taught.} The reference decides the
+\proseparagraph{Three things the sweep taught.} The reference decides the
 small-field rows, and the ablation says by how much: the same ViT, from
 the uniform state and from the mean-field state, is three orders of
 magnitude apart at $h = 0.2J$ ($3.0 \times 10^{-5}$ against
@@ -18943,7 +18943,7 @@ scored on CASP16's targets beside the groups that predicted them blind.
 The \bestiaryref{bestiary:evoformer}{Evoformer entry} that closes the section is
 the architecture that ended that era.
 
-\paragraph{A residual network on residue pairs.} A protein is a string
+\proseparagraph{A residual network on residue pairs.} A protein is a string
 over twenty letters, and its fold is set by which residues end up near
 each other. Write the distance between the $\beta$-carbons of residues $i$
 and $j$ as a histogram over 64 bins from 2 to 22\,Å, one per pair:
@@ -19044,7 +19044,7 @@ where the table's 0.646 and 0.892 are means.}
 \label{fig:casp16_distogram}
 \end{figure}
 
-\paragraph{The bracket on the CASP16 targets.} Table~\ref{tab:casp16_arms} is
+\proseparagraph{The bracket on the CASP16 targets.} Table~\ref{tab:casp16_arms} is
 the top-$L/5$ long-range contact precision over the 84 evaluation units (a long-range pair is 24 or
 more residues apart; the number is the fraction of the $L/5$ most confident
 such pairs that are within 8\,Å), the recall of the true long-range
@@ -19219,9 +19219,9 @@ for Pong, a twin fed the six numbers the renderer draws from. The ladder runs a 
 from pixels, then regret minimization under hidden information, then self-play and
 tree search, then search inside a learned model; every rung goes through the
 squared-error block of the diffusion demo with a host-built target, and none of it
-is new codegen but MuZero's unrolled model. The catalog beside the
-demos is the AlphaGo family and Deep CFR, the same loops at the scale that made them
-famous.
+is new codegen but MuZero's unrolled model. Each section closes on the paper's
+network, the same loop at the scale that made it famous: Deep CFR, AlphaGo and
+AlphaZero, MuZero.
 
 \section{Pong --- DQN from pixels against the six-number state}
 \label{sec:game_pong}
@@ -19267,7 +19267,7 @@ the random and scripted-tracker baselines as lines.}
 \label{fig:pong_dqn}
 \end{figure}
 
-\paragraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is the
+\proseparagraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is the
 mean points per game over twenty fresh games after training, with the standard
 error; the baselines over a hundred games (\texttt{lake run demo pong env 100}). Each
 arm is 500k agent steps on one card, five to seven minutes for a state run and
@@ -19382,7 +19382,7 @@ cells ringed.}
 \label{fig:deep_cfr_leduc}
 \end{figure}
 
-\paragraph{Every arm against the best response.} Exploitability in chips per hand (ante
+\proseparagraph{Every arm against the best response.} Exploitability in chips per hand (ante
 one; a thousandth of a chip is a milli-ante per game, the Leduc papers' unit) and
 head-to-head against CFR+ averaged over the two seats. The scripted honest arm raises a
 pair or a king and folds a jack to a bet; the price-of-honesty arm is CFR+ with its
@@ -19440,6 +19440,34 @@ response exists to score against and the paper's numbers are against abstraction
 head-to-head; no-limit and multi-way poker (Pluribus) are another scale again, and
 exploitability is not computable there.
 
+\subsection*{Deep CFR (\texttt{Bestiary/DeepCFR.lean})}
+\emph{Zero} new primitives. Counterfactual regret minimization with the two tables
+replaced by networks (Brown, Lerer, Gross and Sandholm 2019): an advantage network per
+player regresses the sampled counterfactual regrets of an information set and regret
+matching on its positive outputs is the current strategy; an average-strategy network
+regresses the strategies played, or, in Single Deep CFR (Steinberger 2019), the stored
+advantage networks are averaged exactly instead. The paper's network is two branches ---
+summed card embeddings through three dense layers, bet flags and sizes through two ---
+concatenated into three more with skips where the widths agree and a normalization of
+the last layer's features, 98,948 parameters for heads-up flop hold'em; its Leduc
+experiments and ours use three dense layers of 64. The architecture is not the point and
+the paper says so; the loop is, and this section trains it.
+
+\begin{verbatim}
+def deepCfrLeducNet (r : Nat := 3) : NetSpec where
+  name   := s!"Deep CFR Leduc r{r}"
+  imageH := 1
+  imageW := 1
+  layers := [
+    -- 2r + 24 features: one-hot cards with rank scalars, pair and
+    -- above-public flags, the betting history, the round, the pot.
+    .dense (2 * r + 24) 64 .relu,
+    .dense 64 64 .relu,
+    .dense 64 64 .relu,
+    .dense 64 3 .identity          -- fold, call, raise
+  ]
+\end{verbatim}
+
 \section{Tic-tac-toe --- AlphaZero against the solved game}
 \label{sec:game_ttt}
 
@@ -19484,7 +19512,7 @@ $3 \times 3$, 155k at $4 \times 4$. Three things change relative to Pong's DQN:
     the table is sampled but the games.
 \end{itemize}
 
-\paragraph{Five by five, four in a row.} No table exists there ($3^{25}$ bytes), so the
+\proseparagraph{Five by five, four in a row.} No table exists there ($3^{25}$ bytes), so the
 instrument becomes an exact solver --- alpha-beta with a transposition table over
 symmetry-canonical positions --- checked against the dense table on every reachable
 $3 \times 3$ and $4 \times 4$ position before it is trusted where no table exists. It
@@ -19511,7 +19539,7 @@ decision positions, one dot per position, medians as bars.}
 \label{fig:alphazero_ttt}
 \end{figure}
 
-\paragraph{Every arm against the solved game.} Table~\ref{tab:ttt_arms} is the agreement
+\proseparagraph{Every arm against the solved game.} Table~\ref{tab:ttt_arms} is the agreement
 of the arm's move with the optimal set --- over every decision position at $3 \times 3$ and $4 \times 4$, over the
 20,000-position sample at $5 \times 5$; the scripted players' is their expected
 agreement --- and W/D/L against the perfect player as X and as O: 1,000 games each way
@@ -19555,6 +19583,93 @@ sample is 92.1\% over the exhaustive opening, every position with at most three
 stones: it is best in the opening, the positions every game passes through. On this
 board the search is what closes the second player's games, and at a hundred
 iterations it has not closed them.
+
+\subsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
+\emph{Zero} new primitives. The original 2016 Lee Sedol system
+(Silver et al.\ 2016,
+\href{https://www.nature.com/articles/nature16961}{Nature}).
+Three separate networks: a 13-layer conv \emph{policy} network
+($\sim$3.9M) trained first on 30M human games then fine-tuned via
+self-play, a 13-layer conv + FC-head \emph{value} network
+($\sim$4M), and a shallow linear \emph{rollout} policy used inside
+MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
+planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
+etc.). AlphaGo Zero (the next entry) discards all of this --- raw
+board only, one two-headed net, self-play only --- and plays better
+(5185 Elo vs 3140). The one-sentence lesson is written into every
+follow-up paper: the network will learn on its own every feature it can.
+
+\begin{verbatim}
+def alphaGoPolicyNet : NetSpec where
+  name   := "AlphaGo policy network"
+  imageH := 19
+  imageW := 19
+  layers := [
+    -- 13 conv layers: one 5×5 stem + eleven 3×3 at 192 channels.
+    -- Plain conv+ReLU, no BatchNorm: 2016 AlphaGo predates both BN and
+    -- residual blocks in this lineage (AlphaGo Zero added them).
+    .conv2d 48 192 5 .same .relu,                 -- 48 hand-crafted planes in
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    -- 1×1 conv to per-position move logit (reshape + pass scalar downstream)
+    .conv2d 192 1 1 .same .identity
+  ]
+\end{verbatim}
+
+\subsection*{AlphaZero (\texttt{Bestiary/AlphaZero.lean})}
+\phantomsection\label{bestiary:alphagozero}
+\emph{Zero} new primitives --- \texttt{convBn} + \texttt{residualBlock}
++ \texttt{dense}. Two-headed (policy + value) network
+(Silver et al.\ 2018,
+\href{https://arxiv.org/abs/1712.01815}{arXiv:1712.01815}),
+expressed as two separate \texttt{NetSpec} values sharing the body in
+prose. Variants: AlphaGo Zero (Go; Silver et al.\ 2017,
+\href{https://www.nature.com/articles/nature24270}{Nature}),
+AlphaZero chess, tiny fixture.
+
+\begin{verbatim}
+def alphaGoZeroPolicy : NetSpec where
+  name   := "AlphaGo Zero (policy head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 17 256 3 1 .same,                     -- 17 raw-history planes → 256
+    .residualBlock 256 256 19 1,                  -- 19 residual blocks (shared body)
+    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU, 2 ch
+    .flatten,
+    .dense (2 * 19 * 19) 362 .identity            -- 361 board moves + pass
+  ]
+\end{verbatim}
+
+The value head shares the first two layers (body) and diverges at
+the head --- one filter, two-layer MLP down to a single scalar
+(\texttt{tanh} is applied downstream; \texttt{Activation} doesn't
+include it):
+
+\begin{verbatim}
+def alphaGoZeroValue : NetSpec where
+  name   := "AlphaGo Zero (value head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 17 256 3 1 .same,                     -- shared body
+    .residualBlock 256 256 19 1,                  -- shared body
+    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
+    .flatten,
+    .dense (1 * 19 * 19) 256 .relu,
+    .dense 256 1 .identity                        -- → scalar (tanh applied downstream)
+  ]
+\end{verbatim}
+
+The chess variant keeps the 19-block tower on 119 input planes over an
+\(8 \times 8\) board, and its policy head is convolutional as in Silver et
+al.\ 2018: a convolution to 73 move planes, flattened into the 4672
+logits, with no dense layer. The tiny fixture is 17 planes, 3 blocks, a
+\(9 \times 9\) board.
 
 \section{Tic-tac-toe without the rules --- MuZero against the solved game}
 \label{sec:game_muzero_ttt}
@@ -19643,7 +19758,7 @@ lines.}
 \label{fig:muzero_ttt}
 \end{figure}
 
-\paragraph{Every arm against the solved game.} Table~\ref{tab:muzero_ttt_arms} adds
+\proseparagraph{Every arm against the solved game.} Table~\ref{tab:muzero_ttt_arms} adds
 MuZero's rows to Table~\ref{tab:ttt_arms}'s protocol --- agreement over every decision
 position, three independent 256-game evaluations of the saved network pooled against
 the perfect player --- and two columns only a model can have: the policy's agreement
@@ -19700,7 +19815,7 @@ the values of weak play. Doubling the steps an iteration
 brings the take-off to iteration 40 and the sweep to 99.1\%, the table's 600-step rows,
 and costs one game in 768 alone as O. Self-play stood at 2.6\% of the decision positions.
 
-\paragraph{What the model learned.} The value-equivalent prediction --- values, not the
+\proseparagraph{What the model learned.} The value-equivalent prediction --- values, not the
 board --- does not hold at one move and holds with depth. On the agent's own lines the
 probe refit on $g$'s latents recovers 99.8\% of whole $4 \times 4$ boards after one
 imagined move and 99.7\% after five; on random lines 94\% after one and 55\% after
@@ -19722,127 +19837,6 @@ phantom win on the principal line --- $r$ calling a win the true board does not 
 cost O games on two of three initializations; at $4 \times 4$ the search errs where
 the network alone does not at 3 starts in 19,961, one of them with a phantom win, and
 holds at 100 simulations on every initialization.
-
-\section{The catalog: the AlphaGo family and Deep CFR}
-
-The entries in this section are these loops at the scale that made them famous: the network is
-a residual tower, the game is Go or chess, and the target is still the model's own
-later estimate.
-
-\subsection*{Deep CFR (\texttt{Bestiary/DeepCFR.lean})}
-\emph{Zero} new primitives. Counterfactual regret minimization with the two tables
-replaced by networks (Brown, Lerer, Gross and Sandholm 2019): an advantage network per
-player regresses the sampled counterfactual regrets of an information set and regret
-matching on its positive outputs is the current strategy; an average-strategy network
-regresses the strategies played, or, in Single Deep CFR (Steinberger 2019), the stored
-advantage networks are averaged exactly instead. The paper's network is two branches ---
-summed card embeddings through three dense layers, bet flags and sizes through two ---
-concatenated into three more with skips where the widths agree and a normalization of
-the last layer's features, 98,948 parameters for heads-up flop hold'em; its Leduc
-experiments and ours use three dense layers of 64. The architecture is not the point and
-the paper says so; the loop is, and \S\ref{sec:game_leduc} trains it.
-
-\begin{verbatim}
-def deepCfrLeducNet (r : Nat := 3) : NetSpec where
-  name   := s!"Deep CFR Leduc r{r}"
-  imageH := 1
-  imageW := 1
-  layers := [
-    -- 2r + 24 features: one-hot cards with rank scalars, pair and
-    -- above-public flags, the betting history, the round, the pot.
-    .dense (2 * r + 24) 64 .relu,
-    .dense 64 64 .relu,
-    .dense 64 64 .relu,
-    .dense 64 3 .identity          -- fold, call, raise
-  ]
-\end{verbatim}
-
-\subsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
-\emph{Zero} new primitives. The original 2016 Lee Sedol system
-(Silver et al.\ 2016,
-\href{https://www.nature.com/articles/nature16961}{Nature}).
-Three separate networks: a 13-layer conv \emph{policy} network
-($\sim$3.9M) trained first on 30M human games then fine-tuned via
-self-play, a 13-layer conv + FC-head \emph{value} network
-($\sim$4M), and a shallow linear \emph{rollout} policy used inside
-MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
-planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
-etc.). AlphaGo Zero (\bestiaryref{bestiary:alphagozero}{the AlphaZero entry}) discards all of this --- raw
-board only, one two-headed net, self-play only --- and plays better
-(5185 Elo vs 3140). The one-sentence lesson is written into every
-follow-up paper: the network will learn on its own every feature it can.
-
-\begin{verbatim}
-def alphaGoPolicyNet : NetSpec where
-  name   := "AlphaGo policy network"
-  imageH := 19
-  imageW := 19
-  layers := [
-    -- 13 conv layers: one 5×5 stem + eleven 3×3 at 192 channels.
-    -- Plain conv+ReLU, no BatchNorm: 2016 AlphaGo predates both BN and
-    -- residual blocks in this lineage (AlphaGo Zero added them).
-    .conv2d 48 192 5 .same .relu,                 -- 48 hand-crafted planes in
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu,
-    -- 1×1 conv to per-position move logit (reshape + pass scalar downstream)
-    .conv2d 192 1 1 .same .identity
-  ]
-\end{verbatim}
-
-\subsection*{AlphaZero (\texttt{Bestiary/AlphaZero.lean})}
-\phantomsection\label{bestiary:alphagozero}
-\emph{Zero} new primitives --- \texttt{convBn} + \texttt{residualBlock}
-+ \texttt{dense}. Two-headed (policy + value) network
-(Silver et al.\ 2018,
-\href{https://arxiv.org/abs/1712.01815}{arXiv:1712.01815}),
-expressed as two separate \texttt{NetSpec} values sharing the body in
-prose. Variants: AlphaGo Zero (Go; Silver et al.\ 2017,
-\href{https://www.nature.com/articles/nature24270}{Nature}),
-AlphaZero chess, tiny fixture.
-
-\begin{verbatim}
-def alphaGoZeroPolicy : NetSpec where
-  name   := "AlphaGo Zero (policy head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 17 256 3 1 .same,                     -- 17 raw-history planes → 256
-    .residualBlock 256 256 19 1,                  -- 19 residual blocks (shared body)
-    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU, 2 ch
-    .flatten,
-    .dense (2 * 19 * 19) 362 .identity            -- 361 board moves + pass
-  ]
-\end{verbatim}
-
-The value head shares the first two layers (body) and diverges at
-the head --- one filter, two-layer MLP down to a single scalar
-(\texttt{tanh} is applied downstream; \texttt{Activation} doesn't
-include it):
-
-\begin{verbatim}
-def alphaGoZeroValue : NetSpec where
-  name   := "AlphaGo Zero (value head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 17 256 3 1 .same,                     -- shared body
-    .residualBlock 256 256 19 1,                  -- shared body
-    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
-    .flatten,
-    .dense (1 * 19 * 19) 256 .relu,
-    .dense 256 1 .identity                        -- → scalar (tanh applied downstream)
-  ]
-\end{verbatim}
-
-The chess variant keeps the 19-block tower on 119 input planes over an
-\(8 \times 8\) board, and its policy head is convolutional as in Silver et
-al.\ 2018: a convolution to 73 move planes, flattened into the 4672
-logits, with no dense layer. The tiny fixture is 17 planes, 3 blocks, a
-\(9 \times 9\) board.
 
 \subsection*{MuZero (\texttt{Bestiary/MuZero.lean})}
 \emph{Zero} new primitives --- three ResNet-style networks (representation,
@@ -20736,7 +20730,7 @@ linear net, the MLP and its biases, the CNN over \(\mathbb{R}\) and in
 float, and CIFAR). The way the chain avoids
 new axioms is the part worth explaining.
 
-\paragraph{The model is a hypothesis.}
+\proseparagraph{The model is a hypothesis.}
 A \texttt{FloatModel} is any rounding operator \(\mathrm{rnd}\)
 with relative error \(u\): \(|\mathrm{rnd}(x) - x| \le u\,|x|\).
 Binary32 round-to-nearest satisfies this with \(u = 2^{-24}\) on the
@@ -20760,7 +20754,7 @@ because GPU transcendentals have no IEEE specification.
 the deductive and empirical layers meet at a named interface rather than
 an unstated assumption, and that one constant still has to be measured.
 
-\paragraph{How far the model reaches, and where it stops being useful.}
+\proseparagraph{How far the model reaches, and where it stops being useful.}
 \label{par:precision_reach}
 Because \(u\) is a parameter, nothing in the chain is
 \texttt{float32}-specific. \texttt{Binary32Instance.lean} constructs the
@@ -20817,7 +20811,7 @@ at fp32 accumulate, useful at a low-precision leaf over an
 fp32 accumulator, and useless at pure low precision --- which is
 a fact about the arithmetic, not a gap in the proofs.
 
-\paragraph{The chain.} Four links, each in the three-axiom audit.
+\proseparagraph{The chain.} Four links, each in the three-axiom audit.
 \emph{Forward}: the rounded \(784{\to}512{\to}512{\to}10\) forward is
 budgeted against the exact one from coordinatewise magnitude bounds alone
 (\texttt{mlp\_float\_close\_uniform}). \emph{Backward}: every rounded SGD
@@ -20846,7 +20840,7 @@ stops there: the admissible \(\mathrm{lr}\) is a product of per-layer
 operator-norm factors, so each added layer shrinks it geometrically.
 Full-depth CIFAR and all five deep nets stay closeness-only, by design.
 
-\paragraph{The corner.}
+\proseparagraph{The corner.}
 Over \(\mathbb{R}\), ReLU forced the hypotheses \(x_k \ne 0\). In
 float the same op inverts its role twice. The forward mask is
 exact, since compare-and-select rounds nothing, so the op that
@@ -20857,7 +20851,7 @@ the accumulated rounding error must not flip a sign
 (\texttt{reluMask\_close}). A qualitative side condition became a
 checkable margin.
 
-\paragraph{Measured against proven.}
+\proseparagraph{Measured against proven.}
 The chain's final numeric theorems are instantiated at the trained magnitudes
 of a real 12-epoch, 97.8\% GPU run (\(|W| \le 3/5\), covering the
 measured \(0.52\), and He initialization already exceeds prettier bounds

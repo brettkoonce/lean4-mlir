@@ -53,6 +53,8 @@
 % (macros/web.tex) demotes it below the web TOC depth so the ch1-9 web
 % sidebars match the PDF table of contents (numbered sections only).
 \newcommand{\prosesection}[1]{\section*{#1}}
+% \proseparagraph: see macros/web.tex; in print the ordinary run-in heading.
+\newcommand{\proseparagraph}[1]{\paragraph{#1}}
 
 % \cellleft: ragged-right text in a p{...} tabular cell. \raggedright alone
 % turns the row-ending \\ into a line break, so the row end is restored.
