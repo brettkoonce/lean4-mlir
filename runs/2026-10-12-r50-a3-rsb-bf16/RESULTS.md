@@ -96,4 +96,4 @@ McNemar exact p = **0.0002** (pre-F6: 4,038 / 1,901 / 2,137 / +236, p = 0.0002).
 first pairing used the JAX checkpoint rescored on ares's own GPUs instead (38,794, a 4-image card gap):
 1,889 / 2,120, p = 0.00028 — the same answer. Logs: `rescore_f6_pre.log` / `rescore_f6_f6.log`. Both
 bitmaps are `runs/**/*.bin`, git-ignored; they live on atlas (and the verified one on ares).
-**The book's A3 pair is 77.58 / 78.05 at 235 from 2026-10-20**, top-5 93.66 / 93.97.
+**The book's A3 pair is 78.14 / 93.70 (reference, `runs/2026-11-06-r50-a3mix8-jax`) and 77.99 / 93.69 (verified, `runs/2026-11-06-r50-a3-ver-mix256`)**, Mixup or CutMix drawn per 256-row chunk on both paths, scored at 235.

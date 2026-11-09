@@ -173,6 +173,9 @@ status:
     - {declaration: "Proofs.conv2dHasVJP3_correct", file: "LeanMlir/Proofs/Architectures/CNN.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     # batch-norm's three-term backward (layer-norm is the same lemma at one row)
     - {declaration: "Proofs.bn_input_grad_correct", file: "LeanMlir/Proofs/Architectures/BatchNorm.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.LinFoldB.lin_train_step_tiedB", file: "LeanMlir/Proofs/Nets/Small/LinearFoldB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.MlpFoldB.mlp_train_step_tiedB", file: "LeanMlir/Proofs/Nets/Small/MlpFoldB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.CnnFoldB.cnn_train_step_tiedB", file: "LeanMlir/Proofs/Nets/Small/CnnFoldB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # softmax cross-entropy
     - {declaration: "Proofs.softmaxCE_grad", file: "LeanMlir/Proofs/Architectures/Softmax.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     # multi-head self-attention

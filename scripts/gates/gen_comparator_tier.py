@@ -221,7 +221,7 @@ bridge, the descent result and the three certificate theorems — plus the three
 other two files never mention (ResNet-34, ResNet-50, MobileNetV4).
 
 Its contents are exactly the declarations `formalization.yaml` advertises as the audited
-set, minus the four `config-arch.json` already covers. So "every declaration this project
+set, minus the three `config-arch.json` already covers. So "every declaration this project
 puts forward is independently kernel-rechecked" is a claim a reader can now check by
 diffing this theorem list against that yaml."""
 BLURB_S = """Solution to `ChallengeTier.lean`. Each proof is the project theorem itself:
