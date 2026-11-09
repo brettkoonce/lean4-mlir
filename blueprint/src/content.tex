@@ -15268,7 +15268,7 @@ The entries are grouped by task domain, over three chapters. This one is
 recognition: the chapter nets on pictures, at real-world scale and then on
 real problems --- classification backbones first, where every layer is one
 Part~1 proved, then detection, inspection, sign language, leaves, satellite
-chips and tumours, each with a dataset, the field's own baseline to beat, and beside
+chips and tumors, each with a dataset, the field's own baseline to beat, and beside
 the demo the architectures that field uses. Chapter~\ref{chap:bestiary_beyond}
 leaves recognition behind, and Chapter~\ref{chap:bestiary_games} plays games
 against their exact solutions.
@@ -16040,7 +16040,7 @@ and the seed spread of the bold row is in the big classes --- car moves
 $0.066$ across seeds --- while the four rarest agree to $0.002$. That the fix
 was data rather than objective is the substantive point.
 Reweighting a loss toward rare classes raises their recall at the expense of
-precision, and average precision penalises that trade; supplying the scales the
+precision, and average precision penalizes that trade; supplying the scales the
 rare classes are missing raises both at once, which is what the recall and
 class-agnostic AP columns move together to show. Detection on aerial imagery does
 not degrade uniformly --- it collapses on whatever is simultaneously small
@@ -16729,23 +16729,23 @@ is the recurring pattern; UNet is the canonical instance, and the same
 shape later became the diffusion-model backbone.
 
 \paragraph{A ResNet-34 UNet on BraTS.} The question is what a slice
-segmenter built from the Part~1 kit scores on brain-tumour MRI, and what its
+segmenter built from the Part~1 kit scores on brain-tumor MRI, and what its
 two borrowed parts --- the ImageNet encoder and the decoder's skip
 connections --- each contribute. The
 \texttt{demos/MainUnetBratsR34.lean} trainer (\texttt{unet-brats-r34}) is an
 encoder--decoder segmentation network at 24.5M parameters on MSD Task01
-brain-tumour MRI: four co-registered modalities (FLAIR / T1w / T1gd / T2w) at
+brain-tumor MRI: four co-registered modalities (FLAIR / T1w / T1gd / T2w) at
 $224 \times 224$ in, four per-pixel classes out (background, edema,
-non-enhancing/necrotic core, enhancing tumour), 14{,}415 training slices from
+non-enhancing/necrotic core, enhancing tumor), 14{,}415 training slices from
 411 patients with the 2{,}569 validation slices held out by patient. The
-tumour sub-regions are defined by which modality lights up --- edema is bright
-on FLAIR, enhancing tumour on T1gd --- so the input is multi-modal rather
+tumor sub-regions are defined by which modality lights up --- edema is bright
+on FLAIR, enhancing tumor on T1gd --- so the input is multi-modal rather
 than three correlated views of one scene, and the classes are imbalanced:
-enhancing tumour is about $0.5\%$ of voxels.
+enhancing tumor is about $0.5\%$ of voxels.
 
 Scored on the clinical literature's regions --- Dice over the nested WT (whole
-tumour), TC (tumour core) and ET (enhancing tumour) --- pooled over the 2{,}569
-tumour-bearing validation slices, ten epochs of plain per-pixel cross-entropy
+tumor), TC (tumor core) and ET (enhancing tumor) --- pooled over the 2{,}569
+tumor-bearing validation slices, ten epochs of plain per-pixel cross-entropy
 gives Table~\ref{tab:brats_dice}: three seeds an arm at each seed's
 best-by-val epoch, about an hour an arm on one card, the encoder's ImageNet weights (the bootstrap the
 detection sections also use) against the same encoder from He initialization
@@ -16754,7 +16754,7 @@ detection sections also use) against the same encoder from He initialization
 
 \begin{table}[H]
 \centering
-\caption{The ResNet-34 UNet on BraTS validation: mIoU, and Dice on the three tumour regions, pooled over the tumour-bearing slices. Ten epochs, batch 16 at $224^2$; mean $\pm$ sd over seeds 0, 1, 2 at each seed's best-by-val epoch, and the paired difference seed by seed. At epoch 1 the ET gap, \texttt{r34} minus \texttt{scratch}, is $+0.064$, $-0.035$ and $-0.003$ on seeds 0, 1, 2.}
+\caption{The ResNet-34 UNet on BraTS validation: mIoU, and Dice on the three tumor regions, pooled over the tumor-bearing slices. Ten epochs, batch 16 at $224^2$; mean $\pm$ sd over seeds 0, 1, 2 at each seed's best-by-val epoch, and the paired difference seed by seed. At epoch 1 the ET gap, \texttt{r34} minus \texttt{scratch}, is $+0.064$, $-0.035$ and $-0.003$ on seeds 0, 1, 2.}
 \label{tab:brats_dice}
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -16792,8 +16792,8 @@ voxels are background. They do not produce similar pictures.
 \includegraphics[width=0.52\textwidth]{demos/brats_r34_unet.png}
 \caption{The ResNet-34 UNet on four held-out BraTS patients, one per row: the
 T1gd slice, the ground truth, the prediction. Green is the edema that bounds the
-whole tumour, red the necrotic and non-enhancing core, yellow the enhancing
-tumour. Background is $97\%$ of the voxels, which is why this picture carries
+whole tumor, red the necrotic and non-enhancing core, yellow the enhancing
+tumor. Background is $97\%$ of the voxels, which is why this picture carries
 more than the pixel accuracy does.}
 \label{fig:brats_unet}
 \end{figure}
@@ -16865,9 +16865,9 @@ core is resolved with skips and smeared into the core without them.
 
 \paragraph{Scored per patient.} Tables~\ref{tab:brats_dice} and
 \ref{tab:brats_skips} pool every pixel of every
-tumour-bearing slice into one Dice. The literature does something else: one
-Dice per patient volume, over all of its slices including the tumour-free
-ones, then the mean over patients --- so a small tumour counts as much as a
+tumor-bearing slice into one Dice. The literature does something else: one
+Dice per patient volume, over all of its slices including the tumor-free
+ones, then the mean over patients --- so a small tumor counts as much as a
 large one, and the slices where there is nothing to paint count against a model
 that paints anyway. \texttt{brats-eval} (\texttt{demos/MainBratsEval.lean})
 computes that from a whole-volume export of the 73 validation patients
@@ -16895,12 +16895,12 @@ ResNet-34 UNet, 2.5D ($\pm 1$ slice) & 0.893 (0.916) & 0.824 (0.868) & 0.788 (0.
 \end{tabular}
 \end{table}
 
-\noindent Two things the pooled number hid. The tumour-free slices cost almost
-nothing: pooled over every slice the Dice is within $0.003$ of the tumour-slice
-value, so the slice model does not paint tumour where there is none. And the
+\noindent Two things the pooled number hid. The tumor-free slices cost almost
+nothing: pooled over every slice the Dice is within $0.003$ of the tumor-slice
+value, so the slice model does not paint tumor where there is none. And the
 per-patient mean sits two to seven points below the pooled number with a wide
 spread (standard deviations of $0.07$ on WT to $0.19$ on ET): the medians are
-at the pooled values, and the means are pulled down by a tail of small-tumour
+at the pooled values, and the means are pulled down by a tail of small-tumor
 patients --- which is what the per-patient protocol exists to expose. The skips
 gain more per patient than per pixel, $+0.16$ on ET against $+0.12$. These
 are the numbers scored the way published BraTS work scores, and they are
@@ -16923,12 +16923,12 @@ the reference a Lean rank-5 port would be tied to). In
 Table~\ref{tab:brats_per_patient} its means are ahead of the anchor's by under a point on WT and TC and by two on
 ET, and most of the ET gain is what a size threshold also gives. So
 Table~\ref{tab:brats_3d} applies the usual BraTS post-process to every model ---
-enhancing-tumour predictions under 200 voxels in a volume are relabelled as
+enhancing-tumor predictions under 200 voxels in a volume are relabelled as
 core --- and reads two seeds a side:
 
 \begin{table}[H]
 \centering
-\caption{Per-patient Dice after the size post-process, two seeds each: the slice UNet against the 3D UNet. The worst tenth is the seven lowest-scoring of the 73 patients; a false alarm is a slice with no enhancing tumour in the ground truth on which the model paints some, out of 8{,}060 such slices.}
+\caption{Per-patient Dice after the size post-process, two seeds each: the slice UNet against the 3D UNet. The worst tenth is the seven lowest-scoring of the 73 patients; a false alarm is a slice with no enhancing tumor in the ground truth on which the model paints some, out of 8{,}060 such slices.}
 \label{tab:brats_3d}
 \begin{tabular}{lcccc}
 \hline
@@ -16945,10 +16945,10 @@ ResNet-34 UNet, seed 1 & 0.891 $\cdot$ 0.699 & 0.818 $\cdot$ 0.453 & 0.801 $\cdo
 \noindent Paired over patients the
 3D means are ahead by $0.009$ on WT and TC and $0.004$ on ET, and the
 bootstrap interval excludes zero on WT alone. The tail is where the two
-differ. On tumour core the 3D net's worst tenth is above both 2D seeds' on
-both of its own, and it raises a false enhancing-tumour alarm on under half
+differ. On tumor core the 3D net's worst tenth is above both 2D seeds' on
+both of its own, and it raises a false enhancing-tumor alarm on under half
 as many slices, a gap twenty times the seed-to-seed spread on either side. On
-enhancing tumour its worst tenth is ahead on both seeds too, on one of them
+enhancing tumor its worst tenth is ahead on both seeds too, on one of them
 by less than the two 3D seeds differ from each other. The 3D step runs at roughly three quarters of
 the 2D per-voxel rate through XLA on this card, so the port is affordable;
 it is not built, and this section's Lean trainer is the slice model.
@@ -17227,7 +17227,7 @@ that come to mind first, more steps, a bigger batch, rotary positions,
 move it by hundredths and never change the sign. \texttt{tiny}, with nearly six
 times the parameters, is worse still, because on 1 MB of text it has
 memorized the file by step 4,000 and spends the rest of the schedule
-overfitting. The nets were not undertrained. They were unregularised.
+overfitting. The nets were not undertrained. They were unregularized.
 
 One knob changes the sign. \texttt{.transformerEncoder (dropout := 0.2)}
 puts GPT-2's residual dropout on each block's two branches and nothing
@@ -18810,7 +18810,7 @@ width, depth or patch size, and its excess energy is $\Delta/2$ to three
 digits, $\Delta$ the splitting between the even- and odd-parity states ---
 it converged to the symmetry-broken half of the finite-$N$ cat state that
 the product-state reference imprints, and the fix was more structure, not
-more network: the symmetrised reference $\psi_{\mathrm{MF}}(\sigma) +
+more network: the symmetrized reference $\psi_{\mathrm{MF}}(\sigma) +
 \psi_{\mathrm{MF}}(-\sigma)$, one \texttt{logaddexp} on the host, takes it
 to $2.0 \times 10^{-5}$. And signs are the open row. The Ising ground state
 is positive, so the rungs above are real; the $J_1$--$J_2$ Heisenberg chain
@@ -20117,7 +20117,7 @@ lowerer.
 \hline \\[-6pt]
 \cellleft \texttt{lake run mnist}, \texttt{cifar}, \texttt{imagenette} & \cellleft the tier's nets, every one & \cellleft the ladder above; \texttt{imagenette-orin} on the Jetson \\[4pt]
 \cellleft \texttt{lake run train <net> [gpu] [backend]} & \cellleft linear, mlp, cnn; cifar8w, cifar8w-bn, cifar8wb-bbn; r34, r50, mnv2, mnv4, enet, cnx, vit & \cellleft one chapter net; any \texttt{lean\_exe} name, or a prefix that picks out one net, also works \\[4pt]
-\cellleft \texttt{lake run demo <group> [entry] [args]} & \cellleft yolo [visdrone, neudet, neudet448]; signs; plant-leaf; rs-bands; brats [train, r34, predict, eval] (Chapter~\ref{chap:bestiary_nets}) \newline shakespeare [bigram, gpt]; ddpm [train, sample, score]; diffusion-2d; gw; ising; casp (Chapter~\ref{chap:bestiary_beyond}) \newline pong [env, dqn]; leduc [env, cfr]; ttt [env, alphazero, muzero] (Chapter~\ref{chap:bestiary_games}) & \cellleft one demo; a one-entry group takes its arguments straight after the group, and everything after the entry goes to the demo \\[4pt]
+\cellleft \texttt{lake run demo <group> [entry] [args]} & \cellleft yolo [visdrone, neudet, neudet448]; signs; plant-leaf; rs-bands; brats [train, r34, predict, eval] (Chapter~\ref{chap:bestiary_nets}) \newline shakespeare [bigram, gpt]; ddpm [train, sample, score]; lidc [train, sample]; diffusion-2d; gw; ising; casp (Chapter~\ref{chap:bestiary_beyond}) \newline pong [env, dqn]; leduc [env, cfr]; ttt [env, alphazero, muzero] (Chapter~\ref{chap:bestiary_games}) & \cellleft one demo; a one-entry group takes its arguments straight after the group, and everything after the entry goes to the demo \\[4pt]
 \cellleft \texttt{lake run imagenet [start | once] [name ...]} & \cellleft r34, r50, a3, a2, a1, mnv2, mnv4, enet, cnx, cnxs, cnxb, vit, vits, vitb & \cellleft the ImageNet tier, Appendix~\ref{app:imagenet_tier}: with no name it plans, \texttt{start} supervises, \texttt{once} runs once; \texttt{list} names the jobs \\[4pt]
 \cellleft \texttt{lake run bench [plan] <name ...|all>} & \cellleft the same & \cellleft the net's verified job and its JAX reference, timed against each other; \texttt{--jax} or \texttt{--verified} for one side \\
 \end{tabular}
@@ -21268,9 +21268,9 @@ its own:
     scored on the second, and the demo of \S\ref{sec:bestiary_remote_sensing}
     is what each subset does on the Brazilian chips.
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
-    four-modality brain-tumour MRI, and the thin-class collapse is the
+    four-modality brain-tumor MRI, and the thin-class collapse is the
     whole problem rather than a nuisance
-    (enhancing tumour is $\sim$0.5\,\% of voxels). Two trainers read it:
+    (enhancing tumor is $\sim$0.5\,\% of voxels). Two trainers read it:
     \texttt{unet-brats-train} (a from-scratch UNet at native
     $240 \times 240$) and \texttt{unet-brats-r34} (the ResNet-34 encoder of
     \S\ref{sec:bestiary_segmentation}, which needs the $224$ center-cropped

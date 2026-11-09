@@ -737,7 +737,7 @@ lean_exe «vit-b-imagenet-verified» where
   root := `apps.imagenette.MainViTBImagenet
   moreLinkArgs := lowererLink
 
--- ─── Demos — `lake run demo <group> [entry]` (`demoGroups`) or `lake exe <name>`, in Chapters 11–13's order: detection, inspection, people, agriculture, segmentation; RL, language, diffusion, physics, signal, beyond vision (demos/README.md) ───
+-- ─── Demos — `lake run demo <group> [entry]` (`demoGroups`) or `lake exe <name>`, in Chapters 11–13's order: detection, inspection, people, agriculture, segmentation; RL, language, diffusion, image generation, physics, signal, beyond vision (demos/README.md) ───
 
 lean_exe «unet-brats-train» where
   root := `demos.MainUnetBratsTrain
@@ -2494,6 +2494,8 @@ private def demoGroups : List (String × String × String × List (String × Str
     ("ddpm", "12", "diffusion: DDPM on MNIST",
       [("train", "mnist-ddpm-train"), ("sample", "mnist-ddpm-sample"),
        ("score", "mnist-ddpm-score")]),
+    ("lidc", "12", "image generation: low-dose CT synthesis on LIDC, held out on Mayo",
+      [("train", "lidc-denoise-train"), ("sample", "lidc-denoise-sample")]),
     ("diffusion-2d", "12", "physics: a flow-matching Boltzmann generator on Müller-Brown",
       [("", "diffusion-2d")]),
     ("gw", "12", "signal: gravitational-wave detection on LIGO strain",
