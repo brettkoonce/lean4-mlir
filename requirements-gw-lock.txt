@@ -6,6 +6,7 @@
 # their own numpy/scipy pins and would clobber the cuDNN stack the JAX reference needs.
 #
 #   python3 -m venv .venv-gw && .venv-gw/bin/pip install -r requirements-gw-lock.txt
+# (a uv venv needs setuptools too: pycbc's waveform plugins import pkg_resources)
 astropy==6.1.7
 astropy-iers-data==0.2026.9.7.0.56.14
 beautifulsoup4==4.15.0
@@ -63,3 +64,4 @@ tqdm==4.70.1
 typing_extensions==4.16.0
 tzlocal==5.4.4
 urllib3==2.7.0
+setuptools==79.0.1

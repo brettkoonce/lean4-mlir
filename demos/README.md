@@ -956,7 +956,7 @@ python3 scripts/demos/gw_metrics.py matrix gauss=<prefix> real=<prefix>   # the 
 python3 scripts/demos/gw_figure.py <table_val.json> gw_detect.png --cnn-real=<table_val.json> --net=CNN
 ```
 
-![A chapter-4 CNN against the matched filter on LIGO strain](figures/gw_detect.png)
+![A CIFAR CNN against the matched filter on LIGO strain](figures/gw_detect.png)
 
 (a) A whitened 2 s H1 window from the validation set with its injected chirp overlaid; (b) the
 spectrograms the CNN sees, a noise-only window and the injected one; (c) detection probability
