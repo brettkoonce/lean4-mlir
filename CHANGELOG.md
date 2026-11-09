@@ -3,6 +3,45 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.8.0 — Every pair ties, and the book read through
+
+The ResNet-50 RSB-A3 pair ties. Mixup and CutMix drawn per 256 rows rather
+than once a step (the recipe's `mixChunks := 8`) puts the JAX reference on the
+paper's number, **78.14%**, and the verified render at **77.99 / 93.69** over
+100 epochs (McNemar p = 0.23; 21.0 h on four RTX 3060), so all seven ImageNet
+pairs sit within two tenths of their references and Appendix C's table
+carries no caveat. The book is read line by line for the publisher: every
+number re-derived from its run, every chapter numeral a `\ref`, US spelling
+throughout, the one footnote folded into its table, seeds and intervals in
+captions rather than prose, a pass for a reader whose first language is not
+English that took the money, race and stock idioms out, the dependency
+graphs regenerated with the BatchNorm chapter's in two legible halves, and
+the LIGO and AlphaZero figures regenerated. Every chapter's run-it-first
+block is `lake run train <net>`, every demo `lake run demo <group>`, the
+ImageNet tier `lake run imagenet start <net>`, and `lake run bench` times a
+pair on real data. 270 pages. Lean 4.35.0.
+
+Part 2 adds image generation: low-dose chest CT synthesis on LIDC-IDRI, held
+out on the Mayo scanner. The MSE UNet beats every classical filter by twenty
+HU and keeps 97.5% of the nodule contrast where the filters keep half to
+three quarters; the conditional diffusion model gets the scan's grain back,
+and crosses to Mayo without failing only once it is trained across doses on
+Mayo's kernel to predict the clean slice (median 85 HU, no slice worse than
+its input). `lake run demo lidc` runs it.
+
+Platforms: three rows run the whole ladder. The Apple M5 Pro Mac mini on
+Metal is the first Mac through all of it: the suite, MNIST 92.10 / 97.82 /
+98.56, twelve CIFAR arms, and all seven Imagenette nets at 80 epochs in one
+uninterrupted run, five inside CUDA's five-seed range. The Radeon RX 7900 XTX
+on ROCm 10.1 wheels, no root, runs all seven Imagenette nets inside CUDA's
+range or above it. IREE, pinned to 3.12.0 and built by
+`deploy/iree_cpu_setup.sh` for the CPU or the card, runs its `-iree` twins
+over CUDA through Imagenette, all seven nets, five inside XLA's range. The
+comparator's tier set is the 58 `ChallengeTier.lean` holds, 110 theorems in
+all. The typeset book leaves the website for a private bucket, the site
+being the web blueprint and the API docs, and the Zenodo abstract states the
+book as it stands.
+
 ## v0.7.3 — Every pair on its paper recipe, five seeds a row
 
 Every ImageNet pair trains the recipe its paper trained, on both paths, and
