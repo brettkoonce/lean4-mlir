@@ -2,7 +2,6 @@ module
 
 public import LeanMlir.Proofs.Nets.ViT.ViTParamGrad
 public import LeanMlir.Proofs.Foundation.DataParallel.Node
-public import LeanMlir.Proofs.Foundation.DataParallel.Sync
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 @[expose] public section
@@ -24,7 +23,7 @@ mean of the replicas' losses is the single-device loss at the global batch.
   masks is its shard of the batch-`R·N` forward.
 * `smoothedBatchLossDiv_shard` — the batch-`R·N` loss at divisor `R·B` is the mean over replicas of
   the batch-`N` losses at divisor `B`, each at its shard of the logits and targets.
-* `HasGradAt.allReduceMean` — the collective, at any slot: if each replica's node is the gradient
+* `HasGradAt.at_allReduceMeanF` — the collective, at any slot: if each replica's node is the gradient
   of that replica's loss, the all-reduced node is the gradient of the mean loss.
 * `vit_dp_node_lossGrad` — the three composed, **for every parameter slot**: whenever each
   replica's gradient node is the gradient of its own shard's loss in the slot (which
@@ -58,7 +57,7 @@ open scoped BigOperators
 /-- **The collective at a slot.** If each replica's node is the gradient at `θ` of that replica's
     loss `G r`, the all-reduced node is the gradient at `θ` of the mean of the `R` losses.
     `dpMeanGrad_eq_grad_meanLoss` in `HasGradAt`'s vocabulary, at the `SHlo` node. -/
-theorem HasGradAt.allReduceMean {P : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
+theorem HasGradAt.at_allReduceMeanF {P : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
     (g : Fin R → SHlo P) (G : Fin R → Vec P → Vec 1) (θ : Vec P)
     (hg : ∀ r, HasGradAt (G r) θ (den (g r))) :
     HasGradAt (fun θ' => fun _ : Fin 1 => meanLoss (fun r θ'' => G r θ'' 0) θ') θ
@@ -180,7 +179,7 @@ theorem vit_dp_node_lossGrad {gf : GeluForm} (R N : Nat) (hR : 0 < R) {nC : Nat}
             (den (g r))) :
     HasGradAt (fun θ' => vitGlobalLoss gf R N ε α B sd img t (slot θ')) θ
       (den (.allReduceMeanF R hR tn ds g)) := by
-  refine (HasGradAt.allReduceMean R hR tn ds g _ θ hg).congr_left ?_
+  refine (HasGradAt.at_allReduceMeanF R hR tn ds g _ θ hg).congr_left ?_
   funext θ'
   rw [vitGlobalLoss_eq_mean R N hR]
   rfl

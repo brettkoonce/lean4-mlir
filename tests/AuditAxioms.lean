@@ -1332,7 +1332,7 @@ open Proofs
 #audit_axioms Proofs.ViTTieGB.vit_net_tied_lossGrad
 -- ViT-Tiny data-parallel: R replicas of N are one device at R·N, through AdamW and the EMA shadow
 -- (ViTDataParallel.lean)
-#audit_axioms Proofs.HasGradAt.allReduceMean
+#audit_axioms Proofs.HasGradAt.at_allReduceMeanF
 #audit_axioms Proofs.smoothedBatchLossDiv_shard
 #audit_axioms Proofs.ViTTieGB.vitNetB_shard
 #audit_axioms Proofs.ViTTieGB.vitGlobalLoss_eq_mean
