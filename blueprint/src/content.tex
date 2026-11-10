@@ -13714,13 +13714,14 @@ over the \(k\) blocks), the final LayerNorm and the head; see
 \begin{theorem}[The depth-\(k\) graph denotes the tower]
   \label{thm:vitFwdGraphKMHV_faithful}
   \lean{Proofs.StableHLO.vitFwdGraphKMHV_faithful, Proofs.StableHLO.vitFwdGraphBDrop_faithful,
-        Proofs.vitForwardKVDrop_ones}
+        Proofs.vitForwardKVDrop_ones, Proofs.StableHLO.denOp_softmaxRowAt}
   \leanok
   \uses{def:geluForm}
   \Prove{} for every depth \(k\) the typed forward graph
   \texttt{vitFwdGraphKMHV} denotes \texttt{vitForwardKV}; and with stochastic
   depth on both residual branches of every block, the batched graph of the
-  \texttt{drop} renders denotes, at either precision and at each example,
+  \texttt{drop} renders denotes, at either precision, with the attention
+  softmax plain or max-shifted, and at each example,
   this forward with that
   example's two mask entries per block as its branch scales --- at all-ones
   masks, \texttt{vitForwardKV} on every example. The emitted ViT text names
@@ -13858,13 +13859,21 @@ itself does not); see \leandocref{Proofs.ViTTieGB.vit\_net\_tiedGB}.
 render adds.} As for ConvNeXt: the \texttt{replicas} $> 1$ renders wrap
 each of these 200 nodes in an all-reduce mean, which denotes the mean of
 the replicas' nodes (\leandocref{Proofs.den\_allReduceMeanF\_eq\_dpMean});
-ViT has no BatchNorm, so its batch loss is a mean of per-example losses
-and that mean is the gradient at the combined batch
-(\leandocref{Proofs.dpMeanGrad\_eq\_globalBatchGrad\_of\_perExample}). The
-composition with these nodes is not stated as a theorem --- the five
-BatchNorm nets carry one because their statistics all-reduce makes it
-non-trivial --- and the collectives are gated by the checks of
-\S\ref{sec:vit_imagenet} instead.
+ViT has no BatchNorm, so no statistic has to cross the replicas: a
+replica's forward is its shard of the forward at the combined batch, and
+the mean of the replicas' losses is one device's loss at \(R \cdot N\).
+The composition is a theorem for every parameter slot
+(\leandocref{Proofs.ViTTieGB.vit\_dp\_node\_lossGrad}): if each replica's
+node is the gradient of its own shard's loss, which
+Theorem~\ref{thm:vit_loss_grad} proves at each of the 200, the all-reduced
+node is the gradient of the single-device loss at the combined batch. The
+optimizer and the shadow ride on it
+(\leandocref{Proofs.ViTTieGB.vit\_dp\_step}): the emitted AdamW triple is
+the AdamW step at that gradient, and the EMA node is
+\(d\,e + (1 - d)\,\theta'\) at the weight that step produced. That the
+replicas hold the same weights and that their shards are cut from one
+host batch stay the driver's, gated by the checks of
+\S\ref{sec:vit_imagenet}.
 
 \begin{theorem}[Every ViT-Tiny gradient node is the loss's derivative]
   \label{thm:vit_loss_grad}
@@ -14565,11 +14574,13 @@ nodes. It adds exactly $72 \times 4$ lines to the train step, 36 forward
 and 36 backward-recompute softmaxes, with the operand count unchanged,
 and moves a step's result by less than the render's own f32 error
 ($2.9\times10^{-4}$ from an f64 reference, against $3.0\times10^{-4}$
-without the shift). Theorem~\ref{thm:vit_step_tie} is stated on the
-unshifted chain; each shifted node is proved to denote its unshifted peer,
-but the tie is not restated on the \texttt{smx} render, so on this
-pair the step is the render's through that equality rather than a
-theorem's, with the EMA tail outside it as before. It runs with:
+without the shift). The proofs carry the shift as a flag. The forward
+graph of Theorem~\ref{thm:vitFwdGraphKMHV_faithful} denotes the same
+forward with the softmax plain or shifted, and the backward recompute
+denotes the plain softmax backward at both
+(\texttt{den\_softmaxRowBackBAt}). The 200 gradient nodes of
+Theorem~\ref{thm:vit_step_tie} are nodes the shift never touches, so
+the tie is this render's as it stands. It runs with:
 
 \begin{verbatim}
 lake run imagenet start vit      # the job vit-default-emabf16-4gpu

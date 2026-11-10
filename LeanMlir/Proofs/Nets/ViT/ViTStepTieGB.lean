@@ -52,11 +52,20 @@ entries. `nC` is a binder too (10 on Imagenette, 1000 on ImageNet).
 **Stochastic depth is a binder.** `sd : Option (Fin 12 → Vec N × Vec N)` is the render's `drop`
 flag: `none` the drop-free artifacts' chain — every family constant, so the lifts are `batchMap` /
 `batchMapAux` and the statement is the drop-free one by `rfl` — and `some` the `*drop*` artifacts',
-the book's `vitin_emadp128x4wxclipdropeps0000001erfbf16` among them: block `k`'s two sites (`vitSdA` / `vitSdM`,
+the book's `vitin_emadp256x4wxdropeps0000001smxerfbf16` among them: block `k`'s two sites (`vitSdA` / `vitSdM`,
 the `%dp<2k>` / `%dp<2k+1>` inputs) scale the out-projection's and fc2's outputs by example `n`'s
 entries (`BlockParamsV.fwdOD`), the out-projection and fc2 weight and bias nodes read the dropped
 cotangent (`dropPathOpt`, where `ViTRenderB` emits `dropPathB` on it), and both skip fan-ins read
 the raw one (`BlockParamsV.cotInD`, `ViTDropBlock`).
+
+**The softmax shift is not on the statement, because no tied node reads it.** The `smx` artifacts
+(the book's is one) subtract each row's maximum before the attention `exp`. That changes two kinds of node and neither is a gradient node: the 36
+forward softmaxes, where `ViTFwdDrop`'s graph carries the renderer's `smShift` flag and denotes the
+same forward at both values (`vitFwdGraphBDrop_faithful`), and the 36 backward recomputes, where
+`SHlo.softmaxRowBackBAt smShift` below denotes `batchMapAux` of the plain `rowSoftmaxBackFlat` at
+both values (`den_softmaxRowBackBAt`). Every activation and cotangent the capstone threads is
+therefore the value the `smx` render's chain computes, and its 200 gradient nodes are the
+constructors tied here, so `vit_net_tiedGB` is the `smx` artifacts' tie as it is the plain ones'.
 
 **The CLS-token conjunct.** The CLS token is one
 shared `[192]` vector; its gradient is the sum of every example's CLS-row cotangent. The fused
@@ -79,12 +88,46 @@ batched statement, as it was for ConvNeXt.
 all 25 sites, 3 heads × d_head 64, depth 12, D 192, MLP 768, 16×16 patches, GELU (no kink — no
 smoothness hypothesis anywhere). Stated at ViT-Tiny's literal dims; S and B are other nets.
 
-**Scope.** One replica: in `vitin_adamdp128x4*` (four replicas of 128) every gradient node feeds
-`allReduceMeanF`, and `DataParallel.Node` composes the per-replica statement with the replica
-mean.
+**Scope.** One replica: in the `vitin_*dp*` artifacts every gradient node feeds
+`allReduceMeanF`. `ViTDataParallel` composes this statement with the replica mean, the AdamW tail
+and the EMA shadow: `R` replicas of `N` are one device at `R·N` (`vit_dp_node_lossGrad`,
+`vit_dp_step`).
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
+
+namespace Proofs.StableHLO
+
+/-! ## The attention softmax's backward on the renderer's `smShift` switch -/
+
+/-- **The batched softmax backward on the renderer's `smShift` switch**: `false` the plain
+    recompute (`softmaxRowBackB`), `true` the max-shifted one the `smx` artifacts emit
+    (`softmaxRowBackShiftB`), as `ViTRenderB`'s backward selects them. The forward partner is
+    `BatchableOp.softmaxRowAt` (`ViTFwdDrop`). -/
+def SHlo.softmaxRowBackBAt (smShift : Bool) {N m n : Nat} (xN : String)
+    (preAct : Vec (N * (m * n))) (e : SHlo (N * (m * n))) : SHlo (N * (m * n)) :=
+  bif smShift then .softmaxRowBackShiftB xN preAct e else .softmaxRowBackB xN preAct e
+
+/-- **At either value the switch denotes the plain softmax backward, lifted per example**: the
+    shifted kind by `den_softmaxRowBackShiftB_eq`, the plain kind by `rfl`. -/
+theorem den_softmaxRowBackBAt (smShift : Bool) {N m n : Nat} (xN : String)
+    (preAct : Vec (N * (m * n))) (e : SHlo (N * (m * n))) :
+    den (SHlo.softmaxRowBackBAt smShift xN preAct e)
+      = batchMapAux N (rowSoftmaxBackFlat m n) preAct (den e) := by
+  cases smShift
+  · rfl
+  · exact (den_softmaxRowBackShiftB_eq xN preAct e).trans (den_softmaxRowBackB xN preAct e)
+
+/-- **Each example's softmax backward recomputes from its own saved scores, shifted or not**:
+    `den_softmaxRowBackB_per_example` on the switch. -/
+theorem den_softmaxRowBackBAt_per_example (smShift : Bool) {N m n : Nat} (xN : String)
+    (preAct : Vec (N * (m * n))) (e : SHlo (N * (m * n))) (k : Fin N) (i : Fin (m * n)) :
+    den (SHlo.softmaxRowBackBAt smShift xN preAct e) (finProdFinEquiv (k, i))
+      = rowSoftmaxBackFlat m n (batchSlice N (m * n) preAct k)
+          (batchSlice N (m * n) (den e) k) i := by
+  simp only [den_softmaxRowBackBAt, batchMapAux, Equiv.symm_apply_apply]
+
+end Proofs.StableHLO
 
 namespace Proofs.ViTTieGB
 
@@ -456,9 +499,15 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim :
     which the per-example capstone could state only at `N = 1`.
 
     `sd` is stochastic depth: `none` the drop-free artifacts' chain, `some` the `*drop*`
-    artifacts' — `vitin_emadp128x4wxclipdropeps0000001erfbf16`'s, the book's run — each block's out-projection
+    artifacts' — `vitin_emadp256x4wxdropeps0000001smxerfbf16`'s, the book's run — each block's out-projection
     and fc2 nodes at the dropped cotangent and both skips at the raw one, so the book's ViT job is
-    reached at every gradient node with only its EMA tail outside.
+    reached at every gradient node; its replica mean, AdamW tail and EMA shadow are
+    `ViTDataParallel`'s (`vit_dp_step`).
+
+    The max-shifted softmax of the `smx` artifacts is no binder here because no conjunct reads it: the shifted forward and
+    backward softmax nodes denote the plain ones' values (`vitFwdGraphBDrop_faithful` at
+    `smShift := true`, `den_softmaxRowBackBAt`), so the activations and cotangents threaded below
+    are the `smx` chain's and the statement is that render's tie unchanged.
 
     `N` and `nC` are binders and there is no smoothness hypothesis (GELU, no kink). The batch
     enters only through the per-example lifts, because no ViT op couples examples. The statement

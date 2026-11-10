@@ -13,7 +13,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 `ViTDepthK` states the ViT forward one example at a time (`vitFwdGraphKMHV_faithful`). The
 `*drop*` artifacts — `vit_drop_fwd`, `vitin_drop_fwd`, `vitsin_drop_fwd` and the forward half of
-every `*drop*` train step, the book's `vitin_emadp128x4wxclipdropeps0000001erfbf16` among them — add
+every `*drop*` train step, the book's `vitin_emadp256x4wxdropeps0000001smxerfbf16` among them — add
 **stochastic depth**: two `%dp<i>` mask inputs per block, a per-example scale `dropPath` on the
 attention branch (after the out-dense, before the first skip add) and on the MLP branch (after
 fc2, before the second), as `ViTRenderB.vBlockFwdB` emits them. Block `i`'s attention site is
@@ -45,6 +45,12 @@ does there. Every statement below holds at every value of both flags (`Bf16Erasu
 identity rounding each bf16 kind denotes what its f32 peer does), so the bf16 train steps' forward,
 read over ℝ, is the same per-example forward. Their backward through the drop sites is
 `ViTStepTieGB`'s and `ViTParamGrad`'s (the `sd` binder; per example, `ViTDropBlock`).
+
+**The softmax shift.** The graph takes the renderer's `smShift` flag too. The `smx` artifacts
+(the book's is one) subtract each row's maximum before
+the attention `exp` so that a score past 88.72 cannot overflow f32 (`softmaxRowShift`). The switch
+is `BatchableOp.softmaxRowAt smShift`, it denotes the row softmax at both values
+(`denOp_softmaxRowAt`, by `rowSoftmaxShiftFlat_eq`), and every statement below holds at both.
 
 ## References
 
@@ -290,6 +296,21 @@ lemma scale_flat_right {m n : Nat} (s : ℝ) (A : Mat m n) :
 lemma scale_flat_pt {m n : Nat} (s : ℝ) (A : Mat m n) (j : Fin (m * n)) :
     s * Mat.flatten A j = Mat.flatten (fun r c => s * A r c) j := rfl
 
+/-- **The attention softmax on the renderer's `smShift` switch**: `false` the plain row softmax
+    (`softmaxRow`), `true` the max-shifted one the `smx` artifacts emit (`softmaxRowShift`,
+    `exp(s − max s) / Σ exp(s − max s)` per row), as `ViTRenderB.vBlockFwdB` selects them. -/
+def BatchableOp.softmaxRowAt (smShift : Bool) {m n : Nat} : BatchableOp (m * n) (m * n) :=
+  bif smShift then .softmaxRowShift else .softmaxRow
+
+/-- **At either value the switch denotes the row softmax**: the shifted kind by
+    `rowSoftmaxShiftFlat_eq` (softmax is invariant under a per-row constant), the plain kind by
+    `rfl`. This is what lets every statement below carry `smShift` as a binder. -/
+theorem denOp_softmaxRowAt (smShift : Bool) {m n : Nat} :
+    denOp (BatchableOp.softmaxRowAt smShift (m := m) (n := n)) = rowSoftmaxFlat m n := by
+  cases smShift
+  · rfl
+  · exact rowSoftmaxShiftFlat_eq m n
+
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The batched block, tower and net graphs + faithfulness
 -- ════════════════════════════════════════════════════════════════
@@ -298,10 +319,11 @@ lemma scale_flat_pt {m n : Nat} (s : ℝ) (A : Mat m n) (j : Fin (m * n)) :
     vector-LN 1 (`lnRow` → `rowScale` → `rowBias`), Q/K/V `denseRow`, per head `headSlice` →
     `transpose` → `matmulFB` → `scaleB` → `softmaxRow` → `matmulFB` → `headPad`, summed by
     `headsSumGB`; out `denseRow`, `dropPathB` at `mA`, skip `addVB`; vector-LN 2, fc1, GELU, fc2,
-    `dropPathB` at `mM`, skip `addVB`. -/
+    `dropPathB` at `mM`, skip `addVB`. At `smShift := true` the softmax is the max-shifted
+    `softmaxRowShift`, the `smx` artifacts' (`BatchableOp.softmaxRowAt`). -/
 def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε s : ℝ)
-    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 : Bool)
+    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 smShift : Bool)
     (x : SHlo (B * (Np1 * ((hm1 + 1) * d)))) : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
   let ln1 : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
     .batchOp (N := B) (.rowBias (m := Np1) s!"%{pfx}bt1" p.β1)
@@ -317,7 +339,7 @@ def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
     headsSumGB (fun h : Fin (hm1 + 1) =>
       .batchOp (N := B) (.headPad (N := Np1) (heads := hm1 + 1) (d := d) h)
         (.matmulFBAt bf16 (m := Np1) (k := Np1) (n := d) id
-          (.batchOp (N := B) (.softmaxRow (m := Np1) (n := Np1))
+          (.batchOp (N := B) (.softmaxRowAt smShift (m := Np1) (n := Np1))
             (.scaleB sStr s
               (.matmulFBAt bf16 (m := Np1) (k := d) (n := Np1) id
                 (.batchOp (N := B) (.headSlice (N := Np1) (heads := hm1 + 1) (d := d) h) q)
@@ -339,18 +361,19 @@ def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
   .addVB hres (.dropPathB mM m m2)
 
 /-- **Example `t` of the batched drop block is the spelled drop block at example `t`'s input and
-    mask entries.** -/
+    mask entries**, at either precision and with the softmax plain or max-shifted. -/
 lemma vitBlockGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε : ℝ)
-    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 : Bool)
+    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 smShift : Bool)
     (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B) (A : Mat Np1 ((hm1 + 1) * d))
     (hA : batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A) :
     batchSlice B (Np1 * ((hm1 + 1) * d))
-        (den (vitBlockGraphBDrop gf pfx epsStr sStr mA mM ε (sdpaScale d) p a m bf16 e)) t
+        (den (vitBlockGraphBDrop gf pfx epsStr sStr mA mM ε (sdpaScale d) p a m bf16 smShift e)) t
       = Mat.flatten (vitBlockSpelledMHVDrop gf Np1 (hm1 + 1) d mlpDim ε (a t) (m t) p A) := by
   simp only [vitBlockGraphBDrop, batchSlice_den_addVB, batchSlice_den_dropPathB,
     batchSlice_den_batchOp, Bf16Fold.den_matmulFBAt_id, batchSlice_den_matmulFB,
-    batchSlice_den_scaleB, batchSlice_den_headsSumGB, Bf16Fold.denOp_denseRowAt_id, hA]
+    batchSlice_den_scaleB, batchSlice_den_headsSumGB, Bf16Fold.denOp_denseRowAt_id,
+    denOp_softmaxRowAt, hA]
   simp only [denOp]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat, rowDenseFlat_flat,
     headSliceFlat_flat, transposeFlat_flat, matMulFlat_flat, scale_flat_right,
@@ -361,54 +384,55 @@ lemma vitBlockGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat}
     `b{base+i}_` and reads `%dp<2(base+i)>` / `%dp<2(base+i)+1>`, as `ViTRenderB.vitFwd12B`
     names them (`vitSiteIdx`). -/
 def vitBodyGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
-    (epsStr sStr : String) (ε s : ℝ) (bf16 : Bool) :
+    (epsStr sStr : String) (ε s : ℝ) (bf16 smShift : Bool) :
     (base k : Nat) → (Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) →
     (Fin k → Vec B) → (Fin k → Vec B) →
     SHlo (B * (Np1 * ((hm1 + 1) * d))) → SHlo (B * (Np1 * ((hm1 + 1) * d)))
   | _, 0, _, _, _, e => e
   | base, k + 1, ps, sdA, sdM, e =>
-      vitBodyGraphBDrop gf epsStr sStr ε s bf16 (base + 1) k
+      vitBodyGraphBDrop gf epsStr sStr ε s bf16 smShift (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ)
         (vitBlockGraphBDrop gf s!"b{base}_" epsStr sStr (dpName (2 * base)) (dpName (2 * base + 1))
-          ε s (ps 0) (sdA 0) (sdM 0) bf16 e)
+          ε s (ps 0) (sdA 0) (sdM 0) bf16 smShift e)
 
 /-- Example `t` of the batched tower is the drop tower at example `t`'s input and mask entries —
     by induction on `k`, one `vitBlockGraphBDrop_slice` per block. -/
 lemma vitBodyGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) (ε : ℝ)
-    (bf16 : Bool) :
+    (bf16 smShift : Bool) :
     ∀ (base k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim)
       (sdA sdM : Fin k → Vec B) (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B)
       (A : Mat Np1 ((hm1 + 1) * d)),
       batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A →
       batchSlice B (Np1 * ((hm1 + 1) * d))
-          (den (vitBodyGraphBDrop gf epsStr sStr ε (sdpaScale d) bf16 base k ps sdA sdM e)) t =
+          (den (vitBodyGraphBDrop gf epsStr sStr ε (sdpaScale d) bf16 smShift base k ps sdA sdM e)) t =
         Mat.flatten (vitBodyKVDrop gf Np1 (hm1 + 1) d mlpDim ε k ps (fun i => (sdA i t, sdM i t)) A)
   | _, 0, _, _, _, _, _, _, hA => hA
   | base, k + 1, ps, sdA, sdM, e, t, A, hA => by
       have hb := vitBlockGraphBDrop_slice (gf := gf) s!"b{base}_" epsStr sStr (dpName (2 * base))
-        (dpName (2 * base + 1)) ε (ps 0) (sdA 0) (sdM 0) bf16 e t A hA
-      have ih := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 (base + 1) k
+        (dpName (2 * base + 1)) ε (ps 0) (sdA 0) (sdM 0) bf16 smShift e t A hA
+      have ih := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 smShift (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ) _ t _ hb
       rw [vitBlockSpelledMHVDrop_eq] at ih
       exact ih
 
 /-- **The batched ViT forward graph with stochastic depth** — the typed form of
-    `ViTRenderB.vitFwd12B … (sd := true) bf16 bf16Conv` at depth `k`: batched patch embed over `%x`,
-    the drop tower, final vector-LN, CLS slice, dense head. -/
+    `ViTRenderB.vitFwd12B … (sd := true) bf16 bf16Conv … smShift` at depth `k`: batched patch embed
+    over `%x`, the drop tower, final vector-LN, CLS slice, dense head. `smShift := true` is the
+    `smx` artifacts' forward, every attention softmax max-shifted. -/
 def vitFwdGraphBDrop (gf : GeluForm) {B ic H W P N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String) (ε s : ℝ)
     (Wc : Kernel4 ((hm1 + 1) * d) ic P P) (bc cls : Vec ((hm1 + 1) * d))
     (pos : Mat (N + 1) ((hm1 + 1) * d))
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv smShift : Bool)
     (x : Vec (B * (ic * H * W))) : SHlo (B * nClasses) :=
   .batchOp (N := B) (.dense "%Wc" "%bc" Wcls bcls)
     (.batchOp (N := B) (.clsSlice (N := N) (D := (hm1 + 1) * d))
       (.batchOp (N := B) (.rowBias (m := N + 1) "%btF" βF)
         (.batchOp (N := B) (.rowScale (m := N + 1) "%gF" γF)
           (.batchOp (N := B) (.lnRow (m := N + 1) (n := (hm1 + 1) * d) "%one" "%zero" epsStr ε 1 0)
-            (vitBodyGraphBDrop gf epsStr sStr ε s bf16 0 k ps sdA sdM
+            (vitBodyGraphBDrop gf epsStr sStr ε s bf16 smShift 0 k ps sdA sdM
               (.batchOp (N := B) (.patchEmbedAt (bf16 && bf16Conv) (N := N) id
                   "%wConv" "%bConv" "%cls" "%pos" Wc bc cls pos)
                 (.operand "%x" x)))))))
@@ -422,10 +446,10 @@ theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDi
     (ε : ℝ)
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv smShift : Bool)
     (x : Vec (B * (ic * H * W))) (t : Fin B) :
     batchSlice B nClasses (den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d)
-        Wc bc cls pos k ps sdA sdM γF βF Wcls bcls bf16 bf16Conv x)) t
+        Wc bc cls pos k ps sdA sdM γF βF Wcls bcls bf16 bf16Conv smShift x)) t
       = vitForwardKVDrop gf ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps (fun i => (sdA i t, sdM i t)) γF βF Wcls bcls
           (batchSlice B (ic * H * W) x t) := by
@@ -436,7 +460,7 @@ theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDi
           Wc bc cls pos (batchSlice B (ic * H * W) x t))) := by
     rw [batchSlice_den_batchOp, Bf16Fold.denOp_patchEmbedAt_id, Mat.flatten_unflatten, den_operand]
     rfl
-  have hbody := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 0 k ps sdA sdM _ t _ h0
+  have hbody := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 smShift 0 k ps sdA sdM _ t _ h0
   simp only [vitFwdGraphBDrop, batchSlice_den_batchOp, denOp, hbody]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat]
   unfold vitForwardKVDrop classifierFlat
@@ -444,7 +468,8 @@ theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDi
   rfl
 
 /-- **The batched ViT forward graph with stochastic depth denotes `vitForwardKVDropB`** — at every
-    depth, every pair of mask families, every input and either precision. -/
+    depth, every pair of mask families, every input, either precision, and with the attention
+    softmax plain or max-shifted: the `smx` artifacts' forward is the same function. -/
 theorem vitFwdGraphBDrop_faithful {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String)
     (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize)
@@ -452,15 +477,15 @@ theorem vitFwdGraphBDrop_faithful {gf : GeluForm} {B ic H W patchSize N hm1 d ml
     (ε : ℝ)
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv smShift : Bool)
     (x : Vec (B * (ic * H * W))) :
     den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d) Wc bc cls pos k ps sdA sdM γF βF Wcls bcls
-      bf16 bf16Conv x)
+      bf16 bf16Conv smShift x)
       = vitForwardKVDropB gf B ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps sdA sdM γF βF Wcls bcls x := by
   funext idx
   have h := congrFun (vitFwdGraphBDrop_slice (gf := gf) epsStr sStr Wc bc cls pos ε k ps sdA sdM γF βF
-    Wcls bcls bf16 bf16Conv x (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
+    Wcls bcls bf16 bf16Conv smShift x (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
   simp only [batchSlice, Prod.mk.eta, Equiv.apply_symm_apply] at h
   exact h
 

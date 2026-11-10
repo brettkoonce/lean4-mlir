@@ -192,6 +192,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad,
              `LeanMlir.Proofs.Nets.ViT.ViTParamGrad,
+             `LeanMlir.Proofs.Nets.ViT.ViTDataParallel,
              `LeanMlir.Proofs.Foundation.BackwardMaps,
              `LeanMlir.Proofs.Architectures.ChannelLNBack,
              `LeanMlir.Proofs.Nets.ResNet.ResNetBackChains,

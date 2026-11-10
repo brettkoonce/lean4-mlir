@@ -158,6 +158,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTParamGrad
+import LeanMlir.Proofs.Nets.ViT.ViTDataParallel
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.LinearFoldB
@@ -555,6 +556,11 @@ open Proofs
 #audit_axioms StableHLO.rowSoftmaxShiftFlat_eq
 #audit_axioms StableHLO.rowSoftmaxBackShiftFlat_eq
 #audit_axioms StableHLO.den_softmaxRowBackShiftB_eq
+-- The shift as a flag on the statements: the forward and backward softmax on the renderer's
+-- `smShift` switch denote the plain ones at both values
+#audit_axioms StableHLO.denOp_softmaxRowAt
+#audit_axioms StableHLO.den_softmaxRowBackBAt
+#audit_axioms StableHLO.den_softmaxRowBackBAt_per_example
 -- The batch sum that is invisible at N = 1
 #audit_axioms StableHLO.den_posEmbedGradB_at_one
 -- CLASSIFIER DROPOUT
@@ -1324,6 +1330,16 @@ open Proofs
 #audit_axioms Proofs.ViTTieGB.vitNetB_eq_vitForwardKV
 #audit_axioms Proofs.ViTTieGB.vit_net_lossGrad_smoothedCE
 #audit_axioms Proofs.ViTTieGB.vit_net_tied_lossGrad
+-- ViT-Tiny data-parallel: R replicas of N are one device at R·N, through AdamW and the EMA shadow
+-- (ViTDataParallel.lean)
+#audit_axioms Proofs.HasGradAt.allReduceMean
+#audit_axioms Proofs.smoothedBatchLossDiv_shard
+#audit_axioms Proofs.ViTTieGB.vitNetB_shard
+#audit_axioms Proofs.ViTTieGB.vitGlobalLoss_eq_mean
+#audit_axioms Proofs.ViTTieGB.vit_dp_node_lossGrad
+#audit_axioms Proofs.ViTTieGB.vit_dp_node_eq_global
+#audit_axioms Proofs.ViTTieGB.vit_dp_bcls
+#audit_axioms Proofs.ViTTieGB.vit_dp_step
 -- The chapter nets: every parameter gradient node IS the loss's derivative, pools up to twins
 -- (SmallParamGrad.lean and the Nets/Small *ParamGrad files)
 #audit_axioms Proofs.SmallParamGrad.hasGradAt_crossEntropy
