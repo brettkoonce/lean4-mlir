@@ -115,7 +115,7 @@ ninth.
 
 I didn't set out to prove this. I set out to train a ResNet with verified
 gradients, and after enough architectures the pattern was impossible to
-ignore. The framework kept working. It never needed a new primitive.
+ignore. The framework kept working. It never needed a ninth rule.
 
 \section*{Who this book is for}
 
@@ -213,7 +213,7 @@ through CIFAR-10 (color, $32 \times 32$) to Imagenette and then full
 ImageNet-1k (real photos, $224 \times 224$). The architectures form a
 natural progression: MLP $\to$ CNN $\to$ ResNet $\to$ MobileNet $\to$
 EfficientNet $\to$ ConvNeXt $\to$ ViT.
-Each one adds exactly one new primitive. By ViT you've seen every
+Each one adds a new layer, two at most. By ViT you've seen every
 primitive in modern vision, and every primitive in modern language models
 too, because a transformer is the same architecture in both.
 
@@ -288,7 +288,7 @@ Mathlib, why the book tracks vector--Jacobian products rather than
 Jacobians, and what training adds to inference. Everything after assumes
 both.
 
-\textbf{Part 1: The framework (Chapters~\ref{chap:tensor}--\ref{chap:attention}).} One new primitive per
+\textbf{Part 1: The framework (Chapters~\ref{chap:tensor}--\ref{chap:attention}).} A new layer or two per
 chapter, proved correct as we go. The first half pins down the
 composition rules (chain, additive fan-in, product) on dense layers,
 convolution, and normalization. The second half climbs the ladder to ViT.
@@ -865,6 +865,12 @@ the GPU. We do it on the smallest possible network (one matrix multiply: the
 MNIST linear classifier) to demonstrate the pattern. Once that machinery exists, every later
 chapter is just adding a layer: one new primitive dropped into the
 same forward / loss / backward / optimize loop.
+
+The data is MNIST: 28$\times$28 grayscale images of handwritten digits
+0--9, 60\,000 to train on and 10\,000 held out, each with a label saying
+which digit was drawn. It has been around since 1998, and at 784 pixels
+and 10 classes it is small enough to train on a laptop CPU in minutes
+while still being a real learning problem.
 
 \section{Run it first}
 
@@ -1777,8 +1783,8 @@ and one SGD step decreases the loss.
       \pdiv\bigl(\mathrm{dense}(W, \cdot)\, x_k\bigr)\, b\, j\, i
       \,\bigl((p_k)_i - \mathrm{onehot}(\ell_k)_i\bigr),
   \]
-  for every \(N\); and at \(\alpha = \eta / N\), \(N \ge 1\), the weight
-  update is one gradient step at rate \(\eta\) on the batch-mean loss
+  for every \(N\); and at \(\alpha = r / N\), \(N \ge 1\), the weight
+  update is one gradient step at rate \(r\) on the batch-mean loss
   \(\tfrac{1}{N}\sum_k L_k\). That is, the emitted step is the certified
   gradient step on the batch, the forward it differentiates is the proven
   \texttt{fwdGraph} lifted across the batch, and the artifact is the
@@ -2376,11 +2382,11 @@ the depth the descent half actually reaches.
 \medskip\noindent \textbf{The learning rate is folded in.} The weight-gradient
 \texttt{dot\_general} contracts the batch axis, so $dW_0$ is a batch sum
 rather than a mean. The constant \texttt{0.00078125} is
-$\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into
-the mean update. Everything else in the listing is the rendering of a theorem
+$\alpha = 0.1/128$, the rate $0.1$ over the batch size, which turns that
+sum back into the mean update. Everything else in the listing is the rendering of a theorem
 proved earlier in this chapter: Theorem~\ref{thm:linear_fold} certifies the
-two updates at every batch size, the batch sum and the $\alpha/N$ scale
-included, so with $\alpha/N = 0.1/128$ the emitted step is one step at rate
+two updates at every batch size, the batch sum and the $\alpha$ scale
+included, so with $\alpha = 0.1/128$ the emitted step is one step at rate
 $0.1$ on the batch-mean loss. The graph that theorem is
 about is a Lean value, and \texttt{tests/TestSmallNetsBatchedEmit.lean}
 checks that printing it reproduces this file byte for byte.
@@ -2777,18 +2783,11 @@ built from those pieces: a three-layer fully-connected classifier for
 
 \subsection*{Dataset overview}
 
-MNIST is the standard testbed for image-recognition learning. It's a
-collection of 28$\times$28 grayscale images of handwritten digits
-0--9: 60\,000 training images and 10\,000 test images, each with a
-label indicating which digit was drawn. The dataset has been around
-since 1998. At 784 pixels per image and 10 classes, MNIST is small
-enough that you can train a competitive model on a laptop CPU in
-minutes while still having a nontrivial learning problem.
-
-Our goal in this chapter is to correctly classify a held-out test
-digit based on a model trained from the 60\,000 training digits.
-We're going to ignore the 2D spatial structure of the image entirely
-for now, so just flatten each 28$\times$28 image into a 784-dim
+The data is Chapter~\ref{chap:tensor}'s MNIST and the goal is the same:
+classify a held-out test digit with a model trained on the 60\,000
+training digits.
+We still ignore the 2D spatial structure of the image entirely,
+so just flatten each 28$\times$28 image into a 784-dim
 vector and treat it as a plain supervised-learning classification
 problem. This is the \textbf{multilayer perceptron} (MLP). Chapter~\ref{chap:cnn} revisits MNIST with convolutions that respect the
 spatial structure.
@@ -3109,8 +3108,8 @@ first's. The two \texttt{dot\_general}s with
 $x^{\!\top}\,dy_1$, the weight gradients of
 Theorem~\ref{thm:denseWeightGrad_correct} summed over the batch.
 Theorem~\ref{thm:mlp_fold} states that each of the six returned updates
-is $\theta$ minus $\alpha/N$ times the certified gradient at the
-cotangent these very nodes carry: the slice lemmas it rests on say that
+is $\theta$ minus $\alpha$ times the batch sum of the certified gradient
+at the cotangent these very nodes carry: the slice lemmas it rests on say that
 example $k$'s slice of \texttt{\%v22} and \texttt{\%v26} is the
 one-example chain above, so the bridge and the batched tie are one claim
 at two widths.
@@ -3346,7 +3345,7 @@ So a convolution is a linear map, like a dense layer, but its
 Jacobian is highly structured: each row has only \(k^2 \times C_{\text{in}}\)
 nonzero entries, and those entries are reused across many rows
 because the same kernel is used at every spatial position. The
-forward picture from Chapter~\ref{chap:mlp}, ``the Jacobian of a
+forward picture from Chapter~\ref{chap:tensor}, ``the Jacobian of a
 linear map is the linear map'', still holds. The Jacobian is just
 written in a different basis: instead of one big dense matrix it
 is a list of kernel weights plus a rule for where each one lives.
@@ -5329,8 +5328,8 @@ stated up front so the graphs are no surprise:
   inside the spread of either. AdamW lands a point under SGD once BN is
   in, and its per-coordinate adaptivity gains less than momentum does.
 \item \textbf{The arithmetic does not move the ranking.} Recomputing the
-  normalized ladder in bf16 leaves the optimizer ordering exactly where it
-  was, with medians moving by $-0.21$, $+0.57$ and $+1.02$ --- every one of
+  normalized ladder in bf16 leaves momentum on top; SGD and AdamW trade
+  places by a tenth of a point, with medians moving by $-0.21$, $+0.57$ and $+1.02$ --- every one of
   them smaller than the spread between repeated runs of a single
   configuration. Drop the normalization and the answer is the same: the
   medians move by under a point, inside the seed ranges. The
@@ -7065,7 +7064,7 @@ pipelines, and it's what \texttt{TrainConfig.weightDecay} implements.
 
 \textbf{Augmentation}. Our pipeline does random crops ($256 \to 224$)
 and random horizontal flips on Imagenette, hflip only on CIFAR, and
-nothing on MNIST. Lives in the data pipeline, not the network. We
+nothing on MNIST. It lives in the data pipeline, not the network.
 RandAugment, Mixup and CutMix arrive with the A3 recipe in \S\ref{sec:r50_a3_vs_2018}.
 
 \textbf{Label smoothing} (Szegedy et al., 2016,
@@ -7314,8 +7313,8 @@ The reference trainer is \texttt{jax/MainResnetImagenet.lean}, built in
 through tfds. It runs in bf16 --- the convolutions cast to bfloat16
 against fp32 master weights, the classifier head left in fp32 --- which is
 a throughput choice
-rather than a fidelity one, and is why its column is the faster of the
-two in Table~\ref{tab:r34_paths}. Table~\ref{tab:r34_jax} is the run.
+rather than a fidelity one, and the verified render makes the same one
+(Table~\ref{tab:r34_paths}). Table~\ref{tab:r34_jax} is the run.
 
 \begin{table}[H]
 \centering
@@ -11111,11 +11110,11 @@ in isolation. The full list:
 The result: a model that's pure convolution top to bottom, doesn't
 contain a single attention operation, and matches or beats Swin-T
 on ImageNet at the same compute budget. The conclusion of the
-paper isn't ``convolutions are back.'' It's ``the architectural
-gap between ResNet and Swin was mostly the training recipe, not
-the receptive field.'' Most of what looked like transformer
-superiority was modernization that hadn't been back-ported to the
-convnet baseline.
+paper isn't ``convolutions are back.'' It's that much of the gap
+between ResNet and Swin was modernization that hadn't been back-ported
+to the convnet baseline: the training recipe alone is worth $2.7$ of the
+$5.9$ points from ResNet-50 to ConvNeXt-T, and the architectural steps
+the rest.
 
 \section{Run it first}
 \label{sec:convnext_runit}
@@ -11932,13 +11931,13 @@ too much of this short schedule (above). It is the fourth row of
 Table~\ref{tab:imagenette_five}.
 
 \medskip\noindent\textbf{That is the chapter's thesis arriving as a result
-rather than a claim.} ConvNeXt's paper argues the modernization lives in the
+rather than a claim.} ConvNeXt's paper argues that much of the modernization lives in the
 training recipe, so a ConvNeXt run on somebody else's recipe should
 underperform, and it does. \S\ref{sec:convnext_imagenet} is the control: the
 same architecture, given the official recipe and 300 epochs, reaches
 $82.15\%$ on ImageNet-1k on the verified path and $81.99\%$ on the
-reference, and beats every other network in this book. The architecture was
-never the variable.
+reference, and beats every other network in this book. The recipe was the
+missing piece.
 
 \medskip\noindent\textbf{Where the time goes.} A step is 230\,ms, the
 slowest in the column, against ResNet-34's 134 and EfficientNet-B0's 110.
@@ -12172,7 +12171,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
 Unlike ResNet-34's SGD and the RMSProp of MobileNetV2 and
 EfficientNet-B0, ConvNeXt trains with AdamW and a small decoupled weight
 decay. The modernized-convnet
-recipe is the architecture's whole thesis. \texttt{bf16Conv} matters
+recipe is half the paper's argument. \texttt{bf16Conv} matters
 most here: the $7\times7$ depthwise is $\sim2.3\times$ faster
 in bfloat16 (a large kernel has enough arithmetic to keep the tensor
 cores busy, unlike the $3\times3$ depthwise, which gains nothing), and
@@ -14840,8 +14839,9 @@ chapter nets and the four codegen-backed primitives of
 
 \proseparagraph{What ``\(N\) new primitives'' means.}
 Every bestiary entry leads with how many new \texttt{Layer}
-constructors it asks the reader to absorb on top of the
-primary-sequence toolbox.
+constructors it asks the reader to absorb on top of Part~1's.
+A new primitive is a new name, never a new rule: its backward is still
+built from the three rules and five Jacobian shapes of the Introduction.
 
 \begin{itemize}
   \item \emph{Zero new primitives} means the architecture composes
@@ -14865,9 +14865,8 @@ primary-sequence toolbox.
     more, the architecture probably warranted its own chapter.
 \end{itemize}
 
-This count is calibrated to the reader (what's new vs.\ what
-they've seen), not to the codebase (where some bestiary primitives
-were drafted earlier and already sit in \texttt{Types.lean}).
+The count is against Part~1 in every entry, so each entry reads on its
+own.
 Formalizing every sub-op of every modern architecture is a goal this book
 does not attempt. Figure~\ref{fig:operation_inventory} is the
 inventory.
@@ -15210,8 +15209,8 @@ runs.
   Signature: \texttt{mambaBlock (dim stateSize expand nBlocks : Nat)}.
   Bundles RMSNorm + linear expand + depthwise 1D conv + SiLU +
   selective-scan SSM + gated product + output projection, for
-  \texttt{nBlocks} stacked layers. The selective scan is the novel
-  primitive; everything else could be decomposed to existing layers if
+  \texttt{nBlocks} stacked layers. The selective scan is the one new
+  piece; everything else could be decomposed to existing layers if
   we cared to unpack the bundle.
 \end{definition}
 
@@ -16686,8 +16685,9 @@ March the same chips are green, the ten-band arm reads 59 and RGB 38, and
 savanna becomes ``forest'' to RGB on $42\%$ of its chips. The last column
 is the check the section was built for, and it fails for every arm: the
 same $3{,}620$ chips get the same answer in the two seasons between a
-quarter and two-fifths of the time. The multispectral arms are better in
-both seasons; they are not stabler. Averaged over the Cerrado chips, red
+quarter and two-fifths of the time. The ten-band arms are ahead only in March, by sixteen to twenty-one
+points, and they agree with themselves across the two seasons least of
+the five. Averaged over the Cerrado chips, red
 and the second short-wave band are $1.9$ times as bright in September as in
 March, the first short-wave band $1.5$ times, and the near infrared is
 darker; no European chip taught that.
@@ -17063,7 +17063,7 @@ def deeplabv3plusResnet101 : NetSpec where
 \end{verbatim}
 
 \subsection*{SegFormer (\texttt{Bestiary/SegFormer.lean})}
-\emph{Zero} new primitives --- reuses Definition~\ref{layer:patchMerging} and the
+\emph{One} new primitive (Definition~\ref{layer:patchMerging}), with the
 transformer encoder. Semantic segmentation (Xie et al.\ 2021,
 \href{https://arxiv.org/abs/2105.15203}{arXiv:2105.15203}) via a
 hierarchical transformer pyramid (MiT encoder: four
@@ -17106,7 +17106,7 @@ def segformerB2 : NetSpec where
 
 \subsection*{SAM (\texttt{Bestiary/SAM.lean})}
 \begin{sloppypar}
-\emph{Zero} new primitives --- reuses Definition~\ref{layer:transformerDecoder}. Promptable segmentation (Kirillov et
+\emph{One} new primitive (Definition~\ref{layer:transformerDecoder}). Promptable segmentation (Kirillov et
 al.\ 2023, \href{https://arxiv.org/abs/2304.02643}{arXiv:2304.02643}): a ViT image encoder runs once per image, a tiny prompt
 encoder tokenizes clicks / boxes / masks, a lightweight transformer
 mask decoder cross-attends between image tokens, prompt tokens, and
@@ -19139,9 +19139,9 @@ they are not. So the head is the larger half of the gap and the input is
 the other: an alignment is what the field's models read and ESMFold does
 not, and half of the sixteen are blind to the language model too.
 
-What this is not: a 5.4M-parameter network on a single sequence, 65
-residues of receptive field in a 96-residue window, folded as one point
-per residue. The field's models read alignments and templates and build an
+What this is not: one of the field's models. It is a 5.4M-parameter
+network on a single sequence, 65 residues of receptive field in a
+96-residue window, folded as one point per residue. The field's models read alignments and templates and build an
 all-atom chain through a structure module; the architecture that does so
 is the \bestiaryref{bestiary:evoformer}{Evoformer entry}, and AlphaFold~2's distogram head is this demo's
 network grown into a 48-block pair stack with the alignment beside it.
@@ -19445,8 +19445,8 @@ points), and it bluffs elsewhere instead, a jack under a king 11--17\% across th
 seeds. Honesty's price is exact: moving the equilibrium's worst-hand raises
 to call costs 0.186 of exploitability.
 
-What this is not: a two-player, fixed-limit, one-card game, solved at rank level. The
-scale of the Deep CFR paper is heads-up flop and limit hold'em, where no exact best
+What this is not: poker at the paper's scale. Leduc is a two-player, fixed-limit,
+one-card game, solved at rank level. The scale of the Deep CFR paper is heads-up flop and limit hold'em, where no exact best
 response exists to score against and the paper's numbers are against abstractions and
 head-to-head; no-limit and multi-way poker (Pluribus) are another scale again, and
 exploitability is not computable there.
@@ -19596,18 +19596,18 @@ board the search is what closes the second player's games, and at a hundred
 iterations it has not closed them.
 
 \subsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
-\emph{Zero} new primitives. The original 2016 Lee Sedol system
-(Silver et al.\ 2016,
-\href{https://www.nature.com/articles/nature16961}{Nature}).
+\emph{Zero} new primitives. The original system (Silver et al.\ 2016,
+\href{https://www.nature.com/articles/nature16961}{Nature}), the one that
+beat Fan Hui and, strengthened, Lee Sedol.
 Three separate networks: a 13-layer conv \emph{policy} network
-($\sim$3.9M) trained first on 30M human games then fine-tuned via
+($\sim$3.9M) trained first on 30M positions from human games then fine-tuned via
 self-play, a 13-layer conv + FC-head \emph{value} network
 ($\sim$4M), and a shallow linear \emph{rollout} policy used inside
 MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
 planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
 etc.). AlphaGo Zero (the next entry) discards all of this --- raw
 board only, one two-headed net, self-play only --- and plays better
-(5185 Elo vs 3140). The one-sentence lesson is written into every
+(5185 Elo for its 40-block version against 3140 for this paper's). The one-sentence lesson is written into every
 follow-up paper: the network will learn on its own every feature it can.
 
 \begin{verbatim}
@@ -20145,7 +20145,7 @@ Every VJP correctness theorem is machine-checked by Lean's type system,
 and that covers dense layers, convolution, batch normalization, residual
 connections, depthwise convolution, squeeze-and-excitation, layer
 normalization, and self-attention. If it builds, the gradients are
-right. What the proofs do not say is that training converges, or how
+right over the reals. What the proofs do not say is that training converges, or how
 well: an optimizer handed the exact gradient can still diverge, plateau
 or overfit, and that is a theorem in no framework. Every accuracy in
 this book is a measurement, and the measurement is sharper for the
@@ -20902,8 +20902,9 @@ corner it never samples, and a faithful bridge is blind to a wrong formula
 it renders perfectly. Verified code generation straddles two of the kinds,
 its bridge structural and its printer's text checked empirically. The
 finite-precision layer straddles the other pair, its budgets deductive and
-its interface constants (\(u\), \(e_{\exp}\), \(\delta\)) measured. If it
-builds, the gradients are right. Everything past that is an oracle that
+its interface constants (\(u\), \(e_{\exp}\)) named hypotheses, with
+\(e_{\exp}\) still to be measured. If it
+builds, the gradients are right over the reals. Everything past that is an oracle that
 has to agree.
 
 
@@ -20979,12 +20980,13 @@ Five things are matched, and each uses \texttt{timm} as the reference:
     all resolve \texttt{crop\_pct} $= 0.95$; the $2018$ torchvision
     weights (\texttt{tv\_in1k}) resolve $0.875$. Both values appear in
     this book, attached to the recipe each belongs to.
-  \item \textbf{The field of view is identical.} We decode a centered
-    square of side $\mathrm{crop\_pct} \cdot \min(h,w)$ and resize it to
-    the evaluation resolution; \texttt{timm} resizes the whole image so
-    its shorter side is $\mathrm{img\_size}/\mathrm{crop\_pct}$ and then
-    center-crops. The two orders end on the same pixels, and the
-    ordering itself is measured at $0.02$--$0.04$ points.
+  \item \textbf{The field of view is \texttt{timm}'s.} The whole image
+    is resized so its shorter side is
+    $\mathrm{img\_size}/\mathrm{crop\_pct}$ and then center-cropped.
+    The other order, a centered square of side
+    $\mathrm{crop\_pct} \cdot \min(h,w)$ resized to the evaluation
+    resolution, ends on the same field of view and measures
+    $0.02$--$0.04$ points away.
   \item \textbf{Top-5 is the true label's rank}, matching the
     reference's own $\sum \mathbb{1}[\ell_i > \ell_y] < 5$, and the
     train/test resolution split is the recipe's (RSB-A3 trains at $160$
