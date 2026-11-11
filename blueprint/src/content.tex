@@ -6101,6 +6101,15 @@ what a shallow one represents?'' It provably could. The question
 was: why is optimizing 12 free-form layers to recover identity
 so much harder than just leaving identity there?
 
+This chapter is the longest in Part~1, because it does two jobs. The first
+half is the residual block: run it, the idea, the proof, and sixteen of them
+on Imagenette. The second half sets the training pattern every later chapter
+reuses: the recipe and what each ingredient of it is worth
+(\S\ref{sec:r34_recipe}), then ImageNet on two paths, a reference trainer and
+the verified one side by side, for ResNet-34 and then for ResNet-50. The
+chapter closes on a suggested stopping point for a reader who wants the
+framework and not the whole zoo.
+
 \section{Run it first}
 \label{sec:r34_runit}
 
@@ -7616,40 +7625,6 @@ $\Delta$              & $+1.72$ & $+2.58$ & $+1.04$ & $+0.28$ & $+0.11$ & $+0.29
 \label{fig:r34_paths_curve}
 \end{figure}
 
-\prosesection{A reasonable stopping point}
-
-For the fastest path through this book, the route is roughly:
-
-\begin{itemize}
-  \item The intro chapters \& Ch~\ref{chap:tensor}: framework setup (mandatory context).
-  \item Ch~\ref{chap:mlp}--\ref{chap:cnn}: MLP and CNN worked examples, the simplest cases
-    of the framework reaching real architectures.
-  \item Skim Ch~\ref{chap:bn} (BatchNorm). It's structurally the
-    hardest chapter and the prose says so up front. The math is
-    right (\texttt{pdiv\_bnNormalize}'s three-term cancellation is
-    formalized and matches the codegen), but it's not the place to
-    spend time if you're not specifically interested in BN. Spend
-    time running as many MNIST and CIFAR demos as possible.
-  \item Read this chapter (Ch~\ref{chap:residual}, ResNet-34).
-    Residual blocks are where the chain rule shows it can carry
-    composition through arbitrarily deep architectures, and the proof
-    reduces to one additive-fan-in lemma you've already seen. Run
-    the ResNet-50 RSB-A3 ImageNet training demo
-    (\S\ref{sec:r50_pjrt}; about a day on four cards).
-  \item Stop here. Assume Chapters \ref{chap:depthwise}--\ref{chap:attention}
-    (MobileNet, EfficientNet, ConvNeXt, ViT) and the Bestiary
-    (Chapters~\ref{chap:bestiary}--\ref{chap:bestiary_games}) are correct, because they all reuse the
-    same framework with new operators slotting into the same proof
-    tree. Appendix~\ref{app:verification} walks through how that
-    claim is auditable if you ever want to spot-check it.
-\end{itemize}
-
-Reading through this chapter is enough to know the framework works. Read
-the AlphaGo Zero paper
-(\bestiaryref{bestiary:alphagozero}{bestiary entry}), which combines
-reinforcement learning with a large residual network of
-convolutions.
-
 \subsection{ResNet-50: the 2018 recipe and RSB-A3}
 
 The basic block that ResNet-34 is built from generalizes to the
@@ -8044,6 +8019,40 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \noindent\textbf{[TODO: neither pair has run; the jobs are\\
 \texttt{r50-a2accum-jax-4gpu} / \texttt{r50-a2-bf16-4gpu} and\\
 \texttt{r50-a1-jax-4gpu} / \texttt{r50-a1-bf16-4gpu}.]}
+
+\section{A reasonable stopping point}
+
+For the fastest path through this book, the route is roughly:
+
+\begin{itemize}
+  \item The intro chapters \& Ch~\ref{chap:tensor}: framework setup (mandatory context).
+  \item Ch~\ref{chap:mlp}--\ref{chap:cnn}: MLP and CNN worked examples, the simplest cases
+    of the framework reaching real architectures.
+  \item Skim Ch~\ref{chap:bn} (BatchNorm). It's structurally the
+    hardest chapter and the prose says so up front. The math is
+    right (\texttt{pdiv\_bnNormalize}'s three-term cancellation is
+    formalized and matches the codegen), but it's not the place to
+    spend time if you're not specifically interested in BN. Spend
+    time running as many MNIST and CIFAR demos as possible.
+  \item Read this chapter (Ch~\ref{chap:residual}, ResNet-34).
+    Residual blocks are where the chain rule shows it can carry
+    composition through arbitrarily deep architectures, and the proof
+    reduces to one additive-fan-in lemma you've already seen. Run
+    the ResNet-50 RSB-A3 ImageNet training demo
+    (\S\ref{sec:r50_pjrt}; about a day on four cards).
+  \item Stop here. Assume Chapters \ref{chap:depthwise}--\ref{chap:attention}
+    (MobileNet, EfficientNet, ConvNeXt, ViT) and the Bestiary
+    (Chapters~\ref{chap:bestiary}--\ref{chap:bestiary_games}) are correct, because they all reuse the
+    same framework with new operators slotting into the same proof
+    tree. Appendix~\ref{app:verification} walks through how that
+    claim is auditable if you ever want to spot-check it.
+\end{itemize}
+
+Reading through this chapter is enough to know the framework works. Read
+the AlphaGo Zero paper
+(\bestiaryref{bestiary:alphagozero}{bestiary entry}), which combines
+reinforcement learning with a large residual network of
+convolutions.
 
 \section{Recap}
 
@@ -15310,6 +15319,11 @@ runs.
   \texttt{structureModule (singleChannels pairChannels nBlocks : Nat)}.
 \end{definition}
 
+\medskip\noindent That is the kit: twenty-four names, and none of them a
+new rule. Four are backed by codegen and train in the demos that follow. The
+rest are shapes, the vocabulary the catalog entries are written in. The next
+three chapters put both to work.
+
 \chapter{The chapter nets at work}
 \label{chap:bestiary_nets}
 
@@ -19735,6 +19749,14 @@ def muZeroGoPredictionValue : NetSpec where
     .dense 256 1 .identity                        -- scalar value
   ]
 \end{verbatim}
+
+\medskip\noindent That is the bestiary. Every network in these three
+chapters is written in the same few dozen layer names, and every demo trains
+through the step Part~1 proved. What changed from one section to the next was
+the data, the loss and the instrument that graded the result, and the
+instrument is the part worth copying: a solved game, a closed form, a field's
+own leaderboard. A network is easy to write down. Knowing what its number
+means is the work.
 
 \appendix
 \part*{Appendices}
