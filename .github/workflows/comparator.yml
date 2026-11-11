@@ -186,7 +186,7 @@ jobs:
 
       - name: Install bubblewrap (the `lake comparator` sandbox)
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
+          .github/scripts/apt-install.sh bubblewrap
           # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor; bwrap needs them.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --version

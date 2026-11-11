@@ -230,8 +230,7 @@ jobs:
         # dep-graph dependency only; the old .dot architecture diagrams are gone
         # (now native TikZ), so no `dot -T...` render step is needed.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz libgraphviz-dev pkg-config
+          .github/scripts/apt-install.sh graphviz libgraphviz-dev pkg-config
 
       - name: Dependency graphs are fresh
         # blueprint/src/figures/depgraph/*.tex are committed (the layout needs pygraphviz,
@@ -275,8 +274,7 @@ jobs:
         run: |
           mkdir -p ~/apt-cache
           sudo cp ~/apt-cache/*.deb /var/cache/apt/archives/ 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y \
+          .github/scripts/apt-install.sh \
             texlive-latex-base texlive-latex-extra texlive-fonts-extra \
             texlive-fonts-recommended texlive-xetex texlive-science \
             texlive-pictures texlive-plain-generic texlive-font-utils \
