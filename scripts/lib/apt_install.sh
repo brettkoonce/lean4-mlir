@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apt-get update + install that survives the runner's default Ubuntu mirrors being unreachable.
 #
-#   .github/scripts/apt-install.sh <package> [<package> ...]
+#   scripts/lib/apt_install.sh <package> [<package> ...]
 #
 # GitHub's ubuntu-24.04 runners read their mirrors from /etc/apt/apt-mirrors.txt:
 # azure.archive.ubuntu.com first, then archive.ubuntu.com and security.ubuntu.com. On 2026-11-11
