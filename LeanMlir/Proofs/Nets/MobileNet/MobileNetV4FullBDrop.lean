@@ -33,7 +33,9 @@ Those two artifacts are bf16, and the graph takes the renderers' `bf16` flag thr
 switch as `MobileNetV4FullB` (`StableHLO.PrecisionSwitch`), so `mnv4FwdGraphBFullDrop … true` is
 their forward read over ℝ (`Bf16Erasure`) and `false` its f32 twin — as `mnv4FwdGraphBFullDo` is
 for the classifier-dropout ones. The train steps' backward through the drop sites is outside this
-statement, as it is outside `MobileNetV4StepTieB`.
+file's statements; it is `MobileNetV4StepTieB`'s, whose capstone takes both sites as optional
+masks and whose forward at rendered masks is this file's
+(`Mnv4TieB.mobilenetv4ForwardBFullDropOpt_some`).
 
 **Why a separate file, and why `rw`.** `MobileNetV4FullB`'s group graphs are private and their
 whole-net proof is the one whose `simp only` spelling dies in the kernel, so the drop-carrying

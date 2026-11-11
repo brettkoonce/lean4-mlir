@@ -2763,7 +2763,10 @@ above it; see \leandocref{Proofs.MlpFold.mlp\_net\_lossGrad}.
   The same holds at \(W_1\) and at the three biases, each with its own
   constants, and with the binary32 gradient in place of \(g\) at all three
   weight layers, its \(\eta\) the rounding budget of \S\ref{sec:precision}
-  and a forward rounding margin at every ReLU beside the step margin.
+  and a forward rounding margin at every ReLU beside the step margin. At
+  \(W_0\) that gradient is read off the rounded forward; at \(W_1\) and
+  \(W_2\) the activation entering the layer is the exact one, and the
+  rounding starts at the layer.
 \end{theorem}
 
 \begin{proof}
@@ -3813,8 +3816,10 @@ and the gradient moves to the real net with the germ; see
   The same holds at the first convolution and at both convolutions' biases,
   and with the binary32 gradient in place of \(g\), its \(\eta\) the
   rounding budget of \S\ref{sec:precision} and its pool margin strict.
-  Witness: a trained reduced-width network and a real MNIST test image meet
-  every hypothesis, at both kernels and both biases.
+  Witness: two trained reduced networks and a real MNIST test image,
+  cropped and block-summed to \(12 \times 12\), meet every hypothesis --- one
+  network at the second convolution's kernel and bias, one with a
+  first-convolution bias at the first's.
 \end{theorem}
 
 \begin{proof}
@@ -4933,8 +4938,10 @@ gradients, and one descent step at the last convolution.
   CIFAR net's four convolutions --- denote the certified step at the real
   forward \texttt{cifarCnnForward}, each at the chain cotangent carried back
   from the softmax cross-entropy gradient. Stated at one example; the
-  committed text is the batch-128 instance read one image at a time, and the
-  eight-convolution ties below are batched.
+  committed text is the batch-128 instance read one image at a time. The
+  eight-convolution ties below are stated the same way, except the
+  batch-statistics tie of Theorem~\ref{thm:cifar8bbn_step_tie}, which is
+  batched.
 \end{theorem}
 
 \begin{proof}
@@ -5025,7 +5032,7 @@ stages in reverse; see
   \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
       ax:pdiv, def:hasvjp, thm:cifar_bn_fold, thm:denseBiasGrad_correct,
       thm:denseWeightGrad_correct}
-  \Prove{} with BatchNorm after each of the eight convolutions, all
+  \Prove{} with per-image BatchNorm after each of the eight convolutions, all
   thirty-eight parameter updates of \texttt{cifar8\_bn\_train\_step.mlir} ---
   kernel, bias, and BatchNorm \((\gamma, \beta)\) per convolution, and weight
   and bias per dense layer --- denote the certified step at
@@ -6403,8 +6410,8 @@ stem's endpoint ties, and each block's backward in its slot; see
       thm:vjpComp}
   \Prove{} each of the 110 emitted parameter gradients of the batched
   ResNet-34 step (\texttt{resnet34\_sgd\_train\_step.mlir} and
-  \texttt{\_adam\_} at \(N = 32\), \texttt{resnet34in\_momdp64} at
-  \(N = 64\)) denotes the certified batch gradient
+  \texttt{\_adam\_} at \(N = 32\), \texttt{resnet34in\_mom256} at
+  \(N = 256\)) denotes the certified batch gradient
   \(\sum_n \mathrm{Jacobian} \cdot \mathrm{cotangent}\) at the chain cotangent
   of the label-smoothed cross-entropy (any \(\alpha_{\mathrm{ls}}\) ---
   \(0.1\) in the renders, \(0\) in the \texttt{ls0} twins --- and any
@@ -6450,7 +6457,8 @@ certified block backwards; see
   node at the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
   \texttt{resnet34ForwardBFull} with that one parameter varied, at any batch
   size and number of classes. Instantiated at the batched label-smoothed
-  cross-entropy, and at the stem with each tied window's cotangent routed to
+  cross-entropy for targets summing to one, and at the stem with each tied
+  window's cotangent routed to
   any of its maximal cells, as the emitted \texttt{select\_and\_scatter}
   routes it.
 \end{theorem}
@@ -6533,8 +6541,8 @@ As for ResNet-34, over the three block kinds; see
   the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
   \texttt{resnet50ForwardBFull} with that one parameter varied, at any batch
   and number of classes. Instantiated at both losses of
-  Theorem~\ref{thm:resnet50_step_tie}, and at the stem at any routing to a
-  maximal cell, as for ResNet-34.
+  Theorem~\ref{thm:resnet50_step_tie} for targets summing to one, and at
+  the stem at any routing to a maximal cell, as for ResNet-34.
 \end{theorem}
 
 \begin{proof}
@@ -6637,15 +6645,15 @@ As for ResNet-34; see \leandocref{Proofs.ResNet50SyncTieB.r50\_net\_syncTiedB}.
   \label{thm:lamb_clip_faithful}
   \lean{Proofs.StableHLO.lamb_triple_faithful, Proofs.StableHLO.lamb_triple_faithful_committed,
         Proofs.StableHLO.lamb_triple_faithful_excluded, Proofs.StableHLO.clipGrad_faithful,
-        Proofs.StableHLO.clipShared_faithful, Proofs.clipFactor_le_one, Proofs.clipFactor_accum,
+        Proofs.StableHLO.clipGrad_fold_faithful, Proofs.StableHLO.clipShared_faithful, Proofs.clipFactor_le_one, Proofs.clipFactor_accum,
         Proofs.lambTrust_nonneg}
   \leanok
   \Prove{} in the RSB-A3 render of \S\ref{sec:r50_a3_vs_2018}:
   \begin{enumerate}
     \item the clip: the emitted scale op denotes
           \(g \cdot \min\bigl(1,\; c / (\sqrt{s} + \varepsilon)\bigr)\), where
-          \(s\) is the sum of squares folded across every parameter, one
-          scalar shared by every leaf. The factor never exceeds one, and at
+          \(s\) is the sum of squares folded across every parameter, at any
+          number of them, one scalar shared by every leaf. The factor never exceeds one, and at
           threshold \(kc\), \(k\varepsilon\) and \(k^2 s\) it equals the
           factor at \(c\), \(\varepsilon\), \(s\), which is what lets the
           clip run after \(k\)-fold accumulation;
@@ -8576,15 +8584,18 @@ As for MobileNetV2; see \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}
       thm:pdiv_finset_sum, thm:pdiv_of_affine, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} each of the 158 emitted parameter gradients of the batched
   MobileNetV2 step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at
-  \(N = 32\), \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) denotes the
+  \(N = 32\), \texttt{mobilenetv2in\_rms64} at \(N = 64\)) denotes the
   certified batch gradient at the chain cotangent of a loss cotangent left as
   a binder, generic in \(N\), at either precision as for ResNet-34, and
   with the classifier dropout as an optional mask: at \texttt{none} the
   chain is the drop-free artifacts', at \texttt{some} the \texttt{do}
-  renders' --- \texttt{mobilenetv2in\_emarmstfdp64wxdwdoeps0001bf16}, the
-  run's, among them --- where the dense weight node reads the dropped
+  renders', where the dense weight node reads the dropped
   activation and the cotangent handed down to the pooling passes through
-  the mask. Instantiated at the label-smoothed cross-entropy for targets summing to one. The optimizer
+  the mask. Instantiated at the label-smoothed cross-entropy for targets summing to one. The
+  data-parallel renders --- \texttt{mobilenetv2in\_rmsdp64} and the run's
+  \texttt{mobilenetv2in\_emarmstfdp64wxdwdoeps0001bf16} among them --- are
+  this node at batch \(R \cdot N\), by
+  Theorem~\ref{thm:mobilenetv2_sync_tie}. The optimizer
   that consumes the nodes is outside the tie and is
   Theorem~\ref{thm:rmsprop_faithful}.
 \end{theorem}
@@ -8634,9 +8645,10 @@ each of the two differences is one \texttt{ring}; see
         Proofs.emaNext_zero}
   \leanok
   \Prove{} in every render carrying \texttt{ema}, the one extra op per
-  parameter denotes \(e' = d\,e + (1 - d)\,\theta'\), with \(\theta'\) the
-  parameter the optimizer tail has just produced, not the one it read,
-  and the decay \(d\) a runtime scalar. The shadow's distance to the live
+  parameter denotes \(e' = d\,e + (1 - d)\,\theta'\) at whatever operand
+  \(\theta'\) it reads, with the decay \(d\) a runtime scalar. The renderer
+  wires that operand to the parameter the optimizer tail has just produced,
+  not the one it read. The shadow's distance to the live
   weight shrinks by the factor \(d\) a step; at \(d = 1\) it is frozen and
   at \(d = 0\) it is the live weight. The warmup-corrected schedule of
   \(d\) and the second shadow over the BatchNorm buffers are the
@@ -8703,13 +8715,20 @@ backwards (Theorem~\ref{thm:hasGradAt_comp}, once per stage); see
       thm:identityHasVJP, thm:pdiv_finset_sum, thm:pdiv_of_affine, thm:rowwiseHasVJPMat,
       thm:vjpComp}
   \Prove{} each of the 233 parameter gradients of the batched
-  MobileNetV4-Conv-M step (\texttt{mnv4in\_adamdp64} at \(224^2\), the paper
-  tier's \texttt{mnv4in256\_\allowbreak accdp8x128\allowbreak wxdropdowd01bf16} at
+  MobileNetV4-Conv-M step (\texttt{mnv4in\_adam64} at \(224^2\), the paper
+  tier's \texttt{mnv4in256\_\allowbreak acc8x128\allowbreak wxdropdowd01bf16} at
   \(256^2\)) denotes
   the certified batch gradient at the chain cotangent of a loss cotangent left
   as a binder, generic in \(N\), in the number of classes and in the final
   feature side, at either precision. Instantiated at the label-smoothed
-  cross-entropy for targets summing to one.
+  cross-entropy for targets summing to one. Stochastic depth on the eighteen
+  skip-carrying blocks and the classifier dropout are optional masks: at
+  \texttt{none} the chain is the drop-free artifacts', at \texttt{some} the
+  \texttt{do} and \texttt{dropdo} renders', where a masked block's nodes read
+  the cotangent through its site and the skip reads it raw, and the dense
+  weight node reads the dropped activation. The optimizer tails that consume
+  the nodes are outside it. The data-parallel renders are this node at
+  batch \(R \cdot N\), by Theorem~\ref{thm:mobilenetv4_sync_tie}.
 \end{theorem}
 
 \begin{proof}
@@ -8734,17 +8753,19 @@ of the body, skip and fused stages and the head; see
       thm:pdiv_finset_sum, thm:pdiv_of_affine, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
-    \item at the activation its stage sees, every ReLU is off its corner; the
-          BatchNorm positivities are fields of the weights
-          \hfill[\texttt{Mnv4SmoothAt}]
+    \item at the activation its stage sees in the forward at the same
+          drop-path masks, every ReLU is off its corner; the BatchNorm
+          positivities are fields of the weights
+          \hfill[\texttt{Mnv4SmoothAtDrop}]
     \item \(L\) is any loss of the logits, with gradient \(g\) there
           \hfill[\texttt{hL}]
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:mobilenetv4_step_tie}, the node
-  at the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
-  \texttt{mobilenetv4ForwardBFull} with that one parameter varied, at any
-  batch and number of classes. Instantiated at the label-smoothed
-  cross-entropy for targets summing to one.
+  at the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of the
+  forward at the same masks (\texttt{mobilenetv4ForwardBFullDropOpt};
+  \texttt{mobilenetv4ForwardBFull} at \texttt{none}) with that one parameter
+  varied, at any batch and number of classes. Instantiated at the
+  label-smoothed cross-entropy for targets summing to one.
 \end{theorem}
 
 \begin{proof}
@@ -8835,7 +8856,10 @@ its shard, so its node is the global node's sum over that shard, scaled by
       thm:bnBatchTensor4HasVJP, thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP,
       thm:pdiv_of_affine, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} the same for MobileNetV4's 233 gradients, at every final feature
-  side, instantiated at the label-smoothed cross-entropy.
+  side and with stochastic depth and the classifier dropout as optional
+  masks: at \texttt{some}, each replica's masks are its shards of global
+  ones. Instantiated at the label-smoothed cross-entropy. The forward
+  half at the masks is not stated for this net.
 \end{theorem}
 
 \begin{proof}
@@ -9691,7 +9715,7 @@ $512$-image micro-batch, which is the group the reference's accumulation
 gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the data-parallel
 render's bf16 gradient nodes to one device's step at the global batch at every
 final feature side, so it reaches this $256^2$ render as it does the $224^2$
-ones; accumulation and the two dropouts sit outside the statement as before.
+ones, at its drop-path and dropout masks; accumulation sits outside the statement.
 The three rows the
 recipe paragraph discloses are out on this path as on the reference. It
 launches as:
@@ -10092,10 +10116,10 @@ gradient and the data-parallel tie; no seal.
   emitted forward graph denotes exactly that forward. With stochastic depth
   on the nine blocks that carry a skip and classifier dropout between the
   pool and the dense, the \texttt{drop} and \texttt{dropdo} forward graphs
-  denote the masked forward at every mask, at training and at inference
-  BatchNorm, at either precision --- the committed
-  \texttt{efficientnetin\_drop\_fwd} and \texttt{efficientnetin\_dropdo\_fwd}
-  are the f32 instances. The graph ties take no hypothesis, and the VJP no
+  denote the masked forward at every mask: at training BatchNorm at either
+  precision --- the committed \texttt{efficientnetin\_drop\_fwd} and
+  \texttt{efficientnetin\_dropdo\_fwd} are the f32 instances --- and at
+  inference BatchNorm in f32, as the eval artifacts are. The graph ties take no hypothesis, and the VJP no
   smooth-point one: swish and the SE gate have no corner.
 \end{theorem}
 
@@ -10199,7 +10223,7 @@ backwards; see \leandocref{Proofs.EnetTieG.efficientnet\_net\_tiedG}.
   the forward at the same masks (\texttt{efficientnetForwardBFullDrop};
   \texttt{efficientnetForwardBFull} at \texttt{none}) with that one
   parameter varied, at any batch and number of classes. Instantiated at
-  the label-smoothed cross-entropy.
+  the label-smoothed cross-entropy for targets summing to one.
 \end{theorem}
 
 \begin{proof}
@@ -13799,8 +13823,10 @@ Op by op along the graph, block by block along the tower; see
   \texttt{vitInputGradKB} equals the backward of the batched network
   \(\mathrm{batchMap}\, B\; \texttt{vitForwardKV}\) for every \(B\), number
   of classes, cotangent and index. The same holds at every depth, and the
-  per-example backward graph the render prints denotes that VJP at every
-  depth, image and cotangent.
+  per-example backward graph composed from the certified block graphs
+  (\texttt{vitNetBackGraph}) denotes that VJP at every depth, image and
+  cotangent. That the printed step is this backward is
+  Theorem~\ref{thm:vit_step_tie}.
 \end{theorem}
 
 \begin{proof}

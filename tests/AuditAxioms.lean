@@ -1272,6 +1272,9 @@ open Proofs
 #audit_axioms Proofs.Mnv4TieB.mnv4_net_lossGrad
 #audit_axioms Proofs.Mnv4TieB.mnv4_net_lossGrad_smoothedCE
 #audit_axioms Proofs.Mnv4TieB.mnv4_net_tied_lossGrad
+#audit_axioms Proofs.Mnv4TieB.mnv4Skip_hasGradAt_comp
+#audit_axioms Proofs.Mnv4TieB.mnv4SkipDrop_body_hasGradAt
+#audit_axioms Proofs.Mnv4TieB.mnv4SmoothAtDrop_of_smoothAt
 -- EfficientNet-B0: every parameter gradient node IS the loss's derivative (EfficientNetParamGrad.lean)
 #audit_axioms Proofs.GradNodeB.biasBeta_hasGradAt
 #audit_axioms Proofs.GradNodeB.hasGradAt_swish
@@ -2689,6 +2692,16 @@ open Proofs
 #audit_axioms Proofs.MobileNetV4SyncTieB.mnv4_head_syncTiedB
 #audit_axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB
 #audit_axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB_smoothedCE
+#audit_axioms Proofs.Mnv4TieB.mnv4HeadCotIn_eq_vjp_do
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDoOpt_some
+#audit_axioms Proofs.Mnv4TieB.mnv4SkipDropLayer_none
+#audit_axioms Proofs.Mnv4TieB.mnv4SkipDropLayer_some
+#audit_axioms Proofs.Mnv4TieB.mnv4SkipDropLayer_ok
+#audit_axioms Proofs.Mnv4TieB.mnv4SkipCotIn_eq_vjp_drop
+#audit_axioms Proofs.Mnv4TieB.mnv4Pre6_eq_blk
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOpt_none
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOpt_none_none
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOpt_some
 
 -- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT
 #audit_axioms Proofs.lambStep
@@ -2696,6 +2709,7 @@ open Proofs
 #audit_axioms Proofs.StableHLO.lamb_triple_faithful
 #audit_axioms Proofs.StableHLO.lamb_triple_faithful_committed
 #audit_axioms Proofs.StableHLO.lamb_triple_faithful_excluded
+#audit_axioms Proofs.StableHLO.clipGrad_fold_faithful
 #audit_axioms Proofs.softplus_hasDerivAt
 #audit_axioms Proofs.softplus_neg
 #audit_axioms Proofs.log_sigmoidScalar

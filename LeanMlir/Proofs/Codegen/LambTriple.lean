@@ -132,6 +132,40 @@ theorem lamb_triple_faithful_excluded {n : Nat}
   show (sgdParam lr θ (lambScale (scalarOf (fun _ => (0 : ℝ))) _), _, _) = _
   rw [show scalarOf (fun _ => (0 : ℝ)) = 0 from rfl, lambScale_zero_weight]
 
+-- ════════════════════════════════════════════════════════════════
+-- § The clip's fold, at every parameter count
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The renderer's sum-of-squares fold**, as the train step builds it: a left-nested chain of
+    `gradSumSqAccF` over the gradient nodes in order, from a seed. Each entry carries the node's
+    size, its shape and the node. -/
+def gradSumSqFold (seed : SHlo 1) : List ((n : Nat) × List Nat × SHlo n) → SHlo 1
+  | [] => seed
+  | p :: ps => gradSumSqFold (.gradSumSqAccF p.2.1 seed p.2.2) ps
+
+/-- **The fold denotes the seed plus every node's sum of squares**, at any number of nodes. -/
+theorem gradSumSqFold_faithful (seed : SHlo 1) (gs : List ((n : Nat) × List Nat × SHlo n)) :
+    scalarOf (den (gradSumSqFold seed gs))
+      = scalarOf (den seed) + (gs.map fun p => gradSumSq (den p.2.2)).sum := by
+  induction gs generalizing seed with
+  | nil => simp [gradSumSqFold]
+  | cons p ps ih =>
+    rw [gradSumSqFold, ih, gradSumSqAccF_faithful, List.map_cons, List.sum_cons, ← add_assoc]
+    rfl
+
+/-- **The clip at every parameter count.** The scale op reading the fold from `%zero` over the
+    whole list of gradient nodes denotes `clipGrad` at the sum of all their squared norms, at any
+    node `g`. `clipGrad_faithful` is this at two nodes. -/
+theorem clipGrad_fold_faithful {n : Nat} (ds : List Nat) (clipS epsS : String) (c ε : ℝ)
+    (gs : List ((n : Nat) × List Nat × SHlo n)) (g : SHlo n) :
+    den (.clipScaleF clipS epsS c ε ds
+          (gradSumSqFold (.operand "%zero" (fun _ => 0)) gs) g)
+      = clipGrad c ε ((gs.map fun p => gradSumSq (den p.2.2)).sum) (den g) := by
+  rw [clipScaleF_faithful, gradSumSqFold_faithful]
+  have h : scalarOf (den (SHlo.operand "%zero" (fun _ => (0 : ℝ)) : SHlo 1)) = 0 := rfl
+  rw [h, zero_add]
+  rfl
+
 end StableHLO
 
 end Proofs

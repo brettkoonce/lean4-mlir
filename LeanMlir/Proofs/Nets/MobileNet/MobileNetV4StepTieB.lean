@@ -1,7 +1,8 @@
 module
 
 public import LeanMlir.Proofs.Foundation.GradNodesBAt
-public import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
+public import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
+public import LeanMlir.Proofs.Foundation.DropSites
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 @[expose] public section
@@ -639,51 +640,51 @@ noncomputable def mnv4HeadCotHn (N h w : Nat) {c mid oc nCls : Nat}
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     -- `bd` is taken and NOT read: the dense input-VJP does not see the bias. Kept so every
     -- cotangent in the head chain has the tie bundle's argument list.
-    (Wd : Mat oc nCls) (_bd : Vec nCls)
+    (Wd : Mat oc nCls) (_bd : Vec nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * 1 * 1)) :=
   reluMaskB (N * (oc * 1 * 1))
     (bnBatchLA N oc 1 1 ε2 γ2 β2
       (batchMap N (flatConv W2 b2) (mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin)))
-    (mnv4To11 (rowDenseBackFlat N oc nCls Wd g))
+    (mnv4To11 (dropoutOpt cd (rowDenseBackFlat N oc nCls Wd g)))
 
 /-- Cotangent at `conv_head`'s CONV output. Feeds `%hW`. -/
 noncomputable def mnv4HeadCotHc (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * 1 * 1)) :=
   bnInB N oc 1 1 ε2 γ2
     (batchMap N (flatConv W2 b2) (mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin))
-    (mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
+    (mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g)
 
 /-- Cotangent at the FIRST head BN's output — `conv_head`'s input-VJP, relabelled, spread by the
     GAP backward, masked by the first relu. Feeds `%h1g` and `%h1bt`. -/
 noncomputable def mnv4HeadCotH1n (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (bnBatchLA N mid h w ε1 γ1 β1 (batchMap N (flatConv W1 b1) xin))
     (gapInB N mid h w
-      (mnv4From11 (cInB N W2 b2 (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g))))
+      (mnv4From11 (cInB N W2 b2 (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g))))
 
 /-- Cotangent at the first head CONV's output. Feeds `%h1W`. -/
 noncomputable def mnv4HeadCotH1c (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (mid * h * w)) :=
   bnInB N mid h w ε1 γ1 (batchMap N (flatConv W1 b1) xin)
-    (mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
+    (mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g)
 
 /-- **The head's input cotangent** — what block 21 receives as its `dyOut`. -/
 noncomputable def mnv4HeadCotIn (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (c * h * w)) :=
-  cInB N W1 b1 (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
+  cInB N W1 b1 (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g)
 
 /-- **Head, tied** — all EIGHT nodes: two conv weights, two BatchNorm γ/β pairs, and the
     classifier's weight and bias. `conv_head`'s nodes (`%hW`, `%hg`, `%hbt`) read the POOLED
@@ -692,15 +693,15 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String) (bf16 : Bool)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Prop :=
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Prop :=
   let pool := mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin
   let feat := mnv4HeadFeat N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 xin
   let c1 := batchMap N (flatConv W1 b1) xin
   let c2 := batchMap N (flatConv W2 b2) pool
-  let cotH1n := mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
+  let cotH1n := mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g
+  let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g
+  let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g
+  let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g
   GradNodeB.ConvWTiedBAt bf16 N h w xN cotN b1 xin W1 cotH1c
   ∧
   GradNodeB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
@@ -710,15 +711,15 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
   ∧
   GradNodeB.BnPairTiedB N oc 1 1 vN epsStr cotN ε2 γ2 β2 (reassocB N oc 1 1 c2)
       (reassocB N oc 1 1 cotHn)
-  ∧ GradNodeB.DenseWTiedB N xN cotN feat Wd bd g
+  ∧ GradNodeB.DenseWTiedB N xN cotN (dropoutOpt cd feat) Wd bd g
   ∧ GradNodeB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
 
 theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String) (bf16 : Bool)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) :
-    mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr bf16 xin g := by
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) :
+    mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr bf16 cd xin g := by
   unfold mnv4HeadTiedB
   exact ⟨convWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds,
     denseWTiedB_holds, denseBTiedB_holds⟩
@@ -808,6 +809,17 @@ private theorem den_denseRowBack {N a nC : Nat} (W : Mat a nC) (e : SHlo (N * nC
     den (SHlo.denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e)
       = rowDenseBackFlat N a nC W (den e) := rfl
 
+/-- **The classifier-dropout site as a certified layer**: `dropoutOpt cd`, certified everywhere,
+    its backward graph the `dropoutB` node at the same mask (nothing at `none`). -/
+noncomputable def dropoutOptLayer (N : Nat) {n : Nat} (cd : Option (Vec (N * n))) :
+    CertLayer (N * n) (N * n) where
+  fwd := dropoutOpt cd
+  ok := fun _ => True
+  diff := fun x _ => (dropoutOpt_differentiable cd) x
+  vjp := fun x _ => (dropoutOptHasVJP cd).toHasVJPAt x
+  graph := fun _ e => dropoutOptG "%do" cd e
+  faithful := fun x _ e => by rw [den_dropoutOptG]; rfl
+
 /-- **The head's input cotangent — block 21's `dyOut` — is its certified VJP's backward**, at
     any loss cotangent `g`. -/
 theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
@@ -818,7 +830,7 @@ theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
     (hok : (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
       (gapLayer N (c := mid) (h := h) (w := w))
       (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).ok xin) :
-    mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
+    mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd none xin g
       = ((mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
           (gapLayer N (c := mid) (h := h) (w := w))
           (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).vjp
@@ -827,6 +839,82 @@ theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
   simp only [mnv4Head, CertLayer.comp, castLayer, gapLayer, denseLayer, cbReluLayer,
     den_cbReluBack, den_gapBack, den_castIdx, den_denseRowBack, den_operand, reindexCLM_apply]
   rfl
+
+
+/-- **The same at the classifier-dropout site**: with `dropoutOpt cd` between `conv_head`'s
+    output and the dense, the chain at `cd` is the backward of the head whose classifier is the
+    dropout layer followed by the dense. -/
+theorem mnv4HeadCotIn_eq_vjp_do (N h w : Nat) {c mid oc nCls : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls))
+    (hok : (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+      (gapLayer N (c := mid) (h := h) (w := w))
+      (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) ((dropoutOptLayer N cd).comp (denseLayer N Wd bd))).ok xin) :
+    mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd cd xin g
+      = ((mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+          (gapLayer N (c := mid) (h := h) (w := w))
+          (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) ((dropoutOptLayer N cd).comp (denseLayer N Wd bd))).vjp
+            xin hok).backward g := by
+  rw [CertLayer.backward_eq_den_graph]
+  simp only [mnv4Head, CertLayer.comp, castLayer, gapLayer, denseLayer, cbReluLayer, dropoutOptLayer, den_dropoutOptG,
+    den_cbReluBack, den_gapBack, den_castIdx, den_denseRowBack, den_operand, reindexCLM_apply]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The stochastic-depth sites — one per skip row
+-- ════════════════════════════════════════════════════════════════
+
+/-- Site `k`'s per-example scale — of the eighteen skip rows in table order (rows 2, 4–10, 12–21;
+    the renderer's `mnv4DropSites`, `MobileNetV4FullBDrop`'s table) — when the render carries
+    stochastic depth. Named, so no statement spells the `Option.map`. -/
+def mnv4Sd {N : Nat} (sd : Option (Fin 18 → Vec N)) (k : Fin 18) : Option (Vec N) :=
+  sd.map fun m => m k
+
+@[simp] theorem mnv4Sd_none {N : Nat} (k : Fin 18) :
+    mnv4Sd (none : Option (Fin 18 → Vec N)) k = none := rfl
+
+@[simp] theorem mnv4Sd_some {N : Nat} (m : Fin 18 → Vec N) (k : Fin 18) :
+    mnv4Sd (some m) k = some (m k) := rfl
+
+/-- **A stochastic-depth site as a certified layer**: `dropPathOpt N n s`, certified everywhere,
+    its backward graph the `dropPathB` node at the same per-example scale (nothing at `none`). -/
+noncomputable def dropPathOptLayer (N n : Nat) (s : Option (Vec N)) : CertLayer (N * n) (N * n) where
+  fwd := dropPathOpt N n s
+  ok := fun _ => True
+  diff := fun x _ => (dropPathOpt_differentiable N n s) x
+  vjp := fun x _ => (dropPathOptHasVJP N n s).toHasVJPAt x
+  graph := fun _ e => dropPathOptG "%dp" s e
+  faithful := fun x _ e => by rw [den_dropPathOptG]; rfl
+
+/-- **A skip row with its stochastic-depth site**, certified: the body, then the site on the
+    BRANCH, then the identity skip — `x ↦ dropPathOpt s (L.fwd x) + x`. At `none` its forward is
+    `CertLayer.residual L`'s, at `some s` `MobileNetV4FullBDrop`'s `mnv4SkipDrop L.fwd s`, both
+    `rfl`; it is certified exactly where the body is. -/
+noncomputable def mnv4SkipDropLayer {N n : Nat} (L : CertLayer (N * n) (N * n)) (s : Option (Vec N)) :
+    CertLayer (N * n) (N * n) :=
+  CertLayer.residual (L.comp (dropPathOptLayer N n s))
+
+theorem mnv4SkipDropLayer_none {N n : Nat} (L : CertLayer (N * n) (N * n)) :
+    (mnv4SkipDropLayer L none).fwd = (CertLayer.residual L).fwd := rfl
+
+theorem mnv4SkipDropLayer_some {N n : Nat} (L : CertLayer (N * n) (N * n)) (s : Vec N) :
+    (mnv4SkipDropLayer L (some s)).fwd = mnv4SkipDrop L.fwd s := rfl
+
+theorem mnv4SkipDropLayer_ok {N n : Nat} (L : CertLayer (N * n) (N * n)) (s : Option (Vec N))
+    (x : Vec (N * n)) : (mnv4SkipDropLayer L s).ok x ↔ L.ok x :=
+  ⟨fun h => h.1, fun h => ⟨h, trivial⟩⟩
+
+/-- **The skip fan-in through a drop site is the dropped skip row's backward**: the body reads
+    the block-output cotangent THROUGH the site (`dropPathOpt s dyOut` — the site's VJP is
+    itself, `dropPathOpt_vjp_is_self`), the skip reads it raw, and the sum is
+    `mnv4SkipDropLayer`'s certified backward. `mnv4SkipCotIn_eq_vjp` is this at `none`. -/
+theorem mnv4SkipCotIn_eq_vjp_drop {N n : Nat} (L : CertLayer (N * n) (N * n)) (s : Option (Vec N))
+    (x : Vec (N * n)) (hok : L.ok x) (dyOut : Vec (N * n)) :
+    mnv4SkipCotIn ((L.vjp x hok).backward (dropPathOpt N n s dyOut)) dyOut
+      = ((mnv4SkipDropLayer L s).vjp x ⟨hok, trivial⟩).backward dyOut :=
+  mnv4SkipCotIn_eq_vjp (L.comp (dropPathOptLayer N n s)) x ⟨hok, trivial⟩ dyOut
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net capstone
@@ -837,7 +925,9 @@ theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
 
     `MobileNetV4FullB.lean`'s `mnv4Pre0 … mnv4Pre6` are the resolution-group prefixes, which is
     the granularity the whole-net forward, graph and VJP need; the tie needs one per BLOCK, so these 22 name the finer chain.
-    `mnv4Blk0` is definitionally `mnv4Pre1`. -/
+    `mnv4Blk0` is definitionally `mnv4Pre1`. From `mnv4Blk2` on they carry the stochastic-depth
+    sites `sd`: skip row `k` is `mnv4SkipDropLayer` at its site `mnv4Sd sd ·` (`none` the
+    drop-free forward, where `mnv4Blk{k}` meets the group prefixes — `mnv4Pre6_eq_blk`). -/
 noncomputable def mnv4Blk0 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (48 * (2 * (2 * (2 * f))) * (2 * (2 * (2 * f))))) := mnv4Pre1 N f w x
 
@@ -845,85 +935,85 @@ noncomputable def mnv4Blk1 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (80 * (2 * (2 * f)) * (2 * (2 * f)))) :=
   (mnv4StridedBodyOfRow N (mnv4Row1 f) w.b1).fwd (mnv4Blk0 N f w x)
 
-noncomputable def mnv4Blk2 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk2 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (80 * (2 * (2 * f)) * (2 * (2 * f)))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row2 f) w.b2)).fwd (mnv4Blk1 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row2 f) w.b2) (mnv4Sd sd 0)).fwd (mnv4Blk1 N f w x)
 
-noncomputable def mnv4Blk3 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk3 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (mnv4StridedBodyOfRow N (mnv4Row3 f) w.b3).fwd (mnv4Blk2 N f w x)
+  (mnv4StridedBodyOfRow N (mnv4Row3 f) w.b3).fwd (mnv4Blk2 N f w sd x)
 
-noncomputable def mnv4Blk4 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk4 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row4 f) w.b4)).fwd (mnv4Blk3 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row4 f) w.b4) (mnv4Sd sd 1)).fwd (mnv4Blk3 N f w sd x)
 
-noncomputable def mnv4Blk5 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk5 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row5 f) w.b5)).fwd (mnv4Blk4 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row5 f) w.b5) (mnv4Sd sd 2)).fwd (mnv4Blk4 N f w sd x)
 
-noncomputable def mnv4Blk6 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk6 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row6 f) w.b6)).fwd (mnv4Blk5 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row6 f) w.b6) (mnv4Sd sd 3)).fwd (mnv4Blk5 N f w sd x)
 
-noncomputable def mnv4Blk7 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk7 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row7 f) w.b7)).fwd (mnv4Blk6 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row7 f) w.b7) (mnv4Sd sd 4)).fwd (mnv4Blk6 N f w sd x)
 
-noncomputable def mnv4Blk8 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk8 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row8 f) w.b8)).fwd (mnv4Blk7 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row8 f) w.b8) (mnv4Sd sd 5)).fwd (mnv4Blk7 N f w sd x)
 
-noncomputable def mnv4Blk9 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk9 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row9 f) w.b9)).fwd (mnv4Blk8 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row9 f) w.b9) (mnv4Sd sd 6)).fwd (mnv4Blk8 N f w sd x)
 
-noncomputable def mnv4Blk10 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk10 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (160 * (2 * f) * (2 * f))) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row10 f) w.b10)).fwd (mnv4Blk9 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row10 f) w.b10) (mnv4Sd sd 7)).fwd (mnv4Blk9 N f w sd x)
 
-noncomputable def mnv4Blk11 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk11 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (mnv4StridedBodyOfRow N (mnv4Row11 f) w.b11).fwd (mnv4Blk10 N f w x)
+  (mnv4StridedBodyOfRow N (mnv4Row11 f) w.b11).fwd (mnv4Blk10 N f w sd x)
 
-noncomputable def mnv4Blk12 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk12 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row12 f) w.b12)).fwd (mnv4Blk11 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row12 f) w.b12) (mnv4Sd sd 8)).fwd (mnv4Blk11 N f w sd x)
 
-noncomputable def mnv4Blk13 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk13 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row13 f) w.b13)).fwd (mnv4Blk12 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row13 f) w.b13) (mnv4Sd sd 9)).fwd (mnv4Blk12 N f w sd x)
 
-noncomputable def mnv4Blk14 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk14 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row14 f) w.b14)).fwd (mnv4Blk13 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row14 f) w.b14) (mnv4Sd sd 10)).fwd (mnv4Blk13 N f w sd x)
 
-noncomputable def mnv4Blk15 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk15 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row15 f) w.b15)).fwd (mnv4Blk14 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row15 f) w.b15) (mnv4Sd sd 11)).fwd (mnv4Blk14 N f w sd x)
 
-noncomputable def mnv4Blk16 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk16 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row16 f) w.b16)).fwd (mnv4Blk15 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row16 f) w.b16) (mnv4Sd sd 12)).fwd (mnv4Blk15 N f w sd x)
 
-noncomputable def mnv4Blk17 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk17 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row17 f) w.b17)).fwd (mnv4Blk16 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row17 f) w.b17) (mnv4Sd sd 13)).fwd (mnv4Blk16 N f w sd x)
 
-noncomputable def mnv4Blk18 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk18 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row18 f) w.b18)).fwd (mnv4Blk17 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row18 f) w.b18) (mnv4Sd sd 14)).fwd (mnv4Blk17 N f w sd x)
 
-noncomputable def mnv4Blk19 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk19 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row19 f) w.b19)).fwd (mnv4Blk18 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row19 f) w.b19) (mnv4Sd sd 15)).fwd (mnv4Blk18 N f w sd x)
 
-noncomputable def mnv4Blk20 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk20 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row20 f) w.b20)).fwd (mnv4Blk19 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row20 f) w.b20) (mnv4Sd sd 16)).fwd (mnv4Blk19 N f w sd x)
 
-noncomputable def mnv4Blk21 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mnv4Blk21 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * (256 * f * f)) :=
-  (CertLayer.residual (mnv4BodyOfRow N (mnv4Row21 f) w.b21)).fwd (mnv4Blk20 N f w x)
+  (mnv4SkipDropLayer (mnv4BodyOfRow N (mnv4Row21 f) w.b21) (mnv4Sd sd 17)).fwd (mnv4Blk20 N f w sd x)
 
 /-- **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the head, the 21
@@ -942,9 +1032,16 @@ noncomputable def mnv4Blk21 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     are `∀ cot` statements at explicitly constructed cotangents; the kink and positivity conditions
     live in the `CertLayer`s whose `.ok` `MobileNetV4FullBVJP.lean` binds. The final side `f`
     is a binder, as ResNet-50's `q`: `f = 7` is the artifacts at 224×224 (`mnv4in_adamdp64`, …), `f = 8`
-    the paper tier's `mnv4in256_acc{,dp}8x128wxdropdowd01bf16`, a drop artifact: the statement has
-    no mask binder, so it covers that step only at the all-ones masks
-    (`mobilenetv4ForwardBFullDrop_ones`), and the backward through its drop sites is outside it.
+    the paper tier's `mnv4in256_acc{,dp}8x128wxdropdowd01bf16`, a drop artifact. `cd` is the
+    classifier dropout as an optional site: `none` is the drop-free artifacts' chain, `some m`
+    the `do` renders', where the dense weight node reads the dropped activation and the
+    cotangent handed down to `conv_head` passes through the mask. `sd` is stochastic depth,
+    likewise optional: the eighteen skip rows' per-example scales (site `k` the `k`-th skip row in
+    table order — rows 2, 4–10, 12–21 — read off as `mnv4Sd sd k`), `none` the chain without
+    drop-path and `some s` the `drop` renders' — the paper tier's — where the block prefixes are
+    the dropped forward's (`mnv4SkipDropLayer`), a skip row's body nodes are tied at the
+    cotangent THROUGH its site (`dropPathOpt N n (mnv4Sd sd k) dy`) and the skip fan-in adds the
+    raw `dy` (`mnv4SkipCotIn_eq_vjp_drop`).
     One device, at either precision:
     `bf16` selects the conv and depthwise weight nodes' kind — `false` the f32 artifacts', `true`
     the bf16 ones', read over ℝ (`Bf16Erasure`); the right-hand side is the same certified
@@ -954,29 +1051,29 @@ noncomputable def mnv4Blk21 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     statement is `MobileNetV4SyncTieB.mnv4_net_syncTiedB`, whose right-hand sides are this
     theorem's nodes at the global batch. The AdamW update that follows is not stated here. -/
 theorem mnv4_net_tiedB (N f : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : Mnv4BWeights nCls) (bf16 : Bool) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) (g : Vec (N * nCls)) :
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Option (Fin 18 → Vec N)) (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) (g : Vec (N * nCls)) :
   let dy21 := mnv4HeadCotIn N f f w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
-               w.Wd w.bd (mnv4Blk21 N f w x) g
-  let dy20 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row21 f) w.b21 (mnv4Blk20 N f w x) dy21) dy21
-  let dy19 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row20 f) w.b20 (mnv4Blk19 N f w x) dy20) dy20
-  let dy18 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row19 f) w.b19 (mnv4Blk18 N f w x) dy19) dy19
-  let dy17 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row18 f) w.b18 (mnv4Blk17 N f w x) dy18) dy18
-  let dy16 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row17 f) w.b17 (mnv4Blk16 N f w x) dy17) dy17
-  let dy15 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row16 f) w.b16 (mnv4Blk15 N f w x) dy16) dy16
-  let dy14 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row15 f) w.b15 (mnv4Blk14 N f w x) dy15) dy15
-  let dy13 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row14 f) w.b14 (mnv4Blk13 N f w x) dy14) dy14
-  let dy12 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row13 f) w.b13 (mnv4Blk12 N f w x) dy13) dy13
-  let dy11 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row12 f) w.b12 (mnv4Blk11 N f w x) dy12) dy12
-  let dy10 := mnv4SBodyCotIn N (mnv4Row11 f) w.b11 (mnv4Blk10 N f w x) dy11
-  let dy9 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row10 f) w.b10 (mnv4Blk9 N f w x) dy10) dy10
-  let dy8 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row9 f) w.b9 (mnv4Blk8 N f w x) dy9) dy9
-  let dy7 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row8 f) w.b8 (mnv4Blk7 N f w x) dy8) dy8
-  let dy6 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row7 f) w.b7 (mnv4Blk6 N f w x) dy7) dy7
-  let dy5 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row6 f) w.b6 (mnv4Blk5 N f w x) dy6) dy6
-  let dy4 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row5 f) w.b5 (mnv4Blk4 N f w x) dy5) dy5
-  let dy3 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row4 f) w.b4 (mnv4Blk3 N f w x) dy4) dy4
-  let dy2 := mnv4SBodyCotIn N (mnv4Row3 f) w.b3 (mnv4Blk2 N f w x) dy3
-  let dy1 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row2 f) w.b2 (mnv4Blk1 N f w x) dy2) dy2
+               w.Wd w.bd cd (mnv4Blk21 N f w sd x) g
+  let dy20 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row21 f) w.b21 (mnv4Blk20 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 17) dy21)) dy21
+  let dy19 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row20 f) w.b20 (mnv4Blk19 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 16) dy20)) dy20
+  let dy18 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row19 f) w.b19 (mnv4Blk18 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 15) dy19)) dy19
+  let dy17 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row18 f) w.b18 (mnv4Blk17 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 14) dy18)) dy18
+  let dy16 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row17 f) w.b17 (mnv4Blk16 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 13) dy17)) dy17
+  let dy15 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row16 f) w.b16 (mnv4Blk15 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 12) dy16)) dy16
+  let dy14 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row15 f) w.b15 (mnv4Blk14 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 11) dy15)) dy15
+  let dy13 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row14 f) w.b14 (mnv4Blk13 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 10) dy14)) dy14
+  let dy12 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row13 f) w.b13 (mnv4Blk12 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 9) dy13)) dy13
+  let dy11 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row12 f) w.b12 (mnv4Blk11 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 8) dy12)) dy12
+  let dy10 := mnv4SBodyCotIn N (mnv4Row11 f) w.b11 (mnv4Blk10 N f w sd x) dy11
+  let dy9 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row10 f) w.b10 (mnv4Blk9 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) dy10)) dy10
+  let dy8 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row9 f) w.b9 (mnv4Blk8 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) dy9)) dy9
+  let dy7 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row8 f) w.b8 (mnv4Blk7 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) dy8)) dy8
+  let dy6 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row7 f) w.b7 (mnv4Blk6 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) dy7)) dy7
+  let dy5 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row6 f) w.b6 (mnv4Blk5 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) dy6)) dy6
+  let dy4 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row5 f) w.b5 (mnv4Blk4 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) dy5)) dy5
+  let dy3 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row4 f) w.b4 (mnv4Blk3 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) dy4)) dy4
+  let dy2 := mnv4SBodyCotIn N (mnv4Row3 f) w.b3 (mnv4Blk2 N f w sd x) dy3
+  let dy1 := mnv4SkipCotIn (mnv4BodyCotIn N (mnv4Row2 f) w.b2 (mnv4Blk1 N f w x) (dropPathOpt N (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) dy2)) dy2
   let dy0 := mnv4SBodyCotIn N (mnv4Row1 f) w.b1 (mnv4Blk0 N f w x) dy1
   let dyStem := mnv4FusedCotIn N (2 * (2 * (2 * f))) (2 * (2 * (2 * f))) w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
                  w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt (mnv4Pre0 N f w x) dy0
@@ -984,57 +1081,156 @@ theorem mnv4_net_tiedB (N f : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   ∧ mnv4FusedTiedB N (2 * (2 * (2 * f))) (2 * (2 * (2 * f))) w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
       w.f0pbt xN cotN vN epsStr bf16 (mnv4Pre0 N f w x) dy0
   ∧ mnv4StridedTiedB N (mnv4Row1 f) xN cotN vN epsStr w.b1 bf16 (mnv4Blk0 N f w x) dy1
-  ∧ mnv4ExtraDWTiedB N (mnv4Row2 f) xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N f w x) dy2
-  ∧ mnv4StridedTiedB N (mnv4Row3 f) xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N f w x) dy3
-  ∧ mnv4ExtraDWTiedB N (mnv4Row4 f) xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N f w x) dy4
-  ∧ mnv4ExtraDWTiedB N (mnv4Row5 f) xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N f w x) dy5
-  ∧ mnv4ExtraDWTiedB N (mnv4Row6 f) xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N f w x) dy6
-  ∧ mnv4ExtraDWTiedB N (mnv4Row7 f) xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N f w x) dy7
-  ∧ mnv4ConvNeXtTiedB N (mnv4Row8 f) xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N f w x) dy8
-  ∧ mnv4FfnTiedB N (mnv4Row9 f) xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N f w x) dy9
-  ∧ mnv4ConvNeXtTiedB N (mnv4Row10 f) xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N f w x) dy10
-  ∧ mnv4StridedTiedB N (mnv4Row11 f) xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N f w x) dy11
-  ∧ mnv4ExtraDWTiedB N (mnv4Row12 f) xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N f w x) dy12
-  ∧ mnv4ExtraDWTiedB N (mnv4Row13 f) xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N f w x) dy13
-  ∧ mnv4ExtraDWTiedB N (mnv4Row14 f) xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N f w x) dy14
-  ∧ mnv4FfnTiedB N (mnv4Row15 f) xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N f w x) dy15
-  ∧ mnv4ConvNeXtTiedB N (mnv4Row16 f) xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N f w x) dy16
-  ∧ mnv4ExtraDWTiedB N (mnv4Row17 f) xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N f w x) dy17
-  ∧ mnv4ExtraDWTiedB N (mnv4Row18 f) xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N f w x) dy18
-  ∧ mnv4FfnTiedB N (mnv4Row19 f) xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N f w x) dy19
-  ∧ mnv4FfnTiedB N (mnv4Row20 f) xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N f w x) dy20
-  ∧ mnv4ConvNeXtTiedB N (mnv4Row21 f) xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N f w x) dy21
+  ∧ mnv4ExtraDWTiedB N (mnv4Row2 f) xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N f w x) (dropPathOpt N (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) dy2)
+  ∧ mnv4StridedTiedB N (mnv4Row3 f) xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N f w sd x) dy3
+  ∧ mnv4ExtraDWTiedB N (mnv4Row4 f) xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) dy4)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row5 f) xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) dy5)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row6 f) xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) dy6)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row7 f) xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) dy7)
+  ∧ mnv4ConvNeXtTiedB N (mnv4Row8 f) xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) dy8)
+  ∧ mnv4FfnTiedB N (mnv4Row9 f) xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) dy9)
+  ∧ mnv4ConvNeXtTiedB N (mnv4Row10 f) xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N f w sd x) (dropPathOpt N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) dy10)
+  ∧ mnv4StridedTiedB N (mnv4Row11 f) xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N f w sd x) dy11
+  ∧ mnv4ExtraDWTiedB N (mnv4Row12 f) xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 8) dy12)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row13 f) xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 9) dy13)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row14 f) xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 10) dy14)
+  ∧ mnv4FfnTiedB N (mnv4Row15 f) xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 11) dy15)
+  ∧ mnv4ConvNeXtTiedB N (mnv4Row16 f) xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 12) dy16)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row17 f) xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 13) dy17)
+  ∧ mnv4ExtraDWTiedB N (mnv4Row18 f) xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 14) dy18)
+  ∧ mnv4FfnTiedB N (mnv4Row19 f) xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 15) dy19)
+  ∧ mnv4FfnTiedB N (mnv4Row20 f) xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 16) dy20)
+  ∧ mnv4ConvNeXtTiedB N (mnv4Row21 f) xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N f w sd x) (dropPathOpt N (256 * f * f) (mnv4Sd sd 17) dy21)
   ∧ mnv4HeadTiedB N f f w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
-      w.Wd w.bd xN cotN vN epsStr bf16 (mnv4Blk21 N f w x) g := by
+      w.Wd w.bd xN cotN vN epsStr bf16 cd (mnv4Blk21 N f w sd x) g := by
   intro dy21 dy20 dy19 dy18 dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3
     dy2 dy1 dy0 dyStem
   exact ⟨mnv4_stem_tiedB N (2 * (2 * (2 * (2 * f)))) (2 * (2 * (2 * (2 * f)))) xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt bf16 x dyStem,
     mnv4_fused_tiedB N (2 * (2 * (2 * f))) (2 * (2 * (2 * f))) w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
       w.f0pbt xN cotN vN epsStr bf16 (mnv4Pre0 N f w x) dy0,
     mnv4_strided_tiedB N (mnv4Row1 f) xN cotN vN epsStr w.b1 bf16 (mnv4Blk0 N f w x) dy1,
-    mnv4_extradw_tiedB N (mnv4Row2 f) xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N f w x) dy2,
-    mnv4_strided_tiedB N (mnv4Row3 f) xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N f w x) dy3,
-    mnv4_extradw_tiedB N (mnv4Row4 f) xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N f w x) dy4,
-    mnv4_extradw_tiedB N (mnv4Row5 f) xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N f w x) dy5,
-    mnv4_extradw_tiedB N (mnv4Row6 f) xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N f w x) dy6,
-    mnv4_extradw_tiedB N (mnv4Row7 f) xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N f w x) dy7,
-    mnv4_convnext_tiedB N (mnv4Row8 f) xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N f w x) dy8,
-    mnv4_ffn_tiedB N (mnv4Row9 f) xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N f w x) dy9,
-    mnv4_convnext_tiedB N (mnv4Row10 f) xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N f w x) dy10,
-    mnv4_strided_tiedB N (mnv4Row11 f) xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N f w x) dy11,
-    mnv4_extradw_tiedB N (mnv4Row12 f) xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N f w x) dy12,
-    mnv4_extradw_tiedB N (mnv4Row13 f) xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N f w x) dy13,
-    mnv4_extradw_tiedB N (mnv4Row14 f) xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N f w x) dy14,
-    mnv4_ffn_tiedB N (mnv4Row15 f) xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N f w x) dy15,
-    mnv4_convnext_tiedB N (mnv4Row16 f) xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N f w x) dy16,
-    mnv4_extradw_tiedB N (mnv4Row17 f) xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N f w x) dy17,
-    mnv4_extradw_tiedB N (mnv4Row18 f) xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N f w x) dy18,
-    mnv4_ffn_tiedB N (mnv4Row19 f) xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N f w x) dy19,
-    mnv4_ffn_tiedB N (mnv4Row20 f) xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N f w x) dy20,
-    mnv4_convnext_tiedB N (mnv4Row21 f) xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N f w x) dy21,
+    mnv4_extradw_tiedB N (mnv4Row2 f) xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N f w x) _,
+    mnv4_strided_tiedB N (mnv4Row3 f) xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N f w sd x) dy3,
+    mnv4_extradw_tiedB N (mnv4Row4 f) xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row5 f) xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row6 f) xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row7 f) xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N f w sd x) _,
+    mnv4_convnext_tiedB N (mnv4Row8 f) xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N f w sd x) _,
+    mnv4_ffn_tiedB N (mnv4Row9 f) xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N f w sd x) _,
+    mnv4_convnext_tiedB N (mnv4Row10 f) xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N f w sd x) _,
+    mnv4_strided_tiedB N (mnv4Row11 f) xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N f w sd x) dy11,
+    mnv4_extradw_tiedB N (mnv4Row12 f) xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row13 f) xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row14 f) xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N f w sd x) _,
+    mnv4_ffn_tiedB N (mnv4Row15 f) xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N f w sd x) _,
+    mnv4_convnext_tiedB N (mnv4Row16 f) xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row17 f) xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N f w sd x) _,
+    mnv4_extradw_tiedB N (mnv4Row18 f) xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N f w sd x) _,
+    mnv4_ffn_tiedB N (mnv4Row19 f) xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N f w sd x) _,
+    mnv4_ffn_tiedB N (mnv4Row20 f) xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N f w sd x) _,
+    mnv4_convnext_tiedB N (mnv4Row21 f) xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N f w sd x) _,
     mnv4_head_tiedB N f f w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
-      w.Wd w.bd xN cotN vN epsStr bf16 (mnv4Blk21 N f w x) g⟩
+      w.Wd w.bd xN cotN vN epsStr bf16 cd (mnv4Blk21 N f w sd x) g⟩
 
+
+/-- **The head with the classifier-dropout site**: `mnv4HeadStack` with `dropoutOptLayer` between
+    `conv_head`'s output and the dense — the certified layer `mnv4HeadCotIn_eq_vjp_do` reads the
+    head chain against. -/
+noncomputable def mnv4HeadStackDo (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (cd : Option (Vec (N * 1280))) : CertLayer (N * (256 * f * f)) (N * nCls) :=
+  mnv4Head N (cbReluLayer (h := f) (w := f) N w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt)
+    (gapLayer N (c := 960) (h := f) (w := f))
+    (cbReluLayer (h := 1) (w := 1) N w.hW w.hb w.hE w.hhE w.hg w.hbt)
+    ((dropoutOptLayer N cd).comp (denseLayer N w.Wd w.bd))
+
+/-- **The forward the loss reads, at the classifier-dropout site**: the head with the site
+    (`mnv4HeadStackDo`) on the trunk — `mobilenetv4ForwardBFull` at `none`,
+    `mobilenetv4ForwardBFullDo` at `some m`, both `rfl`. -/
+noncomputable def mobilenetv4ForwardBFullDoOpt (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    Vec (N * nCls) :=
+  (mnv4HeadStackDo N f w cd).fwd (mnv4Pre6 N f w x)
+
+theorem mobilenetv4ForwardBFullDoOpt_none (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) :
+    mobilenetv4ForwardBFullDoOpt N f w none = mobilenetv4ForwardBFull N f w := rfl
+
+theorem mobilenetv4ForwardBFullDoOpt_some (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (m : Vec (N * 1280)) :
+    mobilenetv4ForwardBFullDoOpt N f w (some m) = mobilenetv4ForwardBFullDo N f w m := rfl
+
+/-- **The forward the loss reads, at both regularisers' sites**: the head with the
+    classifier-dropout site on the per-block chain with the eighteen stochastic-depth sites.
+    `none`/`none` is `mobilenetv4ForwardBFull`, `none`/`cd` is `mobilenetv4ForwardBFullDoOpt`
+    (`mobilenetv4ForwardBFullDropOpt_none`), and `some s`/`some m` is `MobileNetV4FullBDrop`'s
+    `mobilenetv4ForwardBFullDrop` (`mobilenetv4ForwardBFullDropOpt_some`), the forward the typed
+    graph `mnv4FwdGraphBFullDrop` denotes. -/
+noncomputable def mobilenetv4ForwardBFullDropOpt (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (sd : Option (Fin 18 → Vec N)) (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    Vec (N * nCls) :=
+  (mnv4HeadStackDo N f w cd).fwd (mnv4Blk21 N f w sd x)
+
+/-- The group prefixes meet the block prefixes at every group boundary, at the drop-free sites. -/
+theorem mnv4Pre2_eq_blk (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mnv4Pre2 N f w x = mnv4Blk2 N f w none x := by
+  rw [mnv4Pre2, mnv4Res28Layer, CertLayer.comp_fwd_apply]; rfl
+
+theorem mnv4Pre3_eq_blk (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mnv4Pre3 N f w x = mnv4Blk6 N f w none x := by
+  rw [mnv4Pre3, mnv4Res14aLayer, CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply,
+    CertLayer.comp_fwd_apply, mnv4Pre2_eq_blk]; rfl
+
+theorem mnv4Pre4_eq_blk (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mnv4Pre4 N f w x = mnv4Blk10 N f w none x := by
+  rw [mnv4Pre4, mnv4Res14bLayer, CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply,
+    CertLayer.comp_fwd_apply, mnv4Pre3_eq_blk]; rfl
+
+theorem mnv4Pre5_eq_blk (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mnv4Pre5 N f w x = mnv4Blk15 N f w none x := by
+  rw [mnv4Pre5, mnv4Res7aLayer, CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply,
+    CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply, mnv4Pre4_eq_blk]; rfl
+
+theorem mnv4Pre6_eq_blk (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mnv4Pre6 N f w x = mnv4Blk21 N f w none x := by
+  rw [mnv4Pre6, mnv4Res7bLayer, CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply,
+    CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply, CertLayer.comp_fwd_apply,
+    mnv4Pre5_eq_blk]; rfl
+
+/-- **Without stochastic depth the forward is the classifier-dropout one** — so at `none`/`none`
+    it is `mobilenetv4ForwardBFull` (`mobilenetv4ForwardBFullDoOpt_none`). -/
+theorem mobilenetv4ForwardBFullDropOpt_none (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mobilenetv4ForwardBFullDropOpt N f w none cd x = mobilenetv4ForwardBFullDoOpt N f w cd x := by
+  rw [mobilenetv4ForwardBFullDropOpt, mobilenetv4ForwardBFullDoOpt, mnv4Pre6_eq_blk]
+
+/-- **With neither regulariser the forward is `mobilenetv4ForwardBFull`**, the drop-free
+    artifacts' — so every tie stated at `mobilenetv4ForwardBFullDropOpt … none none` is the
+    statement on the plain net. -/
+theorem mobilenetv4ForwardBFullDropOpt_none_none (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mobilenetv4ForwardBFullDropOpt N f w none none x = mobilenetv4ForwardBFull N f w x := by
+  rw [mobilenetv4ForwardBFullDropOpt_none, mobilenetv4ForwardBFullDoOpt_none]
+
+/-- **At rendered masks the forward is `MobileNetV4FullBDrop`'s**, the one its typed graph
+    denotes (`mnv4FwdGraphBFullDrop_faithful`). -/
+theorem mobilenetv4ForwardBFullDropOpt_some (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (s : Fin 18 → Vec N) (m : Vec (N * 1280)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
+    mobilenetv4ForwardBFullDropOpt N f w (some s) (some m) x
+      = mobilenetv4ForwardBFullDrop N f w s m x := by
+  -- one `rfl` per resolution group and one for the head, each at a variable input
+  have h2 : mnv4Blk2 N f w (some s) x = mnv4Res28Drop N f w s (mnv4Pre1 N f w x) := rfl
+  have h6 : mnv4Blk6 N f w (some s) x
+      = mnv4Res14aDrop N f w s (mnv4Blk2 N f w (some s) x) := rfl
+  have h10 : mnv4Blk10 N f w (some s) x
+      = mnv4Res14bDrop N f w s (mnv4Blk6 N f w (some s) x) := rfl
+  have h15 : mnv4Blk15 N f w (some s) x
+      = mnv4Res7aDrop N f w s (mnv4Blk10 N f w (some s) x) := rfl
+  have h21 : mnv4Blk21 N f w (some s) x
+      = mnv4Res7bDrop N f w s (mnv4Blk15 N f w (some s) x) := rfl
+  have hh : ∀ v : Vec (N * (256 * f * f)), (mnv4HeadStackDo N f w (some m)).fwd v
+      = batchMap N (dense w.Wd w.bd) (dropout m
+          (mnv4HeadFeatB N f f w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt v)) :=
+    fun _ => rfl
+  rw [mobilenetv4ForwardBFullDropOpt, mobilenetv4ForwardBFullDrop, hh, h21, h15, h10, h6, h2]
 
 /-- **And the loss cotangent `g` is instantiated: MNv4's is the label-smoothed softmax chain.**
     Row by row, the six-op chain `MobileNetV4RenderB` emits (`softmaxRow → subB → scaleB → addVB →
@@ -1050,17 +1246,18 @@ theorem mnv4_net_tiedB (N f : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     hypothesis is that the example's target sums to 1: a one-hot, or mixup's convex combination. -/
 theorem mnv4_lossCot_is_smoothedCE_grad (N f : Nat) {nCls : Nat}
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Mnv4BWeights nCls)
+    (sd : Option (Fin 18 → Vec N)) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (mobilenetv4ForwardBFull N f w x)) t)
+          (rowB N nCls (mobilenetv4ForwardBFullDropOpt N f w sd cd x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (mobilenetv4ForwardBFull N f w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (mobilenetv4ForwardBFullDropOpt N f w sd cd x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.Mnv4TieB

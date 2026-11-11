@@ -934,16 +934,17 @@ theorem chk_mnv2_net_lossGrad :
 /-- `Proofs.Mnv4TieB.mnv4_net_lossGrad` -/
 theorem chk_mnv4_net_lossGrad :
     ∀ (N f : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
-      (w : Proofs.StableHLO.Mnv4BWeights nCls) (bf16 : Bool)
+      (w : Proofs.StableHLO.Mnv4BWeights nCls) (bf16 : Bool) (sd : Option (Fin (18 : ℕ) → Proofs.Vec N))
+      (cd : Option (Proofs.Vec (N * (1280 : ℕ))))
       (x :
         Proofs.Vec
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * f))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * f)))))))),
-      Proofs.StableHLO.Mnv4SmoothAt N f w x →
+      Proofs.Mnv4TieB.Mnv4SmoothAtDrop N f w sd x →
         ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
-          Proofs.HasGradAt L (Proofs.StableHLO.mobilenetv4ForwardBFull N f w x) g →
-            Proofs.Mnv4TieB.Mnv4NetLossTiedB N f xN cotN vN epsStr w bf16 x L g :=
+          Proofs.HasGradAt L (Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOpt N f w sd cd x) g →
+            Proofs.Mnv4TieB.Mnv4NetLossTiedB N f xN cotN vN epsStr w bf16 sd cd x L g :=
   Proofs.Mnv4TieB.mnv4_net_lossGrad
 
 /-- `Proofs.EnetTieG.enet_net_lossGrad` -/
@@ -1507,6 +1508,7 @@ theorem chk_mnv4_net_syncTiedB :
       (0 : ℕ) < N →
         (0 : ℕ) < f →
           ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.StableHLO.Mnv4BWeights nCls) (bf16 : Bool)
+            (sd : Option (Fin (18 : ℕ) → Proofs.Vec (R * N))) (cd : Option (Proofs.Vec (R * N * (1280 : ℕ))))
             (X :
               Proofs.Vec
                 (R * N *
@@ -1514,7 +1516,7 @@ theorem chk_mnv4_net_syncTiedB :
                     ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * f))))))))
             (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
             (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-              Proofs.MobileNetV4SyncTieB.mnv4NetSyncTiedB R hR N f xN cotN vN epsStr w bf16 X G gs :=
+              Proofs.MobileNetV4SyncTieB.mnv4NetSyncTiedB R hR N f xN cotN vN epsStr w bf16 sd cd X G gs :=
   Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB
 
 /-- `Proofs.adamW_at_allReduceMeanF` -/

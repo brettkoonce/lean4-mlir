@@ -242,3 +242,39 @@ diagonal-dominance rewrite as the follow-up that makes the stamp unnecessary for
 If §6.2.3 is taken: `lake build CertsHeavy` with `NetWitnessFull` in the certs-heavy.yml
 serialization loop (the "every root is in the loop" step enforces this), `tests/AuditAxiomsHeavy.lean`
 pins for its theorems, and `smoothing_net_witness_gen.py --check`.
+
+## 7. A common frame for the trained witnesses (2026-11-11)
+
+**Decision (the user, 2026-11-11).** The trained-weight witnesses of Chapters 1–3 move to one
+frame: the chapter's own architecture, narrow, on a real 28×28 MNIST test image. The reason is the
+reader, not the proof: one thing to understand across the three chapters. This supersedes §4.3's
+"leaning delete" for `MlpWitness`.
+
+| Chapter | Today | Target |
+|---|---|---|
+| Linear | 4×4-pooled 49→10 (`Trained/LinearDescent`) | 784→10, the chapter's net at full size |
+| MLP | 4×4-pooled 49→8→10 (`Trained/MlpWitness`) | 784→8→8→10 (`mlpG 8 8`'s shape) |
+| CNN | 24×24 crop, 2×2 block sums to 12×12, 2 channels, 8-wide head (`Trained/CnnDescent`, `CnnDescentConv1`, `CnnWitness`, `CnnSeal`) | 28×28, 2 channels, 8-wide head |
+
+**Sizes (counts from the architectures, not measured builds).** Linear 490 → 7,840 weights (16×).
+MLP about 480 → about 6,400 (13×). CNN 576 → 3,136 pre-activations per convolution and 72 → 392
+pool windows (about 5×). The chapter widths (512, 32 channels) are about 1,400× and 4,000× in
+weights and about 11 million multiplies per CNN forward; that needs a reflective integer evaluator,
+not larger `norm_num` tables, and is out of scope here.
+
+**What is not a resize.**
+- Per-coordinate checks by `fin_cases` over 49 inputs become one kernel check over 784 (§6.2.4's
+  `absLeCheck` point).
+- A 28×28 image has blank borders, so the CNN's tied pool windows grow in number; the twin
+  argument (`MaxPool2MarginQUpTo`, `ConvPatchEq.of_zero`) is the same.
+- The step sizes shrink with the widths' products in the small-step condition.
+- Whether the MLP chapter has a trained DESCENT instance, or only the VJP witness, is unchecked.
+  If only the VJP witness, a parallel story across the three chapters needs a new instance.
+
+**Order.** Linear first, as the proof of concept for the 784-coordinate checks; then the MLP; then
+the CNN descent pair; `CnnWitness` / `CnnSeal` last (the seal is the largest file). Scope added to
+§1–§3: `LinearDescent` and the four CNN files, their generators (`trained_linear_descent.py`,
+`trained_cnn_descent.py`, `trained_cnn_witness.py`, `trained_cnn_seal.py`), and the book's witness
+sentences in `thm:cnn_sgd_descends` and its Chapter 1–2 peers.
+
+**Status.** Not started; queued behind the MobileNetV4 mask work on `book/audit-pass`.
