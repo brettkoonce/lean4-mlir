@@ -333,11 +333,11 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mnv4in256_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 5 |
-| `mnv4in256_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 5 |
-| `mnv4in256_fwd_eval_s320.mlir` | fwd_eval @320px | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | — |
+| `mnv4in256_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
+| `mnv4in256_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
+| `mnv4in256_fwd_eval_s320.mlir` | fwd_eval @320px | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 1 |
 | `mnv4in256_acc8x128wxdropdowd01bf16_train_step.mlir` | train_step | `acc8x128wxdropdowd01bf16` | AdamW, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 | 1.6 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | — |
-| `mnv4in256_accdp8x128wxdropdowd01bf16_train_step.mlir` | train_step | `accdp8x128wxdropdowd01bf16` | AdamW, data-parallel, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 per replica | 1.9 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 5 |
+| `mnv4in256_accdp8x128wxdropdowd01bf16_train_step.mlir` | train_step | `accdp8x128wxdropdowd01bf16` | AdamW, data-parallel, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 per replica | 1.9 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
 
 ## `mobilenetv2` — 5 artifacts, 3.4 MB
 
