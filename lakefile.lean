@@ -617,8 +617,7 @@ lean_exe «mobilenetv2-imagenet-verified» where
     The Ch. 6 row is `mnv4-full-4gpu`, the paper's 500-epoch tier as tf-models' own yaml has it:
     `accdp8x128wxdropdowd01bf16` on `mnv4in256` — AdamW 0.004 at effective 4096 as 8 accumulated
     micro-batches of 4 × 128, wd 0.1 off norm/bias, classifier dropout 0.2, drop-path 0.075 over
-    tf-models' 26-entry ramp, no EMA. `mnv4-full-e100-4gpu` is the same job cut to 100 epochs (the
-    book's landed pair). `mnv4-default-4gpu` is the retired 224 tier (`emaaccdp8x128wxdowd005bf16`,
+    tf-models' 26-entry ramp, no EMA. `mnv4-full-e100-4gpu` is the same job cut to 100 epochs. `mnv4-default-4gpu` is the retired 224 tier (`emaaccdp8x128wxdowd005bf16`,
     the JAX `default` recipe: EMA, wd 0.05, no drop-path), kept as an axis sibling. -/
 lean_exe «mobilenetv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
