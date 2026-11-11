@@ -3659,7 +3659,7 @@ and the saved input \(x\) is the constant coefficient.}
 
 \begin{definition}[MaxPool input VJP]
   \label{ax:maxPool2HasVJP3}
-  \lean{Proofs.maxPool2HasVJP3}
+  \lean{Proofs.maxPool2HasVJP3, Proofs.maxPool2_codegen_matches_canonical}
   \leanok
   \uses{ax:maxPool2, ax:pdiv, def:hasvjp3}
   The max-pool's VJP record, with the \(\pdiv\)-derived backward: at a
@@ -3667,7 +3667,8 @@ and the saved input \(x\) is the constant coefficient.}
   goes to that cell; at a point where any window ties at its maximum the
   map is not differentiable, so the backward is the zero tensor in every
   window, strict ones included. The emitted backward routes a tied window
-  to its first maximal cell.
+  to its first maximal cell. The strict case is a Lean statement; the tie
+  case is \(\fderiv\)'s zero-map convention read off the record, not one.
 \end{definition}
 
 Those are the primitives. The rest of the section is the network: its VJP at
@@ -6513,8 +6514,9 @@ to a maximal cell.
   \Prove{} each of the 161 parameter gradients of the batched ResNet-50 step
   denotes the certified batch gradient at the chain cotangent of a loss
   cotangent \(g\) left as a binder, generic in \(N\) and \(q\). Instantiated
-  at the label-smoothed cross-entropy and at BCE-with-logits over
-  \(N \cdot K\), the two losses the ResNet-50 artifacts train. Stated at
+  at the label-smoothed cross-entropy for targets summing to one and at
+  BCE-with-logits over \(N \cdot K\), the two losses the ResNet-50
+  artifacts train. Stated at
   either precision, as for ResNet-34.
 \end{theorem}
 
@@ -8632,10 +8634,12 @@ of the four block kinds, the stem and the head; see
   \(\theta - \mathrm{lr}\,b'\). The root is positive for
   \(\varepsilon > 0\) and a nonnegative mean-square, which the
   initialization at one supplies from step zero. Two differences the
-  numeric ties are built to see: at a zero second moment the textbook
-  placement \(g / (\sqrt{s'} + \varepsilon)\) is the rendered
-  \(g / \sqrt{s' + \varepsilon}\) divided by \(\sqrt{\varepsilon}\), about
-  \(30\times\) larger at B0's \(\varepsilon = 10^{-3}\); and a buffer built
+  numeric ties are built to see: as the second moment vanishes the textbook
+  placement \(g / (\sqrt{s'} + \varepsilon)\) exceeds the rendered
+  \(g / \sqrt{s' + \varepsilon}\) by a factor that tends to
+  \(1/\sqrt{\varepsilon}\), about \(30\times\) at B0's
+  \(\varepsilon = 10^{-3}\) --- the Lean statement is the two placements at
+  \(s' = 0\), \(g/\varepsilon\) against \(g/\sqrt{\varepsilon}\); and a buffer built
   at rate \(\mathrm{lr}_0\) and stepped at \(\mathrm{lr}_1\) lands
   \(\mu\, b\,(\mathrm{lr}_1 - \mathrm{lr}_0)\) from the rate-outside step,
   per coordinate, so the two forms part at every step of a staircase.
@@ -8655,13 +8659,13 @@ each of the two differences is one \texttt{ring}; see
   \leanok
   \Prove{} in every render carrying \texttt{ema}, the one extra op per
   parameter denotes \(e' = d\,e + (1 - d)\,\theta'\) at whatever operand
-  \(\theta'\) it reads, with the decay \(d\) a runtime scalar. The renderer
-  wires that operand to the parameter the optimizer tail has just produced,
-  not the one it read. The shadow's distance to the live
-  weight shrinks by the factor \(d\) a step; at \(d = 1\) it is frozen and
-  at \(d = 0\) it is the live weight. The warmup-corrected schedule of
-  \(d\) and the second shadow over the BatchNorm buffers are the
-  driver's, outside the graph.
+  \(\theta'\) it reads, with the decay \(d\) a runtime scalar. Against that
+  operand, one update scales the shadow's gap by the factor \(d\); at
+  \(d = 1\) the shadow is frozen and at \(d = 0\) it is the operand. Outside
+  the statement: the renderer wires the operand to the parameter the
+  optimizer tail has just produced, not the one it read; and the
+  warmup-corrected schedule of \(d\) and the second shadow over the
+  BatchNorm buffers are the driver's.
 \end{theorem}
 
 \begin{proof}
@@ -8698,7 +8702,7 @@ weight, so its faithfulness is that op's, by \texttt{rfl}; see
   the forward at the same mask (\texttt{mobilenetv2ForwardBFullDoOpt};
   \texttt{mobilenetv2ForwardBFull} at \texttt{none}) with that one
   parameter varied, at any batch and number of classes. Instantiated at
-  the label-smoothed cross-entropy.
+  the label-smoothed cross-entropy for targets summing to one.
 \end{theorem}
 
 \begin{proof}
@@ -10154,11 +10158,14 @@ and the head; the graph ties op by op; see
     \item every BatchNorm's \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)w}]
   \end{enumerate}
   \Prove{} the hand-written sixteen-block reverse chain
-  \texttt{efficientnetInputGradBFull} equals
+  \texttt{efficientnetInputGradBFull}, with its blocks' backwards and the
+  stem's and head's BatchNorm and swish backwards filled by the certified
+  witnesses, equals
   \[
     \sum_j \pdiv(\texttt{efficientnetForwardBFull})\, x\, i\, j \cdot dy_j
   \]
-  for every batch, cotangent and pixel.
+  for every batch, cotangent and pixel. The blocks are opaque in the
+  statement.
 \end{theorem}
 
 \begin{proof}
@@ -21054,7 +21061,7 @@ its own:
   \item \textbf{VisDrone-DET2019} is drone-altitude imagery where the
     objects are the problem: the median box is $20 \times 25$\,px in the source frame and a frame
     holds some 70 of them, so a single $7\times7$ grid collapses outright and
-    the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
+    the multi-scale FPN head of Definition~\ref{layer:fpnDetect} becomes
     necessary rather than decorative.
   \item \textbf{NEU-DET} is the industrial-inspection dataset, and the
     VisDrone detector's opposite regime: $1{,}800$ grayscale $200\times200$
