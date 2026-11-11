@@ -1,0 +1,21 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1794318446.207600 3491402 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1794318447.333221 3491402 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+=== vit-s jax e300 f32 live ===
+eval dtype: f32 forward (EVAL_DTYPE=f32); the module's DT=bfloat16 CONV_DT=float32
+backend=gpu devices=1
+gen=generated/generated_vit_s_imagenet_accum.py
+state=/home/skoonce/vit_s_jax_2611/vit_s_imagenet_accum.state.npz
+eval protocol: 224px, crop_pct=0.875000 (timm resize-then-crop, antialiased)
+state tuple (from the module): (params, opt_state, ema_params)
+  params=200 bn=0 opt=401 leaves -> 801 total (file has 801) ✓
+loaded step=375300
+scoring the live weights + no BN (BN-free net)
+
+── scoring at 224px, crop_pct 0.875 — train (the module's own)
+   per-image top-1 bitmap -> ../runs/2026-11-05-vits-jax-300ep/bitmaps/vits_jax_e300_f32_live.bin (50000 bytes, 39959 set) — pair with scripts/demos/mcnemar.py
+   top-1: 39959/50000 = 79.92%   top-5: 47448/50000 = 94.90%
+
+=== FULL VAL (f32 forward (EVAL_DTYPE=f32)) ===
+224px crop 0.875  top-1  79.92%  top-5  94.90%  (50000 images)  train (the module's own)

@@ -1,0 +1,70 @@
+[sup] 2026-11-05 20:34:15 START job=vits-accum-jax-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-11-05-vits-jax-300ep
+[sup] 2026-11-05 20:34:15 cmd: bash -c 
+  set -u
+  base=/home/skoonce/vit_s_jax_2611/vit_s_imagenet_accum
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_vit_s_imagenet_accum.py
+
+[sup] 2026-11-05 20:34:15 eta: ~70-75 h on ares at 512 x 2 (2026-10-11 smoke, runs/2026-10-11-vits-jax-smoke/: 648 ms a 1024-row optimizer step at XLA's default arena, 1,251 steps + 17 s eval an epoch, 300 ep); at batch 512 one-shot the trainer read 341 ms a 512-row step, ~71 h (2026-10-07); the 3060 box is unmeasured at this shape
+[sup] 2026-11-05 20:34:15 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-11-05 20:34:15   launched PID=2142493 PGID=2142493
+[sup] 2026-11-06 01:21:11 supervisor exiting — taking the run down (PID=2142493 PGID=2142493)
+[sup] 2026-11-06 16:40:32 START job=vits-accum-jax-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-11-05-vits-jax-300ep
+[sup] 2026-11-06 16:40:32 cmd: bash -c 
+  set -u
+  base=/home/skoonce/vit_s_jax_2611/vit_s_imagenet_accum
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_vit_s_imagenet_accum.py
+
+[sup] 2026-11-06 16:40:32 eta: ~70-75 h on ares at 512 x 2 (2026-10-11 smoke, runs/2026-10-11-vits-jax-smoke/: 648 ms a 1024-row optimizer step at XLA's default arena, 1,251 steps + 17 s eval an epoch, 300 ep); at batch 512 one-shot the trainer read 341 ms a 512-row step, ~71 h (2026-10-07); the 3060 box is unmeasured at this shape
+[sup] 2026-11-06 16:40:32 attempt 1: resuming at epoch 20/300 (next rest: 999)
+[sup] 2026-11-06 16:40:32   launched PID=2378534 PGID=2378534
+[sup] 2026-11-06 17:24:15 supervisor exiting — taking the run down (PID=2378534 PGID=2378534)
+[sup] 2026-11-07 14:22:30 START job=vits-accum-jax-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-11-05-vits-jax-300ep
+[sup] 2026-11-07 14:22:30 cmd: bash -c 
+  set -u
+  base=/home/skoonce/vit_s_jax_2611/vit_s_imagenet_accum
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_vit_s_imagenet_accum.py
+
+[sup] 2026-11-07 14:22:30 eta: ~70-75 h on ares at 512 x 2 (2026-10-11 smoke, runs/2026-10-11-vits-jax-smoke/: 648 ms a 1024-row optimizer step at XLA's default arena, 1,251 steps + 17 s eval an epoch, 300 ep); at batch 512 one-shot the trainer read 341 ms a 512-row step, ~71 h (2026-10-07); the 3060 box is unmeasured at this shape
+[sup] 2026-11-07 14:22:30 attempt 1: resuming at epoch 23/300 (next rest: 999)
+[sup] 2026-11-07 14:22:30   launched PID=2737184 PGID=2737184
+[sup]   last line: Done. Total time: 240382.5s
+[sup] 2026-11-10 09:09:08 ✅ COMPLETE — 300/300 epochs

@@ -1,0 +1,13 @@
+  n = 50000
+  ViT-S EMA  39977/50000 = 79.95%   95% CI 79.60–80.30
+  ViT-S live 39959/50000 = 79.92%   95% CI 79.56–80.27
+  unpaired gap: -0.04 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 39493   both wrong 9557   only ViT-S EMA 484   only ViT-S live 466
+  discordant: 950 of 50000 (1.9%) — the only images the test looks at
+  McNemar exact two-sided p = 0.5813   (chi2 w/ continuity = 0.30)
+  ✗ NOT significant at p<0.05 — the 18 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.
