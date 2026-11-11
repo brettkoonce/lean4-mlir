@@ -34,6 +34,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.Trained.LinearDescent
+import LeanMlir.Proofs.Training.Trained.MlpDescent
 import LeanMlir.Proofs.Training.Trained.CnnDescent
 import LeanMlir.Proofs.Training.Trained.CnnDescentConv1
 import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
@@ -1800,7 +1801,7 @@ theorem chk_trained_linear_sgd_strictly_descends :
         (Proofs.dense
           (Proofs.Mat.unflatten
             (Proofs.TrainedLinearDescent.Wd.flatten -
-              (1 / 8192 : ℝ) •
+              (1 / 65536 : ℝ) •
                 Proofs.binary32.linearFloatGrad Proofs.TrainedLinearDescent.Wd Proofs.TrainedLinearDescent.bd
                   Proofs.TrainedLinearDescent.xd Real.exp Proofs.TrainedLinearDescent.lblD))
           Proofs.TrainedLinearDescent.bd Proofs.TrainedLinearDescent.xd)
@@ -1811,13 +1812,28 @@ theorem chk_trained_linear_sgd_strictly_descends :
         Proofs.TrainedLinearDescent.lblD :=
   Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends
 
+/-- `Proofs.TrainedMlpDescent.trained_mlp_input_sgd_strictly_descends` -/
+theorem chk_trained_mlp_input_sgd_strictly_descends :
+    Proofs.mlpInputLoss Proofs.TrainedMlp.b8
+        Proofs.TrainedMlp.W1V Proofs.TrainedMlp.b8 Proofs.TrainedMlp.W2V Proofs.TrainedMlp.b10 Proofs.TrainedMlpDescent.xd
+        Proofs.TrainedMlpDescent.lblD
+        (Proofs.TrainedMlp.W0V.flatten -
+          ((1 : ℝ) / (2 : ℝ) ^ (35 : ℕ)) •
+            Proofs.gradAt
+              (Proofs.mlpInputLoss Proofs.TrainedMlp.b8 Proofs.TrainedMlp.W1V Proofs.TrainedMlp.b8 Proofs.TrainedMlp.W2V
+                Proofs.TrainedMlp.b10 Proofs.TrainedMlpDescent.xd Proofs.TrainedMlpDescent.lblD)
+              Proofs.TrainedMlp.W0V.flatten) <
+      Proofs.mlpInputLoss Proofs.TrainedMlp.b8 Proofs.TrainedMlp.W1V Proofs.TrainedMlp.b8 Proofs.TrainedMlp.W2V
+        Proofs.TrainedMlp.b10 Proofs.TrainedMlpDescent.xd Proofs.TrainedMlpDescent.lblD Proofs.TrainedMlp.W0V.flatten :=
+  Proofs.TrainedMlpDescent.trained_mlp_input_sgd_strictly_descends
+
 /-- `Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete` -/
 theorem chk_trained_cnn_conv2_sgd_descends_concrete :
     Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2
         Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
         Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl
         (Proofs.TrainedCnnDescent.W2.flatten -
-          ((1 : ℝ) / (2 : ℝ) ^ (42 : ℕ)) •
+          ((1 : ℝ) / (2 : ℝ) ^ (47 : ℕ)) •
             Proofs.gradAt
               (Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V
                 Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
@@ -1827,7 +1843,7 @@ theorem chk_trained_cnn_conv2_sgd_descends_concrete :
       Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
           Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5
           Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl Proofs.TrainedCnnDescent.W2.flatten -
-        ((1 : ℝ) / (2 : ℝ) ^ (42 : ℕ) *
+        ((1 : ℝ) / (2 : ℝ) ^ (47 : ℕ) *
             ∑ idx : Fin ((2 : ℕ) * (2 : ℕ) * (3 : ℕ) * (3 : ℕ)),
               Proofs.gradAt
                   (Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V
@@ -1846,7 +1862,7 @@ theorem chk_trained_cnn_conv2_bias_sgd_descends_concrete :
         Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5
         Proofs.TrainedCnnDescent.lbl
         (Proofs.TrainedCnnDescent.b2 -
-          ((1 : ℝ) / (2 : ℝ) ^ (36 : ℕ)) •
+          ((1 : ℝ) / (2 : ℝ) ^ (40 : ℕ)) •
             Proofs.gradAt
               (Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
                 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4
@@ -1855,7 +1871,7 @@ theorem chk_trained_cnn_conv2_bias_sgd_descends_concrete :
       Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
           Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5
           Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl Proofs.TrainedCnnDescent.b2 -
-        ((1 : ℝ) / (2 : ℝ) ^ (36 : ℕ) *
+        ((1 : ℝ) / (2 : ℝ) ^ (40 : ℕ) *
             ∑ o : Fin (2 : ℕ),
               Proofs.gradAt
                   (Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V
@@ -1875,7 +1891,7 @@ theorem chk_trained_cnn_conv1_sgd_descends_concrete :
         Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4 Proofs.TrainedCnnDescentConv1.W5
         Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
         (Proofs.TrainedCnnDescentConv1.W1.flatten -
-          ((1 : ℝ) / (2 : ℝ) ^ (48 : ℕ)) •
+          ((1 : ℝ) / (2 : ℝ) ^ (50 : ℕ)) •
             Proofs.gradAt
               (Proofs.cnnConv1KernelLoss Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0
                 Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
@@ -1887,7 +1903,7 @@ theorem chk_trained_cnn_conv1_sgd_descends_concrete :
           Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
           Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
           Proofs.TrainedCnnDescentConv1.W1.flatten -
-        ((1 : ℝ) / (2 : ℝ) ^ (48 : ℕ) *
+        ((1 : ℝ) / (2 : ℝ) ^ (50 : ℕ) *
             ∑ idx : Fin ((2 : ℕ) * (1 : ℕ) * (3 : ℕ) * (3 : ℕ)),
               Proofs.gradAt
                   (Proofs.cnnConv1KernelLoss Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0
@@ -1907,7 +1923,7 @@ theorem chk_trained_cnn_conv1_bias_sgd_descends_concrete :
         Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4 Proofs.TrainedCnnDescentConv1.W5
         Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
         (Proofs.TrainedCnnDescentConv1.b1 -
-          ((1 : ℝ) / (2 : ℝ) ^ (45 : ℕ)) •
+          ((1 : ℝ) / (2 : ℝ) ^ (47 : ℕ)) •
             Proofs.gradAt
               (Proofs.cnnConv1BiasLoss Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0
                 Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
@@ -1919,7 +1935,7 @@ theorem chk_trained_cnn_conv1_bias_sgd_descends_concrete :
           Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
           Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
           Proofs.TrainedCnnDescentConv1.b1 -
-        ((1 : ℝ) / (2 : ℝ) ^ (45 : ℕ) *
+        ((1 : ℝ) / (2 : ℝ) ^ (47 : ℕ) *
             ∑ o : Fin (2 : ℕ),
               Proofs.gradAt
                   (Proofs.cnnConv1BiasLoss Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0

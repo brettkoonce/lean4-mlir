@@ -182,6 +182,8 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
 import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
 import LeanMlir.Proofs.Certificates.LipschitzCert.Instance
 import LeanMlir.Proofs.Training.Trained.MlpWitness
+import LeanMlir.Proofs.Training.Trained.MlpDescent
+import LeanMlir.Proofs.Foundation.ListGetD
 import LeanMlir.Proofs.Training.Trained.CnnWitness
 import LeanMlir.Proofs.Training.Trained.CnnSeal
 import LeanMlir.Proofs.Training.Trained.CnnDescent
@@ -192,6 +194,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCert.Float
 import LeanMlir.Proofs.Foundation.ListDot
+import LeanMlir.Proofs.Architectures.ListConv
 import LeanMlir.Proofs.Certificates.IntervalBound
 import LeanMlir.Proofs.Certificates.IntervalBoundConv.Basic
 import LeanMlir.Proofs.Certificates.CrownBound
@@ -1989,11 +1992,35 @@ open Proofs
 -- TRAINED-WEIGHT whole-net VJP witness (Trained/MlpWitness.lean)
 #audit_axioms Proofs.TrainedMlp.preact_eq
 #audit_axioms Proofs.TrainedMlp.preact_ne
+#audit_axioms Proofs.TrainedMlp.relu_preact_eq
+#audit_axioms Proofs.TrainedMlp.preact1_eq
+#audit_axioms Proofs.TrainedMlp.preact1_ne
+#audit_axioms Proofs.TrainedMlp.trainedMlpHasVJPAt
+#audit_axioms Proofs.TrainedMlp.trainedMlpHasVJPAt_correct
+#audit_axioms Proofs.TrainedMlp.backward_eq
 #audit_axioms Proofs.TrainedMlp.pdiv_fwd
 #audit_axioms Proofs.TrainedMlp.pdiv_fwd_val
 #audit_axioms Proofs.TrainedMlp.trainedMlp_backward_nontrivial
 #audit_axioms Proofs.TrainedMlp.trainedMlp_jacobian_nonzero
 #audit_axioms Proofs.TrainedMlp.trainedMlp_not_constant
+
+-- THE MLP's DESCENT AT TRAINED WEIGHTS (Trained/MlpDescent.lean), and the `getD` bridges it and
+-- the linear instance share (Foundation/ListGetD.lean)
+#audit_axioms Proofs.getD_of_forall
+#audit_axioms Proofs.sum_getD
+#audit_axioms Proofs.sum_getD_abs_mul
+#audit_axioms Proofs.sum_abs_div_mul
+#audit_axioms Proofs.TrainedMlpDescent.pre0_eq
+#audit_axioms Proofs.TrainedMlpDescent.pre1_eq
+#audit_axioms Proofs.TrainedMlpDescent.hz_lbl_le
+#audit_axioms Proofs.TrainedMlpDescent.sm_lbl_le_half
+#audit_axioms Proofs.TrainedMlpDescent.grad_key
+#audit_axioms Proofs.TrainedMlpDescent.cot_abs_le
+#audit_axioms Proofs.TrainedMlpDescent.cot_lower
+#audit_axioms Proofs.TrainedMlpDescent.gradL1_le
+#audit_axioms Proofs.TrainedMlpDescent.gradSq_lower
+#audit_axioms Proofs.TrainedMlpDescent.trained_mlp_input_sgd_descends_concrete
+#audit_axioms Proofs.TrainedMlpDescent.trained_mlp_input_sgd_strictly_descends
 
 -- TRAINED-WEIGHT whole-net VJP witness, CNN rung (Trained/CnnWitness.lean)
 #audit_axioms Proofs.TrainedCnn.conv1_eq
@@ -2004,12 +2031,28 @@ open Proofs
 #audit_axioms Proofs.TrainedCnn.d4_ne
 #audit_axioms Proofs.TrainedCnn.trainedCnnHasVJP_correct
 
+-- Kernel-checked integer tables for conv and max-pool certificates (the `ListConv` bridge lemmas)
+#audit_axioms Proofs.conv2d_tab
+#audit_axioms Proofs.relu_ite_tabR
+#audit_axioms Proofs.relu_flatten_tabR
+#audit_axioms Proofs.maxPoolFlat_relu_tab
+#audit_axioms Proofs.tabR_abs_le
+#audit_axioms Proofs.kerR_abs_le
+#audit_axioms Proofs.tabR_lt_abs
+#audit_axioms Proofs.abs_getD_div_le
+#audit_axioms Proofs.convPatchEq_of_zeroTwinZ
+#audit_axioms Proofs.convPatchEq2_of_blankTwinZ
+#audit_axioms Proofs.maxPool2MarginQUpTo_of_poolCertZ
 -- CNN descent at trained weights through tied pool windows (Trained/CnnDescent.lean)
+#audit_axioms Proofs.TrainedCnnDescent.conv2_fun
+#audit_axioms Proofs.TrainedCnnDescent.head_feat
 #audit_axioms Proofs.TrainedCnnDescent.pool_margin
 #audit_axioms Proofs.TrainedCnnDescent.x1_eq
 #audit_axioms Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete
 #audit_axioms Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete
 -- CNN conv1 descent at trained weights through two-layer twins (Trained/CnnDescentConv1.lean)
+#audit_axioms Proofs.TrainedCnnDescentConv1.conv2_fun
+#audit_axioms Proofs.TrainedCnnDescentConv1.head_feat
 #audit_axioms Proofs.TrainedCnnDescentConv1.pool_margin
 #audit_axioms Proofs.TrainedCnnDescentConv1.x1_fun
 #audit_axioms Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete

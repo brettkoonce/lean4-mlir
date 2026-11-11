@@ -277,4 +277,29 @@ the CNN descent pair; `CnnWitness` / `CnnSeal` last (the seal is the largest fil
 `trained_cnn_descent.py`, `trained_cnn_witness.py`, `trained_cnn_seal.py`), and the book's witness
 sentences in `thm:cnn_sgd_descends` and its Chapter 1–2 peers.
 
-**Status.** Not started; queued behind the MobileNetV4 mask work on `book/audit-pass`.
+**Status (2026-11-11).** Linear, MLP and the CNN descent pair done on `book/audit-pass`; the CNN
+VJP witness and seal are blocked (below).
+- `Trained/LinearDescent` is the 784→10 net on test image #8 (`trained_linear_descent.py`
+  rewritten onto `Foundation/ListDot`; the fan-in factor through `gamma_num`, no big power). 27 s.
+- `Trained/MlpWitness` is `mlpForward` / `mlpHasVJPAt` at 784→8→8→10, bias-free, on test image #0,
+  from the new `trained_mlp_witness.py`; it no longer imports `LipschitzCert.Instance`, so §1's
+  "VJP witness on `Instance`'s weights" row and §4.3 are settled (kept, moved). 29 s.
+  `lipschitz_cert_witness_s8.py` no longer writes it.
+- `Trained/MlpDescent` (new, `trained_mlp_descent.py`): `mlp_input_sgd_descends` at the exact
+  gradient, on the SAME net as `MlpWitness` (imported) and test image #63 (a 3 read as a 2), the
+  first misclassified test image off every ReLU kink with a sign-definite row of
+  `mask⁰·W₁·mask¹·W₂`; `lr = 2⁻³⁵`, strict form proved. No binary32 rung: its layer-2 rounding
+  margin fails on that image.
+- `Trained/CnnDescent` and `CnnDescentConv1` are 1×28×28 → conv 1→2 → conv 2→2 → pool → dense
+  392→8 → 8 → 10 on test image #0, tables as kernel list checks through the new
+  `Architectures/ListConv` (one `decide +kernel` per conv map and one for all 392 pool windows);
+  549 and 559 lines (were 2,291 and 2,269), about 70 s each. 1,568 pre-activations per
+  convolution, not the 3,136 this section's size line said.
+- **Blocked: `CnnWitness` / `CnnSeal` stay on their pooled 6×6 input.** `mnistCnnNoBnHasVJPAt`
+  needs `MaxPool2Smooth` (a strict unique max in every window), and on a 28×28 image a window
+  whose cells read blank two-conv receptive fields has four equal conv2 outputs at any weights;
+  all 10,000 test images have at least six such windows per channel. Moving them needs a ReLU+pool
+  "smooth or dead" input VJP for the 2×2 pool (the ResNet stem has one, `stemReluPoolLayer` /
+  `MaxPool3s2SmoothOrDead`) and a net whose blank-background conv2 output is negative in both
+  channels.
+- `Foundation/ListGetD` (new) holds the four `getD` bridges the linear and MLP descent files share.

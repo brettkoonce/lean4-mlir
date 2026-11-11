@@ -40,5 +40,3 @@ LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	w1_grad_close	def-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W0_den_certified	theorem-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W1_den_certified	theorem-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W2_den_certified	theorem-case
-LeanMlir/Proofs/Training/Trained/MlpWitness.lean	W1V	def-case
-LeanMlir/Proofs/Training/Trained/MlpWitness.lean	W2V	def-case

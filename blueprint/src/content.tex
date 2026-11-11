@@ -1834,7 +1834,9 @@ and~\ref{thm:denseBiasGrad_correct}); see
 \begin{theorem}[SGD descends]
   \label{thm:linear_sgd_descends}
   \lean{Proofs.linear_sgd_descends, Proofs.linear_float_sgd_descends,
-        Proofs.linear_bias_sgd_descends}
+        Proofs.linear_bias_sgd_descends,
+        Proofs.TrainedLinearDescent.trained_linear_sgd_descends_concrete,
+        Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends}
   \leanok
   \uses{ax:pdiv, ax:pdiv_comp, ax:pdiv_dense_W, ax:softmaxCE_grad}
   \Assume{}
@@ -1860,7 +1862,9 @@ and~\ref{thm:denseBiasGrad_correct}); see
   The same holds at the bias, and with the binary32 gradient in place of
   \(g\), its \(\eta\) the rounding budget of \S\ref{sec:precision} rather
   than an assumption, under that forward's exp-accuracy and logit-drift
-  bounds.
+  bounds. Witness: the trained \(784 \to 10\) network and a real MNIST test
+  image it misclassifies meet every hypothesis at the binary32 gradient, and
+  the loss strictly decreases.
 \end{theorem}
 
 \begin{proof}
@@ -2733,7 +2737,9 @@ above it; see \leandocref{Proofs.MlpFold.mlp\_net\_lossGrad}.
   \lean{Proofs.mlp_input_sgd_descends, Proofs.mlp_input_float_sgd_descends,
         Proofs.mlp_hidden_sgd_descends, Proofs.mlp_hidden_float_sgd_descends,
         Proofs.mlp_output_float_sgd_descends, Proofs.mlp_input_bias_sgd_descends,
-        Proofs.mlp_hidden_bias_sgd_descends, Proofs.linear_bias_sgd_descends}
+        Proofs.mlp_hidden_bias_sgd_descends, Proofs.linear_bias_sgd_descends,
+        Proofs.TrainedMlpDescent.trained_mlp_input_sgd_descends_concrete,
+        Proofs.TrainedMlpDescent.trained_mlp_input_sgd_strictly_descends}
   \leanok
   \uses{ax:pdiv, ax:pdiv_comp, ax:pdiv_dense, ax:pdiv_dense_W, ax:pdiv_relu,
       ax:softmaxCE_grad, thm:linear_sgd_descends, thm:pdiv_of_affine}
@@ -2766,7 +2772,10 @@ above it; see \leandocref{Proofs.MlpFold.mlp\_net\_lossGrad}.
   and a forward rounding margin at every ReLU beside the step margin. At
   \(W_0\) that gradient is read off the rounded forward; at \(W_1\) and
   \(W_2\) the activation entering the layer is the exact one, and the
-  rounding starts at the layer.
+  rounding starts at the layer. Witness: a trained network of this shape at
+  width 8 and a real MNIST test image it misclassifies meet every hypothesis
+  at the input layer and the exact gradient, and the loss strictly
+  decreases.
 \end{theorem}
 
 \begin{proof}
@@ -3816,10 +3825,10 @@ and the gradient moves to the real net with the germ; see
   The same holds at the first convolution and at both convolutions' biases,
   and with the binary32 gradient in place of \(g\), its \(\eta\) the
   rounding budget of \S\ref{sec:precision} and its pool margin strict.
-  Witness: two trained reduced networks and a real MNIST test image,
-  cropped and block-summed to \(12 \times 12\), meet every hypothesis --- one
-  network at the second convolution's kernel and bias, one with a
-  first-convolution bias at the first's.
+  Witness: two trained networks of this shape at two channels and a real
+  \(28 \times 28\) MNIST test image meet every hypothesis at the exact
+  gradient --- one network at the second convolution's kernel and bias, one
+  with a first-convolution bias at the first's.
 \end{theorem}
 
 \begin{proof}
@@ -19799,7 +19808,7 @@ tests/comparator/run.sh
 \end{verbatim}
 
 \noindent re-runs Lean's kernel typechecker, and five independent checkers
-beside it, over 110 theorems, sandboxed, with an axiom allowlist of exactly
+beside it, over 111 theorems, sandboxed, with an axiom allowlist of exactly
 the three. It needs a built \texttt{Certs} and \texttt{bwrap}. Which 110,
 why thirteen of them are stated in a file that imports nothing but Mathlib,
 and what the run adds to \texttt{\#print axioms} is \S\ref{sec:comparator}
@@ -20120,7 +20129,7 @@ against an allowlist of exactly \(\{\texttt{propext}, \texttt{Quot.sound},
 \texttt{con-leche} and \texttt{con-ron}. Any project axiom in the closure
 of any listed theorem fails the run.
 
-The 110 theorems split across three files, and the split is the point. \texttt{Challenge.lean} imports Mathlib and nothing else: the 13
+The 111 theorems split across three files, and the split is the point. \texttt{Challenge.lean} imports Mathlib and nothing else: the 13
 architecture-free theorems, Chapter~\ref{chap:tensor}'s \texttt{pdiv}
 calculus rules and Chapter~\ref{chap:attention}'s matrix-level ones, with
 the definitions they need copied inline and \texttt{chk\_pdiv\_is\_fderiv}
@@ -20134,16 +20143,16 @@ every chapter's headline Jacobian and the public \texttt{*HasVJP\_correct}
 wrappers, which cannot be phrased without the network in scope. Once the
 \texttt{fderiv} pin and the structural rules are checked over Mathlib
 alone, these are applications of them, and what you must additionally
-trust is the forward functions. The last 58 are \texttt{ChallengeTier.lean},
+trust is the forward functions. The last 59 are \texttt{ChallengeTier.lean},
 the layer the second half of the book rests on: the step ties, the codegen
 faithfulness results, the whole-net back-chains, the data-parallel
 results, the float bridge and the four certificate theorems, printed from
 each declaration's own type rather than transcribed. With the three already
 in \texttt{ChallengeArch.lean} they are exactly the declarations
 \texttt{formalization.yaml} puts forward, so the coverage is checkable by
-diffing two lists. The 110 are not the whole proof suite: the axiom audit
+diffing two lists. The 111 are not the whole proof suite: the axiom audit
 covers every headline declaration under the same allowlist.
-What the 110 add is a second, non-elaborator opinion on every result the
+What the 111 add is a second, non-elaborator opinion on every result the
 book puts forward and the calculus foundation they rest on.
 
 \subsection{A measurement becomes a theorem}

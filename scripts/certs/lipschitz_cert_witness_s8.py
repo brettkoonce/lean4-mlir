@@ -289,5 +289,7 @@ A("  exact (hasFDerivAt_const (fwd xtV) xtV).fderiv")
 A("")
 A("end TrainedMlp")
 A("end Proofs")
-open(os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/MlpWitness.lean"), "w").write(modularize("\n".join(W) + "\n"))
-print("wrote both")
+# `Trained/MlpWitness.lean` is no longer this script's: since 2026-11-11 it is the 784→8→8→10
+# witness that `scripts/certs/trained_mlp_witness.py` emits. The 49→8→10 text built above in `W`
+# is not written, so a run here cannot overwrite it.
+print("wrote the Instance snippet; MlpWitness.lean is emitted by trained_mlp_witness.py")

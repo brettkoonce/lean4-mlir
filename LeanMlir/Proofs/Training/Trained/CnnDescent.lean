@@ -1,39 +1,43 @@
 module
 
 public import LeanMlir.Proofs.Training.SgdDescent.Cnn
+public import LeanMlir.Proofs.Architectures.ListConv
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 @[expose] public section
 
 /-! # Descent at TRAINED weights — the CNN conv2 rungs, through tied pool windows
 
-**REDUCED CERTIFICATE MODEL** — this file's net is a 12×12-input, 2-channel MNIST CNN with an
-8-wide dense head, NOT the canonical 28×28, 32-channel `cnnVerified`; chosen so every table is
-exact rational arithmetic in the kernel. The canonical net's pool condition is measured on all
-10000 test images by scripts/probes/mnist_pool_twin_probe.py.
+The net is the CNN chapter's `mnistCnnNoBn` architecture at 2 channels and an 8-wide head, on the
+28×28 image: `conv 1→2 3×3 SAME → relu → conv 2→2 3×3 SAME → relu → maxpool 2×2 → dense 392→8 →
+relu → dense 8→8 → relu → dense 8→10`. Nothing is cropped or pooled away; only the widths differ
+from the chapter's 32 channels and 512-wide head. The canonical net's pool condition is measured
+on all 10000 test images by scripts/probes/mnist_pool_twin_probe.py.
 
 `cnn_conv2_exact_sgd_descends` — one exact-gradient SGD step on the conv2 kernel decreases the
 cross-entropy loss — instantiated at TRAINED, /128-rationalized weights (biases /16384) and REAL
-MNIST test image #0 (label 7, classified correctly), every hypothesis discharged by exact
-arithmetic: `trained_cnn_conv2_sgd_descends_concrete`, at learning rate `2⁻42`. The conv2-bias
-rung `cnn_conv2_bias_exact_sgd_descends` on the same net and image is
-`trained_cnn_conv2_bias_sgd_descends_concrete`, at `2⁻36`: its radius sits inside the kernel
-rung's, so the relu₂ and pool margins carry over by monotonicity. The conv1 rungs need a net with
-a conv1 bias (`Trained.CnnDescentConv1`).
+MNIST test image #0 (label 7, classified correctly), all 784 pixels `k/255`, every
+hypothesis discharged by exact arithmetic: `trained_cnn_conv2_sgd_descends_concrete`, at learning
+rate `2⁻47`. The conv2-bias rung `cnn_conv2_bias_exact_sgd_descends` on the same net and image
+is `trained_cnn_conv2_bias_sgd_descends_concrete`, at `2⁻40`: its radius sits inside the
+kernel rung's, so the relu₂ and pool margins carry over by monotonicity. The conv1 rungs need a
+net with a conv1 bias (`Trained.CnnDescentConv1`).
 
-What the instance shows is the pool hypothesis. The image's blank corners make conv1's output
+What the instance shows is the pool hypothesis. The image's blank border makes conv1's output
 zero there (conv1 is bias-free, so a zero patch gives the padding's value), the cells of a
-corner window then read identical all-zero patches, and their conv2 outputs are EQUAL — the
-conv2 bias, positive in one channel. 5 live windows tie that way and
-7 are dead. The old `MaxPool2MarginQ` fails at every such window for every margin;
-`MaxPool2MarginQUpTo` takes the twins `ConvPatchEq 3 3 x1V` (`ConvPatchEq.of_zero` per tied cell,
-`zp_*`), and every other cell clears the margin (`cert_*`, through `windowMarginUpTo_of_cert`).
-No pool-tie regularizer was used in training; the ties are the data's.
+border window then read identical all-zero patches, and their conv2 outputs are EQUAL — the
+conv2 bias, positive in one channel. 120 live windows tie that way and
+162 are dead, of 392. The old `MaxPool2MarginQ` fails at every such window for every
+margin; `MaxPool2MarginQUpTo` takes the twins `ConvPatchEq 3 3 x1V` (two cells whose patches are
+all zero, `convPatchEq_of_zeroTwinZ`), and every other cell clears the margin (`cert_chk`, through
+`maxPool2MarginQUpTo_of_poolCertZ`). No pool-tie regularizer was used in training; the ties are
+the data's.
 
-Net: 24×24-center-cropped MNIST, 2×2 block sums to 12×12 (exact pixel sums /1020), conv 1→2
-3×3 SAME without bias → relu → conv 2→2 3×3 SAME → relu → maxpool 2×2 → dense 72→8 → relu →
-dense 8→8 → relu → dense 8→10. The rungs move the conv2 kernel or bias; `x1V` = relu(conv1 image)
-is their frozen input (`x1_eq`). The generator prints the net's test accuracy.
+Every table is nested `List ℤ` numerators over one denominator, and each whole-table fact
+(`conv1_chk`, `conv2_chk`, `pool_chk`, `cert_chk`, the margins and bounds) is one kernel
+evaluation, transported to `ℝ` by `Architectures/ListConv`; the 392-term dense3 sums are
+`Foundation/ListDot` dots. The rungs move the conv2 kernel or bias; `x1V` = relu(conv1 image) is
+their frozen input (`x1_eq`). The generator prints the net's test accuracy.
 
 The step is the exact gradient, so the conclusion bounds the true loss, but the decrease
 `lr·‖∇L‖₂²/2` is not shown positive: that needs a lower bound on the gradient, which the
@@ -47,137 +51,125 @@ namespace TrainedCnnDescent
 -- § Trained weights and the input (data)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Test image #0, center-cropped and 2×2-summed to 12×12, exact pixel sums /1020. -/
-noncomputable def T0 : Tensor3 1 12 12 :=
-  ![![![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), ((269 : ℝ)/1020), ((31 : ℝ)/102), ((8 : ℝ)/85), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), ((219 : ℝ)/340), ((347 : ℝ)/510), ((59 : ℝ)/68), ((175 : ℝ)/204), ((226 : ℝ)/255), ((15 : ℝ)/17), ((293 : ℝ)/340), ((154 : ℝ)/255), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((1 : ℝ)/60), ((4 : ℝ)/51), ((67 : ℝ)/510), ((21 : ℝ)/170), ((593 : ℝ)/1020), ((587 : ℝ)/1020), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((151 : ℝ)/1020), ((49 : ℝ)/51), ((127 : ℝ)/1020), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((139 : ℝ)/204), ((127 : ℝ)/255), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((9 : ℝ)/68), ((889 : ℝ)/1020), ((29 : ℝ)/510), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((19 : ℝ)/1020), ((267 : ℝ)/340), ((463 : ℝ)/1020), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((83 : ℝ)/170), ((67 : ℝ)/85), ((7 : ℝ)/204), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((41 : ℝ)/255), ((29 : ℝ)/30), ((14 : ℝ)/85), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((113 : ℝ)/170), ((327 : ℝ)/340), ((23 : ℝ)/255), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]]]
+/-- MNIST test image #0 (digit 7), the 28×28 pixels as integers `0..255`. -/
+def x0Z : List (List (List ℤ)) :=
+  [[[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 84, 185, 159, 151, 60, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 222, 254, 254, 254, 254, 241, 198, 198, 198, 198, 198, 198, 198, 198, 170, 52, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 67, 114, 72, 114, 163, 227, 254, 225, 254, 254, 254, 250, 229, 254, 254, 140, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 66, 14, 67, 67, 67, 59, 21, 236, 254, 106, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 253, 209, 18, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 233, 255, 83, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 129, 254, 238, 44, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 59, 249, 254, 62, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 133, 254, 187, 5, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 205, 248, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 254, 182, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 75, 251, 240, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 221, 254, 166, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 203, 254, 219, 35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 254, 254, 77, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 224, 254, 115, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 133, 254, 254, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61, 242, 254, 254, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 121, 254, 254, 219, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 121, 254, 207, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]]
+
+/-- Test image #0, pixels `k/255`. -/
+noncomputable def T0 : Tensor3 1 (2*14) (2*14) := tabR (g3 x0Z) 255
+
+/-- conv1 kernel numerators (1→2, 3×3) over 128. -/
+def W1Z : List (List (List (List ℤ))) :=
+  [[[[42, 36, 38], [42, 51, 57], [44, 64, 19]]],
+   [[[Int.negSucc 75, Int.negSucc 37, 0], [Int.negSucc 139, Int.negSucc 12, Int.negSucc 74], [Int.negSucc 43, Int.negSucc 32, Int.negSucc 18]]]]
 
 /-- conv1 kernel (1→2, 3×3), entries k/128; conv1 has no bias. -/
-noncomputable def W1 : Kernel4 2 1 3 3 :=
-  ![![![![((-7 : ℝ)/64), ((51 : ℝ)/128), ((19 : ℝ)/64)], ![((3 : ℝ)/32), ((55 : ℝ)/64), ((25 : ℝ)/32)], ![((5 : ℝ)/16), ((51 : ℝ)/64), ((69 : ℝ)/128)]]],
-   ![![![((-19 : ℝ)/32), ((-19 : ℝ)/64), (0 : ℝ)], ![((-35 : ℝ)/32), ((-13 : ℝ)/128), ((-75 : ℝ)/128)], ![((-11 : ℝ)/32), ((-33 : ℝ)/128), ((-19 : ℝ)/128)]]]]
+noncomputable def W1 : Kernel4 2 1 3 3 := kerR (g4 W1Z) 128
 
 noncomputable def b1 : Vec 2 := ![(0 : ℝ), (0 : ℝ)]
 
+/-- conv2 kernel numerators (2→2, 3×3) over 128. -/
+def W2Z : List (List (List (List ℤ))) :=
+  [[[[98, 33, Int.negSucc 100], [65, Int.negSucc 40, Int.negSucc 23], [52, 28, 7]], [[Int.negSucc 38, Int.negSucc 19, 9], [Int.negSucc 42, Int.negSucc 8, Int.negSucc 6], [23, 9, 15]]],
+   [[[Int.negSucc 48, Int.negSucc 60, Int.negSucc 43], [80, Int.negSucc 35, 54], [62, 34, 47]], [[Int.negSucc 12, 62, 84], [77, 56, 15], [Int.negSucc 51, 0, 28]]]]
+
 /-- conv2 kernel (2→2, 3×3), entries k/128. -/
-noncomputable def W2 : Kernel4 2 2 3 3 :=
-  ![![![![((15 : ℝ)/64), ((55 : ℝ)/64), ((-11 : ℝ)/128)], ![((5 : ℝ)/16), ((13 : ℝ)/128), ((-3 : ℝ)/128)], ![((25 : ℝ)/64), ((23 : ℝ)/128), ((1 : ℝ)/32)]],
-     ![![((-39 : ℝ)/128), ((-5 : ℝ)/32), ((9 : ℝ)/128)], ![((-43 : ℝ)/128), ((-9 : ℝ)/128), ((-7 : ℝ)/128)], ![((23 : ℝ)/128), ((9 : ℝ)/128), ((15 : ℝ)/128)]]],
-   ![![![((1 : ℝ)/128), ((-73 : ℝ)/128), ((-39 : ℝ)/128)], ![((161 : ℝ)/128), ((-19 : ℝ)/128), ((95 : ℝ)/128)], ![((5 : ℝ)/16), ((7 : ℝ)/64), ((67 : ℝ)/128)]],
-     ![![((-13 : ℝ)/128), ((31 : ℝ)/64), ((21 : ℝ)/32)], ![((77 : ℝ)/128), ((7 : ℝ)/16), ((15 : ℝ)/128)], ![((-13 : ℝ)/32), (0 : ℝ), ((7 : ℝ)/32)]]]]
+noncomputable def W2 : Kernel4 2 2 3 3 := kerR (g4 W2Z) 128
 
-noncomputable def b2 : Vec 2 := ![((-9 : ℝ)/16384), ((63 : ℝ)/2048)]
+noncomputable def b2 : Vec 2 := ![((-2111 : ℝ)/8192), ((35 : ℝ)/16384)]
 
-/-- dense3 (72→8, input×output). -/
-noncomputable def W3 : Mat (2*6*6) 8 :=
-  ![![((-21 : ℝ)/64), ((21 : ℝ)/128), ((3 : ℝ)/32), ((7 : ℝ)/64), ((-19 : ℝ)/64), ((-15 : ℝ)/128), ((-7 : ℝ)/64), ((-37 : ℝ)/128)],
-    ![((3 : ℝ)/8), ((-1 : ℝ)/8), ((27 : ℝ)/64), ((15 : ℝ)/128), ((25 : ℝ)/64), ((13 : ℝ)/64), ((1 : ℝ)/8), ((-71 : ℝ)/128)],
-    ![((-3 : ℝ)/32), ((37 : ℝ)/128), ((63 : ℝ)/128), ((3 : ℝ)/16), ((57 : ℝ)/128), ((-3 : ℝ)/32), ((-27 : ℝ)/128), ((15 : ℝ)/64)],
-    ![((-3 : ℝ)/32), ((31 : ℝ)/64), ((19 : ℝ)/64), ((59 : ℝ)/128), ((-13 : ℝ)/128), ((-5 : ℝ)/16), ((-11 : ℝ)/32), ((5 : ℝ)/32)],
-    ![(0 : ℝ), ((11 : ℝ)/64), ((-1 : ℝ)/16), ((91 : ℝ)/128), ((-9 : ℝ)/128), (0 : ℝ), ((-17 : ℝ)/128), ((-3 : ℝ)/16)],
-    ![((3 : ℝ)/128), ((1 : ℝ)/16), ((-25 : ℝ)/128), ((5 : ℝ)/32), ((-43 : ℝ)/128), ((-13 : ℝ)/64), ((15 : ℝ)/128), ((1 : ℝ)/4)],
-    ![((-1 : ℝ)/16), ((-9 : ℝ)/128), ((31 : ℝ)/128), ((-65 : ℝ)/128), ((-23 : ℝ)/128), ((17 : ℝ)/128), ((-37 : ℝ)/64), ((3 : ℝ)/32)],
-    ![((-37 : ℝ)/128), ((25 : ℝ)/128), ((15 : ℝ)/128), (0 : ℝ), ((11 : ℝ)/64), ((-1 : ℝ)/32), ((5 : ℝ)/16), ((23 : ℝ)/128)],
-    ![((11 : ℝ)/64), ((-61 : ℝ)/128), ((35 : ℝ)/128), ((27 : ℝ)/32), ((1 : ℝ)/64), ((19 : ℝ)/128), ((-1 : ℝ)/32), ((-25 : ℝ)/128)],
-    ![((-13 : ℝ)/32), ((21 : ℝ)/128), ((-43 : ℝ)/128), ((-71 : ℝ)/64), ((-33 : ℝ)/128), ((-31 : ℝ)/128), ((9 : ℝ)/128), ((21 : ℝ)/64)],
-    ![((-3 : ℝ)/64), ((-29 : ℝ)/128), ((47 : ℝ)/128), ((9 : ℝ)/64), ((-19 : ℝ)/32), ((13 : ℝ)/128), ((5 : ℝ)/128), ((7 : ℝ)/64)],
-    ![((35 : ℝ)/128), ((1 : ℝ)/32), ((19 : ℝ)/128), ((11 : ℝ)/128), ((-61 : ℝ)/128), ((55 : ℝ)/128), ((-27 : ℝ)/128), ((35 : ℝ)/128)],
-    ![((-11 : ℝ)/128), ((-19 : ℝ)/64), ((-41 : ℝ)/128), ((-3 : ℝ)/128), (0 : ℝ), ((-3 : ℝ)/16), ((7 : ℝ)/128), ((-3 : ℝ)/128)],
-    ![((-45 : ℝ)/128), ((-37 : ℝ)/64), ((-1 : ℝ)/4), ((15 : ℝ)/64), ((-9 : ℝ)/64), ((17 : ℝ)/128), ((57 : ℝ)/128), ((-1 : ℝ)/64)],
-    ![((17 : ℝ)/64), ((-141 : ℝ)/128), ((37 : ℝ)/128), ((33 : ℝ)/128), ((17 : ℝ)/64), ((25 : ℝ)/128), ((1 : ℝ)/4), ((3 : ℝ)/32)],
-    ![((33 : ℝ)/128), ((37 : ℝ)/128), ((-45 : ℝ)/128), ((29 : ℝ)/128), ((-31 : ℝ)/64), ((-17 : ℝ)/128), ((-3 : ℝ)/32), ((-33 : ℝ)/128)],
-    ![((11 : ℝ)/128), ((29 : ℝ)/64), ((-97 : ℝ)/128), ((-27 : ℝ)/128), ((-15 : ℝ)/128), ((11 : ℝ)/128), ((7 : ℝ)/128), ((-15 : ℝ)/128)],
-    ![((-5 : ℝ)/16), ((1 : ℝ)/128), ((25 : ℝ)/128), ((13 : ℝ)/128), ((-9 : ℝ)/128), ((1 : ℝ)/8), ((-41 : ℝ)/128), ((-19 : ℝ)/128)],
-    ![((-1 : ℝ)/16), ((-5 : ℝ)/16), ((-21 : ℝ)/64), ((-1 : ℝ)/128), ((-13 : ℝ)/32), ((-9 : ℝ)/128), ((23 : ℝ)/128), ((-15 : ℝ)/128)],
-    ![((-1 : ℝ)/32), ((-29 : ℝ)/128), ((-3 : ℝ)/32), ((5 : ℝ)/64), ((3 : ℝ)/128), ((-59 : ℝ)/128), ((-15 : ℝ)/64), ((19 : ℝ)/128)],
-    ![((1 : ℝ)/128), ((23 : ℝ)/32), ((101 : ℝ)/128), ((9 : ℝ)/16), ((-29 : ℝ)/128), ((9 : ℝ)/128), ((-5 : ℝ)/64), ((-65 : ℝ)/128)],
-    ![((-5 : ℝ)/64), ((95 : ℝ)/128), ((-71 : ℝ)/64), ((83 : ℝ)/128), ((1 : ℝ)/4), ((75 : ℝ)/128), ((-23 : ℝ)/128), ((-1 : ℝ)/4)],
-    ![((-15 : ℝ)/128), ((-155 : ℝ)/128), ((-17 : ℝ)/128), ((-83 : ℝ)/128), ((-41 : ℝ)/128), ((-9 : ℝ)/64), ((-57 : ℝ)/128), ((-31 : ℝ)/128)],
-    ![((-49 : ℝ)/64), ((-27 : ℝ)/128), ((13 : ℝ)/128), ((-31 : ℝ)/128), ((13 : ℝ)/64), ((-5 : ℝ)/16), ((7 : ℝ)/16), ((3 : ℝ)/64)],
-    ![((3 : ℝ)/128), ((29 : ℝ)/64), ((43 : ℝ)/128), ((-15 : ℝ)/32), ((3 : ℝ)/64), ((-39 : ℝ)/128), ((33 : ℝ)/128), ((-29 : ℝ)/128)],
-    ![((25 : ℝ)/128), ((63 : ℝ)/128), ((-23 : ℝ)/64), ((3 : ℝ)/128), ((-27 : ℝ)/128), ((11 : ℝ)/32), ((-13 : ℝ)/64), ((-7 : ℝ)/64)],
-    ![((-39 : ℝ)/128), ((13 : ℝ)/32), ((-69 : ℝ)/128), ((15 : ℝ)/64), ((-19 : ℝ)/128), ((-65 : ℝ)/128), ((-13 : ℝ)/32), ((-13 : ℝ)/64)],
-    ![((113 : ℝ)/128), ((-41 : ℝ)/128), ((-7 : ℝ)/64), ((-29 : ℝ)/64), ((-31 : ℝ)/128), ((-57 : ℝ)/128), ((-3 : ℝ)/128), ((-3 : ℝ)/16)],
-    ![((-11 : ℝ)/32), ((33 : ℝ)/64), ((85 : ℝ)/128), ((-53 : ℝ)/128), ((-1 : ℝ)/16), ((-47 : ℝ)/128), ((-97 : ℝ)/128), ((1 : ℝ)/32)],
-    ![((-23 : ℝ)/64), ((13 : ℝ)/64), ((-13 : ℝ)/128), ((3 : ℝ)/8), ((-39 : ℝ)/128), ((-41 : ℝ)/128), ((1 : ℝ)/8), ((3 : ℝ)/16)],
-    ![((-29 : ℝ)/128), ((45 : ℝ)/128), ((37 : ℝ)/128), ((-9 : ℝ)/32), ((-5 : ℝ)/16), ((23 : ℝ)/128), ((19 : ℝ)/64), ((5 : ℝ)/32)],
-    ![((15 : ℝ)/128), ((-31 : ℝ)/128), ((-3 : ℝ)/64), ((3 : ℝ)/32), ((-5 : ℝ)/128), ((-17 : ℝ)/128), (0 : ℝ), ((13 : ℝ)/128)],
-    ![((-13 : ℝ)/128), ((-1 : ℝ)/16), ((3 : ℝ)/128), ((-41 : ℝ)/128), ((1 : ℝ)/4), ((11 : ℝ)/32), ((-29 : ℝ)/128), ((-9 : ℝ)/128)],
-    ![((-35 : ℝ)/128), ((-1 : ℝ)/128), ((5 : ℝ)/16), ((5 : ℝ)/16), ((-9 : ℝ)/32), ((73 : ℝ)/128), ((7 : ℝ)/32), ((-1 : ℝ)/32)],
-    ![((-19 : ℝ)/128), ((5 : ℝ)/64), ((3 : ℝ)/32), ((21 : ℝ)/64), ((1 : ℝ)/16), ((27 : ℝ)/128), ((17 : ℝ)/128), ((-7 : ℝ)/128)],
-    ![((1 : ℝ)/32), ((-41 : ℝ)/128), ((13 : ℝ)/64), ((-5 : ℝ)/64), ((19 : ℝ)/64), ((-1 : ℝ)/4), ((-37 : ℝ)/128), ((1 : ℝ)/16)],
-    ![((41 : ℝ)/128), ((-3 : ℝ)/128), ((1 : ℝ)/32), ((-9 : ℝ)/32), ((-3 : ℝ)/64), ((-1 : ℝ)/8), ((51 : ℝ)/128), ((5 : ℝ)/32)],
-    ![((-33 : ℝ)/64), ((91 : ℝ)/128), ((27 : ℝ)/128), ((-53 : ℝ)/128), ((47 : ℝ)/128), ((5 : ℝ)/128), ((-17 : ℝ)/128), ((7 : ℝ)/128)],
-    ![((9 : ℝ)/128), ((63 : ℝ)/128), ((33 : ℝ)/128), ((-5 : ℝ)/128), ((15 : ℝ)/64), ((21 : ℝ)/32), ((-31 : ℝ)/128), ((-31 : ℝ)/128)],
-    ![((-17 : ℝ)/128), ((3 : ℝ)/64), ((25 : ℝ)/128), ((-71 : ℝ)/128), ((11 : ℝ)/128), ((15 : ℝ)/32), ((9 : ℝ)/64), ((11 : ℝ)/32)],
-    ![((-5 : ℝ)/16), ((-39 : ℝ)/128), ((61 : ℝ)/128), ((25 : ℝ)/64), ((7 : ℝ)/128), ((49 : ℝ)/128), ((-5 : ℝ)/16), ((-47 : ℝ)/128)],
-    ![((-23 : ℝ)/128), ((-7 : ℝ)/128), ((-17 : ℝ)/128), ((5 : ℝ)/16), ((-31 : ℝ)/128), ((7 : ℝ)/64), ((-17 : ℝ)/64), ((3 : ℝ)/32)],
-    ![((19 : ℝ)/128), ((-3 : ℝ)/64), ((-1 : ℝ)/16), ((-15 : ℝ)/64), ((17 : ℝ)/128), ((21 : ℝ)/128), ((3 : ℝ)/8), ((-35 : ℝ)/128)],
-    ![((5 : ℝ)/64), ((-13 : ℝ)/128), (0 : ℝ), ((39 : ℝ)/128), ((-23 : ℝ)/64), ((15 : ℝ)/32), ((-43 : ℝ)/128), ((29 : ℝ)/128)],
-    ![((-25 : ℝ)/128), ((-7 : ℝ)/128), ((-7 : ℝ)/16), ((-43 : ℝ)/128), ((1 : ℝ)/64), ((39 : ℝ)/128), ((-1 : ℝ)/16), ((-95 : ℝ)/128)],
-    ![((-5 : ℝ)/128), ((-1 : ℝ)/16), ((-17 : ℝ)/64), (-1 : ℝ), ((33 : ℝ)/128), ((-7 : ℝ)/64), ((-25 : ℝ)/64), ((11 : ℝ)/32)],
-    ![((57 : ℝ)/128), ((-19 : ℝ)/64), ((27 : ℝ)/64), ((-43 : ℝ)/128), ((-9 : ℝ)/32), ((-7 : ℝ)/128), ((31 : ℝ)/128), ((-15 : ℝ)/64)],
-    ![((83 : ℝ)/128), ((-1 : ℝ)/16), ((13 : ℝ)/32), ((1 : ℝ)/8), ((-5 : ℝ)/128), ((21 : ℝ)/128), ((-3 : ℝ)/8), ((43 : ℝ)/128)],
-    ![((-3 : ℝ)/64), ((1 : ℝ)/16), ((-11 : ℝ)/64), ((-11 : ℝ)/128), ((3 : ℝ)/16), ((25 : ℝ)/64), ((1 : ℝ)/4), ((41 : ℝ)/128)],
-    ![((-9 : ℝ)/128), (0 : ℝ), ((21 : ℝ)/128), ((19 : ℝ)/128), ((1 : ℝ)/16), ((-13 : ℝ)/64), ((23 : ℝ)/128), ((-3 : ℝ)/128)],
-    ![((17 : ℝ)/128), ((39 : ℝ)/128), ((17 : ℝ)/32), ((5 : ℝ)/8), ((-1 : ℝ)/32), ((37 : ℝ)/64), ((-23 : ℝ)/64), ((-31 : ℝ)/64)],
-    ![((1 : ℝ)/32), ((85 : ℝ)/128), ((31 : ℝ)/128), ((13 : ℝ)/16), ((-13 : ℝ)/64), ((7 : ℝ)/16), ((-1 : ℝ)/8), ((-11 : ℝ)/128)],
-    ![((-35 : ℝ)/64), ((-29 : ℝ)/32), (0 : ℝ), ((35 : ℝ)/128), ((1 : ℝ)/32), ((17 : ℝ)/64), ((-1 : ℝ)/8), ((-1 : ℝ)/16)],
-    ![((-63 : ℝ)/64), ((3 : ℝ)/8), ((-13 : ℝ)/32), ((-9 : ℝ)/128), ((-1 : ℝ)/8), ((-37 : ℝ)/128), ((-23 : ℝ)/128), ((-19 : ℝ)/64)],
-    ![((-13 : ℝ)/128), ((1 : ℝ)/16), ((33 : ℝ)/128), ((-23 : ℝ)/64), ((-25 : ℝ)/128), ((-1 : ℝ)/4), ((1 : ℝ)/32), ((-11 : ℝ)/64)],
-    ![((21 : ℝ)/64), ((-29 : ℝ)/128), ((-19 : ℝ)/128), ((43 : ℝ)/128), ((-43 : ℝ)/128), ((-1 : ℝ)/128), ((9 : ℝ)/32), ((15 : ℝ)/128)],
-    ![((-55 : ℝ)/128), ((-21 : ℝ)/64), ((37 : ℝ)/128), ((9 : ℝ)/64), (0 : ℝ), ((-55 : ℝ)/128), ((15 : ℝ)/128), ((-23 : ℝ)/128)],
-    ![((9 : ℝ)/128), ((53 : ℝ)/128), ((-33 : ℝ)/64), ((1 : ℝ)/8), ((21 : ℝ)/64), ((-33 : ℝ)/128), ((57 : ℝ)/128), ((15 : ℝ)/32)],
-    ![((-37 : ℝ)/128), ((-47 : ℝ)/64), ((3 : ℝ)/16), ((-9 : ℝ)/16), ((-25 : ℝ)/128), ((-5 : ℝ)/64), ((5 : ℝ)/32), ((-1 : ℝ)/8)],
-    ![((55 : ℝ)/128), ((27 : ℝ)/64), ((-7 : ℝ)/64), ((3 : ℝ)/16), ((19 : ℝ)/128), ((-5 : ℝ)/64), ((-13 : ℝ)/128), ((29 : ℝ)/64)],
-    ![((31 : ℝ)/128), ((59 : ℝ)/128), ((-3 : ℝ)/128), ((-29 : ℝ)/128), ((-37 : ℝ)/128), ((-13 : ℝ)/32), ((-5 : ℝ)/64), ((9 : ℝ)/128)],
-    ![((67 : ℝ)/128), ((7 : ℝ)/16), ((51 : ℝ)/64), ((-25 : ℝ)/128), ((-1 : ℝ)/128), ((-9 : ℝ)/128), ((3 : ℝ)/16), ((1 : ℝ)/32)],
-    ![((5 : ℝ)/16), ((3 : ℝ)/32), ((125 : ℝ)/128), ((15 : ℝ)/128), ((-5 : ℝ)/16), ((-99 : ℝ)/128), ((-7 : ℝ)/64), ((-61 : ℝ)/128)],
-    ![((7 : ℝ)/64), ((5 : ℝ)/64), ((-3 : ℝ)/32), ((33 : ℝ)/64), ((1 : ℝ)/32), ((-3 : ℝ)/128), ((-9 : ℝ)/128), ((15 : ℝ)/128)],
-    ![((25 : ℝ)/128), ((45 : ℝ)/64), ((9 : ℝ)/32), ((35 : ℝ)/64), ((3 : ℝ)/16), ((3 : ℝ)/128), ((29 : ℝ)/128), ((-1 : ℝ)/4)],
-    ![((-5 : ℝ)/16), ((21 : ℝ)/64), ((1 : ℝ)/16), ((-3 : ℝ)/128), ((1 : ℝ)/64), ((15 : ℝ)/128), ((19 : ℝ)/64), ((-5 : ℝ)/16)],
-    ![((-1 : ℝ)/16), ((11 : ℝ)/32), ((-15 : ℝ)/64), ((-61 : ℝ)/128), ((-7 : ℝ)/32), ((17 : ℝ)/64), ((-33 : ℝ)/128), ((21 : ℝ)/128)],
-    ![((-11 : ℝ)/32), ((-1 : ℝ)/32), ((-3 : ℝ)/128), ((-31 : ℝ)/128), ((21 : ℝ)/128), ((65 : ℝ)/128), ((-17 : ℝ)/64), ((-49 : ℝ)/128)],
-    ![((-51 : ℝ)/128), ((17 : ℝ)/128), ((21 : ℝ)/64), ((-21 : ℝ)/128), ((-1 : ℝ)/16), ((121 : ℝ)/128), ((1 : ℝ)/16), ((3 : ℝ)/16)],
-    ![((-9 : ℝ)/128), ((33 : ℝ)/128), ((33 : ℝ)/128), ((-13 : ℝ)/128), ((1 : ℝ)/16), ((15 : ℝ)/64), ((-7 : ℝ)/128), ((-21 : ℝ)/128)],
-    ![((-11 : ℝ)/64), ((-39 : ℝ)/128), ((-23 : ℝ)/64), ((-3 : ℝ)/128), ((15 : ℝ)/128), ((53 : ℝ)/128), ((7 : ℝ)/16), ((3 : ℝ)/128)],
-    ![((25 : ℝ)/128), ((-7 : ℝ)/128), ((-21 : ℝ)/128), ((-19 : ℝ)/64), ((1 : ℝ)/128), ((-31 : ℝ)/128), ((-3 : ℝ)/32), ((19 : ℝ)/128)]]
+/-- dense3's column 0: unit 0's weights over the 392 pooled features, numerators over 128. -/
+def w3c0Z : List ℤ := [Int.negSucc 40, 56, 2, 2, 18, 8, Int.negSucc 5, Int.negSucc 19, 26, Int.negSucc 45, Int.negSucc 0, 12, Int.negSucc 8, Int.negSucc 37, 3, 20, 20, Int.negSucc 62, Int.negSucc 16, 3, Int.negSucc 9, Int.negSucc 24, Int.negSucc 26, Int.negSucc 100, Int.negSucc 13, 25, Int.negSucc 33, 88, Int.negSucc 40, Int.negSucc 33, Int.negSucc 29, 18, Int.negSucc 9, Int.negSucc 31, 8, 2, 34, Int.negSucc 53, 24, 3, Int.negSucc 34, Int.negSucc 27, 25, 12, Int.negSucc 32, Int.negSucc 17, 41, 66, Int.negSucc 1, Int.negSucc 28, Int.negSucc 36, Int.negSucc 44, Int.negSucc 76, Int.negSucc 121, Int.negSucc 21, 37, Int.negSucc 53, Int.negSucc 7, Int.negSucc 47, 73, 44, 53, 44, 47, 31, Int.negSucc 41, Int.negSucc 0, Int.negSucc 37, Int.negSucc 46, 7, Int.negSucc 7, 30, Int.negSucc 36, 51, 13, 35, 99, 30, Int.negSucc 0, 29, 39, Int.negSucc 67, Int.negSucc 2, 20, Int.negSucc 46, Int.negSucc 38, 21, 16, Int.negSucc 3, Int.negSucc 17, Int.negSucc 6, Int.negSucc 17, 25, Int.negSucc 47, Int.negSucc 0, 29, Int.negSucc 9, 10, Int.negSucc 31, 22, 10, Int.negSucc 19, Int.negSucc 27, 0, 4, Int.negSucc 50, 24, 32, Int.negSucc 11, Int.negSucc 18, 23, 15, Int.negSucc 8, Int.negSucc 6, 11, Int.negSucc 6, Int.negSucc 90, 7, Int.negSucc 17, Int.negSucc 20, Int.negSucc 28, Int.negSucc 20, 31, Int.negSucc 24, 40, 11, Int.negSucc 18, Int.negSucc 2, 44, 10, 91, 33, 44, 0, Int.negSucc 16, Int.negSucc 12, Int.negSucc 44, Int.negSucc 8, 21, 24, Int.negSucc 14, Int.negSucc 18, 53, 8, Int.negSucc 20, Int.negSucc 23, 9, Int.negSucc 32, Int.negSucc 10, 3, Int.negSucc 28, Int.negSucc 68, 12, Int.negSucc 25, Int.negSucc 3, 75, Int.negSucc 28, 0, 30, 13, Int.negSucc 8, 21, Int.negSucc 63, Int.negSucc 54, 13, 3, Int.negSucc 0, 3, 24, 21, 34, Int.negSucc 30, Int.negSucc 7, 11, 13, 14, 52, 5, Int.negSucc 33, 19, 37, Int.negSucc 38, Int.negSucc 11, Int.negSucc 14, 6, 57, 18, 8, Int.negSucc 8, Int.negSucc 11, 24, 22, 53, 5, 39, Int.negSucc 17, 29, Int.negSucc 5, Int.negSucc 23, 23, 8, Int.negSucc 17, 42, 6, 53, Int.negSucc 41, 5, Int.negSucc 50, 18, 4, Int.negSucc 23, 7, 19, Int.negSucc 0, 22, 25, 4, Int.negSucc 54, 34, 75, 17, 23, Int.negSucc 17, 44, Int.negSucc 18, Int.negSucc 39, Int.negSucc 4, Int.negSucc 23, Int.negSucc 35, Int.negSucc 79, Int.negSucc 58, Int.negSucc 25, 6, Int.negSucc 15, 16, 60, Int.negSucc 35, 27, Int.negSucc 58, Int.negSucc 30, Int.negSucc 20, 5, 7, Int.negSucc 23, Int.negSucc 48, Int.negSucc 53, Int.negSucc 3, Int.negSucc 29, Int.negSucc 62, 10, 16, Int.negSucc 2, Int.negSucc 47, 16, 81, 8, Int.negSucc 22, 9, Int.negSucc 7, 13, 19, Int.negSucc 21, 11, 67, Int.negSucc 17, Int.negSucc 13, 56, Int.negSucc 32, 18, 24, 33, 35, 19, Int.negSucc 8, Int.negSucc 19, 61, Int.negSucc 0, Int.negSucc 25, Int.negSucc 4, Int.negSucc 65, Int.negSucc 5, 9, 24, 25, Int.negSucc 61, 11, Int.negSucc 13, 6, Int.negSucc 9, 3, 23, 16, Int.negSucc 1, 24, Int.negSucc 32, Int.negSucc 31, 27, 37, Int.negSucc 15, 53, 14, 12, 4, 44, 6, 15, Int.negSucc 21, Int.negSucc 8, 41, Int.negSucc 4, Int.negSucc 42, Int.negSucc 3, Int.negSucc 13, Int.negSucc 16, Int.negSucc 33, 55, 53, Int.negSucc 4, 17, Int.negSucc 31, 50, 59, Int.negSucc 73, Int.negSucc 28, Int.negSucc 21, Int.negSucc 18, Int.negSucc 37, 29, 32, Int.negSucc 31, Int.negSucc 13, 33, Int.negSucc 60, 20, Int.negSucc 12, Int.negSucc 55, 8, Int.negSucc 95, 3, Int.negSucc 18, Int.negSucc 3, Int.negSucc 33, Int.negSucc 21, 33, 9, Int.negSucc 25, Int.negSucc 18, Int.negSucc 8, 4, Int.negSucc 26, Int.negSucc 28, 67, Int.negSucc 34, 44, Int.negSucc 56, 23, Int.negSucc 16, Int.negSucc 68, Int.negSucc 59, 27, Int.negSucc 63, Int.negSucc 9, 9, 29, 17, 5, 33, 86, Int.negSucc 63, 2, 64, 66, 30, 80, Int.negSucc 23, 14, 4, Int.negSucc 13, Int.negSucc 11, 19, Int.negSucc 75, Int.negSucc 45, Int.negSucc 71, Int.negSucc 31, 50, Int.negSucc 42, Int.negSucc 1, Int.negSucc 66, Int.negSucc 18, 41, 53, Int.negSucc 13]
 
-noncomputable def b3 : Vec 8 := ![((599 : ℝ)/4096), ((-3643 : ℝ)/16384), ((3881 : ℝ)/16384), ((2351 : ℝ)/8192), ((401 : ℝ)/4096), ((5053 : ℝ)/16384), ((1455 : ℝ)/16384), ((819 : ℝ)/8192)]
+/-- dense3's column 1: unit 1's weights over the 392 pooled features, numerators over 128. -/
+def w3c1Z : List ℤ := [13, Int.negSucc 15, 22, 64, 41, 32, Int.negSucc 36, 1, 36, 8, 32, 11, 2, Int.negSucc 76, Int.negSucc 47, Int.negSucc 4, Int.negSucc 6, Int.negSucc 41, 16, Int.negSucc 49, 10, 22, Int.negSucc 37, Int.negSucc 30, 72, 20, Int.negSucc 10, 33, 45, Int.negSucc 31, 17, Int.negSucc 118, Int.negSucc 12, 13, Int.negSucc 6, 3, 22, 74, 29, Int.negSucc 23, Int.negSucc 9, 7, Int.negSucc 14, 14, 32, 4, Int.negSucc 9, Int.negSucc 28, 5, 17, Int.negSucc 25, 35, Int.negSucc 19, 29, 14, Int.negSucc 47, Int.negSucc 22, 6, Int.negSucc 5, 7, Int.negSucc 0, 41, 42, 14, 0, 18, 9, Int.negSucc 5, 27, 43, Int.negSucc 24, 31, 4, 4, Int.negSucc 25, 31, Int.negSucc 0, 9, Int.negSucc 32, Int.negSucc 13, Int.negSucc 25, Int.negSucc 21, 1, 39, 27, Int.negSucc 7, Int.negSucc 61, 25, 38, 38, 5, 40, Int.negSucc 12, 1, Int.negSucc 17, Int.negSucc 30, Int.negSucc 14, 29, 1, 28, 20, 7, Int.negSucc 10, 24, 23, Int.negSucc 47, Int.negSucc 75, Int.negSucc 23, 6, Int.negSucc 3, Int.negSucc 7, 37, Int.negSucc 14, 19, 0, 6, Int.negSucc 11, Int.negSucc 33, Int.negSucc 13, Int.negSucc 51, Int.negSucc 23, 17, 4, 66, 21, 32, Int.negSucc 51, 3, Int.negSucc 22, 81, 63, 32, 19, Int.negSucc 26, Int.negSucc 4, 14, 21, 40, 14, 13, Int.negSucc 30, 30, Int.negSucc 32, 0, 40, 20, Int.negSucc 5, 20, Int.negSucc 50, 53, 2, Int.negSucc 12, 44, 28, 21, Int.negSucc 20, Int.negSucc 8, 14, 35, Int.negSucc 0, 13, 39, 37, 3, 29, 17, 46, 58, Int.negSucc 25, 19, 66, 14, Int.negSucc 39, 29, 11, Int.negSucc 18, Int.negSucc 3, 27, Int.negSucc 6, Int.negSucc 49, Int.negSucc 42, Int.negSucc 9, Int.negSucc 2, Int.negSucc 26, 70, Int.negSucc 48, 10, 15, Int.negSucc 16, 54, Int.negSucc 24, 24, 57, Int.negSucc 7, 17, 83, 35, Int.negSucc 2, Int.negSucc 18, Int.negSucc 11, 22, Int.negSucc 26, 63, Int.negSucc 10, Int.negSucc 22, Int.negSucc 60, 19, Int.negSucc 23, 0, Int.negSucc 39, Int.negSucc 6, 23, Int.negSucc 58, 15, Int.negSucc 32, Int.negSucc 48, 2, Int.negSucc 55, 0, 5, Int.negSucc 15, 16, 20, Int.negSucc 6, 30, 44, Int.negSucc 13, 0, 17, 38, 17, 11, Int.negSucc 5, Int.negSucc 19, 22, 26, Int.negSucc 30, 36, 22, Int.negSucc 22, Int.negSucc 10, 7, 38, 23, 31, 79, 81, 55, 105, 50, 61, 12, Int.negSucc 37, 3, 17, 48, Int.negSucc 3, 4, 19, 34, 3, 38, 1, 45, 61, 75, Int.negSucc 0, 54, Int.negSucc 6, 38, Int.negSucc 23, 0, 20, Int.negSucc 14, 13, Int.negSucc 50, 21, 46, Int.negSucc 14, 40, Int.negSucc 38, Int.negSucc 9, Int.negSucc 28, Int.negSucc 55, Int.negSucc 21, Int.negSucc 2, Int.negSucc 48, Int.negSucc 20, Int.negSucc 5, Int.negSucc 27, Int.negSucc 79, Int.negSucc 23, 38, Int.negSucc 18, Int.negSucc 21, Int.negSucc 12, 2, Int.negSucc 18, Int.negSucc 6, Int.negSucc 16, Int.negSucc 38, Int.negSucc 49, 2, Int.negSucc 7, Int.negSucc 53, Int.negSucc 36, Int.negSucc 5, Int.negSucc 10, Int.negSucc 44, Int.negSucc 39, Int.negSucc 47, 7, Int.negSucc 40, Int.negSucc 42, Int.negSucc 12, Int.negSucc 41, 13, Int.negSucc 3, Int.negSucc 57, Int.negSucc 14, Int.negSucc 45, Int.negSucc 9, 41, 18, Int.negSucc 1, 10, Int.negSucc 18, 20, Int.negSucc 1, 10, Int.negSucc 17, Int.negSucc 5, Int.negSucc 39, 7, 2, 14, Int.negSucc 39, 21, 0, 40, 5, 12, 32, 18, Int.negSucc 19, Int.negSucc 15, 5, Int.negSucc 56, Int.negSucc 4, 11, Int.negSucc 48, Int.negSucc 40, 10, Int.negSucc 8, Int.negSucc 25, 62, 65, 32, 40, 31, Int.negSucc 14, Int.negSucc 12, 31, 26, 51, 54, Int.negSucc 18, 4, Int.negSucc 16, 22, 30, 23, Int.negSucc 43, Int.negSucc 27, Int.negSucc 1, 53, Int.negSucc 51, 17, 36, Int.negSucc 6, 48, 4, 54, 35, 24, 59, 12, 29, Int.negSucc 28, Int.negSucc 14, 16, 17]
+
+/-- dense3's column 2: unit 2's weights over the 392 pooled features, numerators over 128. -/
+def w3c2Z : List ℤ := [14, 10, 32, 5, Int.negSucc 25, 2, 22, Int.negSucc 10, 15, Int.negSucc 27, 41, 10, Int.negSucc 26, 16, 53, Int.negSucc 46, Int.negSucc 13, 32, Int.negSucc 26, Int.negSucc 18, Int.negSucc 2, Int.negSucc 32, 10, 18, Int.negSucc 8, Int.negSucc 10, 1, Int.negSucc 23, 14, Int.negSucc 19, Int.negSucc 7, 6, 28, 12, 19, 28, Int.negSucc 4, Int.negSucc 16, Int.negSucc 20, Int.negSucc 5, 27, Int.negSucc 25, Int.negSucc 6, Int.negSucc 9, Int.negSucc 7, Int.negSucc 14, 49, 11, 33, 54, Int.negSucc 2, 42, 24, 36, 49, Int.negSucc 6, 40, Int.negSucc 14, 16, 1, Int.negSucc 52, 14, 29, Int.negSucc 12, 24, 14, 25, 32, Int.negSucc 11, Int.negSucc 40, Int.negSucc 76, Int.negSucc 17, 49, Int.negSucc 7, 12, 48, 2, 9, Int.negSucc 12, 61, 47, 56, 58, 10, 59, Int.negSucc 42, Int.negSucc 3, 55, Int.negSucc 3, 13, 12, Int.negSucc 30, Int.negSucc 5, 3, 23, 46, Int.negSucc 34, Int.negSucc 45, Int.negSucc 29, 73, 3, 11, 3, 8, Int.negSucc 28, Int.negSucc 5, 29, Int.negSucc 2, Int.negSucc 14, Int.negSucc 39, Int.negSucc 44, 33, Int.negSucc 50, Int.negSucc 81, Int.negSucc 32, 1, 6, 0, 26, Int.negSucc 35, 22, 16, Int.negSucc 48, 14, 36, Int.negSucc 53, 62, Int.negSucc 2, 3, 1, Int.negSucc 17, Int.negSucc 2, Int.negSucc 5, Int.negSucc 34, Int.negSucc 3, Int.negSucc 41, 27, Int.negSucc 28, Int.negSucc 57, 18, Int.negSucc 2, Int.negSucc 29, Int.negSucc 30, Int.negSucc 32, 12, 6, Int.negSucc 2, 17, Int.negSucc 25, 20, Int.negSucc 9, 10, Int.negSucc 26, 21, 26, Int.negSucc 1, Int.negSucc 2, 40, 47, Int.negSucc 23, 41, 38, 47, 30, 37, Int.negSucc 44, 11, 44, Int.negSucc 24, 24, Int.negSucc 33, 33, 15, 51, 62, 47, 46, Int.negSucc 0, 24, 11, 41, Int.negSucc 24, 4, Int.negSucc 0, Int.negSucc 4, 3, 31, 33, 49, Int.negSucc 15, Int.negSucc 22, 78, 41, 40, 12, Int.negSucc 34, Int.negSucc 32, 31, 39, 69, Int.negSucc 21, Int.negSucc 68, Int.negSucc 6, Int.negSucc 70, Int.negSucc 14, Int.negSucc 21, 8, 25, Int.negSucc 36, Int.negSucc 9, 13, 22, 12, Int.negSucc 35, 7, Int.negSucc 36, Int.negSucc 1, Int.negSucc 46, Int.negSucc 10, Int.negSucc 19, Int.negSucc 7, Int.negSucc 30, Int.negSucc 29, Int.negSucc 42, 43, Int.negSucc 31, 21, Int.negSucc 17, Int.negSucc 11, 17, 5, 58, 33, 14, 18, Int.negSucc 61, Int.negSucc 17, 23, Int.negSucc 13, Int.negSucc 18, 53, 16, 44, 16, Int.negSucc 4, 32, 14, 47, Int.negSucc 37, 26, 1, Int.negSucc 39, 48, Int.negSucc 10, 30, 29, 42, 14, 44, Int.negSucc 12, 14, Int.negSucc 20, 49, 23, 3, Int.negSucc 6, Int.negSucc 35, 7, Int.negSucc 2, 87, 18, Int.negSucc 26, 27, Int.negSucc 4, 26, Int.negSucc 2, Int.negSucc 6, Int.negSucc 21, 26, Int.negSucc 3, 36, Int.negSucc 5, 17, Int.negSucc 40, 16, Int.negSucc 13, 5, Int.negSucc 19, 35, 31, Int.negSucc 3, Int.negSucc 1, Int.negSucc 17, 34, 30, Int.negSucc 0, Int.negSucc 35, 10, 28, Int.negSucc 0, 26, Int.negSucc 39, Int.negSucc 6, 22, Int.negSucc 6, Int.negSucc 51, 25, 48, Int.negSucc 28, Int.negSucc 16, Int.negSucc 32, 29, 19, 72, 5, 0, Int.negSucc 24, Int.negSucc 33, Int.negSucc 15, Int.negSucc 3, Int.negSucc 3, Int.negSucc 9, 13, 7, Int.negSucc 31, Int.negSucc 8, Int.negSucc 29, Int.negSucc 53, Int.negSucc 35, Int.negSucc 73, Int.negSucc 45, Int.negSucc 44, Int.negSucc 31, Int.negSucc 13, Int.negSucc 54, Int.negSucc 30, 15, Int.negSucc 64, Int.negSucc 1, 23, 5, 19, Int.negSucc 17, Int.negSucc 59, Int.negSucc 18, Int.negSucc 11, Int.negSucc 28, 29, 36, 11, 21, Int.negSucc 25, Int.negSucc 12, Int.negSucc 26, Int.negSucc 41, Int.negSucc 17, Int.negSucc 10, Int.negSucc 7, Int.negSucc 25, Int.negSucc 6, Int.negSucc 16, Int.negSucc 9, 9, 21, 42, 19, 21, 44, Int.negSucc 23, 33, Int.negSucc 16, 2, 2, Int.negSucc 3, 13, 26, 17, Int.negSucc 36, Int.negSucc 13, Int.negSucc 73, Int.negSucc 35, Int.negSucc 26, Int.negSucc 13, 12, 0, 9, 7, 77, 6, 26, 1, Int.negSucc 12]
+
+/-- dense3's column 3: unit 3's weights over the 392 pooled features, numerators over 128. -/
+def w3c3Z : List ℤ := [22, Int.negSucc 7, Int.negSucc 19, Int.negSucc 19, 54, Int.negSucc 19, Int.negSucc 43, Int.negSucc 1, 17, Int.negSucc 34, 38, Int.negSucc 11, Int.negSucc 16, Int.negSucc 9, 29, 33, 17, 0, Int.negSucc 17, 45, Int.negSucc 17, 25, 31, Int.negSucc 7, Int.negSucc 32, 7, 28, Int.negSucc 41, Int.negSucc 11, 23, 9, 5, Int.negSucc 22, Int.negSucc 0, 8, Int.negSucc 27, Int.negSucc 34, Int.negSucc 3, 52, 4, 35, Int.negSucc 6, Int.negSucc 18, 17, Int.negSucc 3, 16, Int.negSucc 2, 45, 43, 10, 69, 61, 46, 39, 18, 41, 9, Int.negSucc 8, Int.negSucc 40, 25, 6, Int.negSucc 14, 9, Int.negSucc 32, Int.negSucc 25, Int.negSucc 20, Int.negSucc 46, Int.negSucc 50, Int.negSucc 23, 8, Int.negSucc 38, Int.negSucc 59, 0, 15, 55, 11, 60, Int.negSucc 3, Int.negSucc 32, Int.negSucc 34, Int.negSucc 16, Int.negSucc 0, Int.negSucc 25, 22, Int.negSucc 30, Int.negSucc 20, Int.negSucc 20, Int.negSucc 16, 79, 49, 67, 39, 27, 7, Int.negSucc 5, Int.negSucc 28, Int.negSucc 24, Int.negSucc 3, 17, Int.negSucc 1, 7, 30, Int.negSucc 26, 0, 32, Int.negSucc 1, Int.negSucc 29, 4, Int.negSucc 38, Int.negSucc 21, Int.negSucc 37, Int.negSucc 33, Int.negSucc 7, Int.negSucc 8, Int.negSucc 15, 1, Int.negSucc 55, Int.negSucc 68, Int.negSucc 28, Int.negSucc 36, Int.negSucc 19, 39, 4, Int.negSucc 4, 22, Int.negSucc 44, Int.negSucc 44, 6, Int.negSucc 20, 21, 14, 0, Int.negSucc 83, Int.negSucc 5, 2, 2, 3, 10, 12, 34, 35, 29, Int.negSucc 49, Int.negSucc 14, Int.negSucc 55, Int.negSucc 18, Int.negSucc 45, Int.negSucc 87, Int.negSucc 50, Int.negSucc 9, Int.negSucc 9, Int.negSucc 30, Int.negSucc 10, Int.negSucc 14, 23, 56, Int.negSucc 9, Int.negSucc 49, 18, Int.negSucc 28, Int.negSucc 8, 51, 59, 56, 64, 4, Int.negSucc 21, Int.negSucc 7, Int.negSucc 50, Int.negSucc 33, 6, Int.negSucc 16, 40, 28, Int.negSucc 4, Int.negSucc 25, Int.negSucc 34, Int.negSucc 9, Int.negSucc 2, 17, 1, Int.negSucc 40, 48, Int.negSucc 1, 33, 44, 30, Int.negSucc 7, Int.negSucc 21, 40, Int.negSucc 0, Int.negSucc 47, 8, Int.negSucc 5, Int.negSucc 39, 13, Int.negSucc 60, 25, 59, 4, Int.negSucc 41, 4, Int.negSucc 34, Int.negSucc 67, Int.negSucc 5, Int.negSucc 13, 14, Int.negSucc 5, Int.negSucc 0, 14, Int.negSucc 11, Int.negSucc 2, 11, 20, Int.negSucc 37, 7, Int.negSucc 1, Int.negSucc 28, Int.negSucc 21, Int.negSucc 66, 26, Int.negSucc 31, 9, Int.negSucc 19, Int.negSucc 22, Int.negSucc 28, Int.negSucc 37, 38, Int.negSucc 30, 38, 12, 13, Int.negSucc 10, 11, 39, Int.negSucc 0, 27, 3, Int.negSucc 37, 20, Int.negSucc 8, Int.negSucc 50, Int.negSucc 6, Int.negSucc 16, Int.negSucc 8, Int.negSucc 12, 8, Int.negSucc 31, 43, 19, 23, 15, Int.negSucc 34, Int.negSucc 16, 15, Int.negSucc 40, 34, Int.negSucc 9, Int.negSucc 6, Int.negSucc 32, 0, 30, Int.negSucc 9, 0, 30, 21, Int.negSucc 31, Int.negSucc 14, Int.negSucc 55, Int.negSucc 13, 3, Int.negSucc 3, 93, 50, 27, 53, Int.negSucc 39, Int.negSucc 3, 13, 17, 21, 28, 28, 17, Int.negSucc 4, Int.negSucc 28, 97, 62, 21, 52, Int.negSucc 13, 83, Int.negSucc 20, Int.negSucc 34, 28, Int.negSucc 18, Int.negSucc 50, Int.negSucc 33, 7, 57, 25, 36, Int.negSucc 57, 20, Int.negSucc 29, 30, 22, Int.negSucc 38, 9, 41, 18, Int.negSucc 1, Int.negSucc 4, 37, Int.negSucc 11, 29, Int.negSucc 26, Int.negSucc 4, Int.negSucc 1, 43, Int.negSucc 27, Int.negSucc 69, Int.negSucc 7, 4, Int.negSucc 11, 26, 26, 5, Int.negSucc 14, Int.negSucc 34, Int.negSucc 23, 5, Int.negSucc 1, 17, Int.negSucc 9, 0, Int.negSucc 20, 81, Int.negSucc 15, Int.negSucc 16, 37, 38, 36, 38, Int.negSucc 0, 19, 29, 38, Int.negSucc 48, Int.negSucc 65, 19, Int.negSucc 29, 8, 13, Int.negSucc 30, 21, 35, 10, Int.negSucc 7, 6, Int.negSucc 14, Int.negSucc 48, 4, Int.negSucc 9, 41, 12, Int.negSucc 59, Int.negSucc 14, 15, 50, 33, 6, Int.negSucc 91, 48, 18, Int.negSucc 4, Int.negSucc 30, Int.negSucc 48, Int.negSucc 39, Int.negSucc 37, Int.negSucc 31, 7, 7, 21, 16, Int.negSucc 5, Int.negSucc 11, Int.negSucc 33, 14, Int.negSucc 43, 23, 2]
+
+/-- dense3's column 4: unit 4's weights over the 392 pooled features, numerators over 128. -/
+def w3c4Z : List ℤ := [Int.negSucc 37, 51, 58, Int.negSucc 11, Int.negSucc 8, Int.negSucc 38, Int.negSucc 16, 27, 9, Int.negSucc 31, Int.negSucc 80, Int.negSucc 63, Int.negSucc 1, Int.negSucc 16, 34, Int.negSucc 61, Int.negSucc 14, Int.negSucc 8, Int.negSucc 41, 36, 5, 45, Int.negSucc 27, 12, Int.negSucc 22, Int.negSucc 40, Int.negSucc 31, Int.negSucc 31, Int.negSucc 6, Int.negSucc 36, Int.negSucc 33, Int.negSucc 1, 42, Int.negSucc 5, 16, 39, 19, 55, 18, 14, Int.negSucc 0, Int.negSucc 25, 17, Int.negSucc 43, 23, 54, Int.negSucc 12, 14, 36, 19, 19, 2, 30, 5, Int.negSucc 3, Int.negSucc 26, 0, 44, 4, 38, Int.negSucc 34, Int.negSucc 33, Int.negSucc 76, Int.negSucc 17, Int.negSucc 0, 15, 18, 51, 33, 30, 15, 2, 25, Int.negSucc 46, Int.negSucc 48, Int.negSucc 57, Int.negSucc 70, Int.negSucc 75, Int.negSucc 45, Int.negSucc 31, 27, 7, 6, 35, Int.negSucc 2, Int.negSucc 37, Int.negSucc 29, Int.negSucc 13, Int.negSucc 37, Int.negSucc 17, Int.negSucc 67, 9, 12, 0, 38, Int.negSucc 3, Int.negSucc 21, 11, Int.negSucc 2, 40, 16, Int.negSucc 12, Int.negSucc 40, Int.negSucc 17, Int.negSucc 12, 88, 8, Int.negSucc 25, Int.negSucc 43, Int.negSucc 42, Int.negSucc 29, Int.negSucc 10, Int.negSucc 24, 26, 8, 11, Int.negSucc 13, Int.negSucc 34, 9, 24, 19, Int.negSucc 22, Int.negSucc 4, Int.negSucc 37, 13, 39, Int.negSucc 16, Int.negSucc 72, 4, 57, 19, 19, Int.negSucc 2, Int.negSucc 2, Int.negSucc 23, 4, Int.negSucc 42, 21, 24, 44, 42, 3, Int.negSucc 2, 51, 13, 36, Int.negSucc 36, Int.negSucc 12, Int.negSucc 10, 48, 31, Int.negSucc 11, 80, Int.negSucc 3, 72, 57, 18, Int.negSucc 2, 59, 41, 63, Int.negSucc 4, 16, 2, 21, 17, Int.negSucc 16, Int.negSucc 46, 30, 0, 1, 61, 59, Int.negSucc 24, 31, 56, Int.negSucc 33, Int.negSucc 6, 4, 17, Int.negSucc 49, 14, 16, Int.negSucc 12, 38, Int.negSucc 6, Int.negSucc 35, Int.negSucc 31, 1, 17, 8, Int.negSucc 9, Int.negSucc 44, Int.negSucc 48, 74, Int.negSucc 10, Int.negSucc 56, 12, Int.negSucc 16, 29, Int.negSucc 47, 37, Int.negSucc 50, 16, Int.negSucc 6, Int.negSucc 46, 43, Int.negSucc 18, 24, Int.negSucc 99, 37, 5, 1, 58, 11, 21, 55, 6, 41, 27, Int.negSucc 17, 10, 18, 17, 17, 26, 23, Int.negSucc 37, 13, 1, 68, 21, 3, Int.negSucc 37, Int.negSucc 14, Int.negSucc 41, Int.negSucc 17, 10, 26, Int.negSucc 43, 5, Int.negSucc 8, 92, 28, 98, 36, 37, 21, 5, 26, 15, 10, Int.negSucc 24, Int.negSucc 7, Int.negSucc 19, Int.negSucc 4, 40, Int.negSucc 16, 37, Int.negSucc 4, 15, Int.negSucc 22, Int.negSucc 2, Int.negSucc 24, 61, 6, 29, Int.negSucc 19, Int.negSucc 27, Int.negSucc 29, 28, Int.negSucc 65, 58, 17, 34, Int.negSucc 34, 2, 32, Int.negSucc 23, Int.negSucc 36, 2, Int.negSucc 26, Int.negSucc 30, Int.negSucc 10, Int.negSucc 16, Int.negSucc 2, 50, 58, Int.negSucc 7, 12, 5, Int.negSucc 77, Int.negSucc 32, Int.negSucc 7, Int.negSucc 18, 2, 6, Int.negSucc 13, 9, 16, 34, Int.negSucc 29, 25, Int.negSucc 7, Int.negSucc 4, 2, 21, 4, Int.negSucc 37, 48, Int.negSucc 4, Int.negSucc 1, Int.negSucc 3, 39, Int.negSucc 9, 47, Int.negSucc 41, 4, 18, 29, Int.negSucc 33, 7, 35, 8, 21, 17, 16, 45, Int.negSucc 48, 33, Int.negSucc 8, 25, 49, 13, 8, 30, 17, 20, 24, Int.negSucc 4, 47, Int.negSucc 25, 8, 9, 37, Int.negSucc 0, 31, Int.negSucc 33, 6, Int.negSucc 33, 49, Int.negSucc 39, 0, Int.negSucc 29, 2, 3, 21, 46, 41, Int.negSucc 9, Int.negSucc 2, 6, 36, 32, 22, 19, 16, Int.negSucc 33, Int.negSucc 26, 53, Int.negSucc 37, 23, 41, 18, 3, 4, Int.negSucc 7, Int.negSucc 65, 27, 18, Int.negSucc 9, Int.negSucc 64, Int.negSucc 81, Int.negSucc 6, 8, 27, 36, 79, 28, Int.negSucc 22, 41, 34]
+
+/-- dense3's column 5: unit 5's weights over the 392 pooled features, numerators over 128. -/
+def w3c5Z : List ℤ := [Int.negSucc 20, 42, Int.negSucc 41, Int.negSucc 34, 51, Int.negSucc 43, 22, Int.negSucc 17, Int.negSucc 35, 18, 45, Int.negSucc 1, Int.negSucc 46, Int.negSucc 7, 1, Int.negSucc 7, 43, 50, 19, 61, 86, 5, Int.negSucc 14, 12, 9, 72, Int.negSucc 2, 0, Int.negSucc 16, Int.negSucc 46, 17, Int.negSucc 35, Int.negSucc 4, Int.negSucc 10, Int.negSucc 54, Int.negSucc 41, 13, 8, Int.negSucc 11, Int.negSucc 12, 41, Int.negSucc 18, 3, 65, 14, Int.negSucc 34, Int.negSucc 10, 27, 59, 17, 20, Int.negSucc 9, 12, Int.negSucc 18, Int.negSucc 2, 13, 14, Int.negSucc 33, Int.negSucc 32, Int.negSucc 2, Int.negSucc 14, 46, 22, 17, Int.negSucc 33, Int.negSucc 6, 14, Int.negSucc 24, 56, Int.negSucc 0, 50, Int.negSucc 59, 12, Int.negSucc 11, 45, 56, 61, 9, Int.negSucc 20, Int.negSucc 25, Int.negSucc 22, Int.negSucc 12, Int.negSucc 53, Int.negSucc 7, Int.negSucc 21, Int.negSucc 35, Int.negSucc 57, 47, 30, 4, 71, Int.negSucc 6, Int.negSucc 42, 11, Int.negSucc 1, 29, 32, 21, 1, Int.negSucc 6, 35, 24, 5, Int.negSucc 13, 27, 66, 40, Int.negSucc 9, Int.negSucc 2, Int.negSucc 41, 18, 7, 24, Int.negSucc 15, Int.negSucc 64, 39, Int.negSucc 2, 76, 83, 37, 43, Int.negSucc 2, Int.negSucc 8, Int.negSucc 0, 64, Int.negSucc 99, Int.negSucc 11, 9, Int.negSucc 21, 23, 21, 54, 22, 25, Int.negSucc 2, 0, Int.negSucc 8, Int.negSucc 39, Int.negSucc 12, Int.negSucc 14, 15, 2, Int.negSucc 2, Int.negSucc 9, 14, 27, 81, 41, 17, 18, Int.negSucc 16, 1, 18, Int.negSucc 52, 37, Int.negSucc 2, 58, Int.negSucc 30, 46, 8, 12, Int.negSucc 20, Int.negSucc 7, Int.negSucc 20, 19, Int.negSucc 1, 65, 46, 9, Int.negSucc 38, 11, Int.negSucc 23, Int.negSucc 23, Int.negSucc 18, Int.negSucc 27, Int.negSucc 38, Int.negSucc 29, 14, 11, 22, Int.negSucc 13, 25, Int.negSucc 31, Int.negSucc 44, Int.negSucc 2, Int.negSucc 23, Int.negSucc 21, Int.negSucc 39, 27, Int.negSucc 9, Int.negSucc 5, Int.negSucc 9, 6, Int.negSucc 34, Int.negSucc 0, Int.negSucc 25, Int.negSucc 24, Int.negSucc 19, Int.negSucc 65, Int.negSucc 37, 19, Int.negSucc 6, Int.negSucc 43, Int.negSucc 12, Int.negSucc 43, Int.negSucc 7, 43, 44, 13, 24, 13, Int.negSucc 1, Int.negSucc 71, Int.negSucc 43, Int.negSucc 20, Int.negSucc 44, 45, Int.negSucc 38, Int.negSucc 9, 34, 23, 19, Int.negSucc 19, Int.negSucc 8, 4, Int.negSucc 1, 30, 35, Int.negSucc 25, Int.negSucc 38, 16, 7, Int.negSucc 28, 34, 50, Int.negSucc 47, Int.negSucc 38, 41, Int.negSucc 36, 26, Int.negSucc 36, Int.negSucc 4, 13, Int.negSucc 61, Int.negSucc 21, Int.negSucc 61, 23, 1, Int.negSucc 16, 26, 32, Int.negSucc 45, Int.negSucc 46, 8, Int.negSucc 16, Int.negSucc 38, 11, 2, Int.negSucc 104, Int.negSucc 72, Int.negSucc 6, Int.negSucc 1, 41, 51, 8, Int.negSucc 20, Int.negSucc 31, 13, 59, 40, Int.negSucc 38, Int.negSucc 23, Int.negSucc 15, 41, Int.negSucc 39, 68, 7, 19, Int.negSucc 22, Int.negSucc 12, 32, Int.negSucc 36, Int.negSucc 11, 15, Int.negSucc 35, 31, 33, 40, 60, 9, Int.negSucc 5, Int.negSucc 17, 41, Int.negSucc 19, Int.negSucc 42, 32, Int.negSucc 26, 55, 39, 22, 38, Int.negSucc 2, 24, 8, Int.negSucc 31, Int.negSucc 8, Int.negSucc 31, Int.negSucc 5, Int.negSucc 6, Int.negSucc 36, 27, Int.negSucc 39, Int.negSucc 2, 92, 45, Int.negSucc 2, Int.negSucc 14, 25, 7, 8, 37, 47, Int.negSucc 18, Int.negSucc 54, Int.negSucc 21, 26, 19, Int.negSucc 51, Int.negSucc 24, Int.negSucc 43, 9, Int.negSucc 7, 79, Int.negSucc 21, Int.negSucc 15, Int.negSucc 14, 25, Int.negSucc 25, Int.negSucc 33, Int.negSucc 10, 26, Int.negSucc 37, 41, 47, Int.negSucc 5, 16, 1, 45, Int.negSucc 25, Int.negSucc 56, Int.negSucc 5, 17, 18, Int.negSucc 50, Int.negSucc 23, 22, 45, 36, 52, 8, 33, 12, Int.negSucc 13, Int.negSucc 15, 5, Int.negSucc 44, 39, Int.negSucc 59, Int.negSucc 31, 0, 15, 54, Int.negSucc 67, 11, 27, Int.negSucc 37, 27, 70, Int.negSucc 8, 62, 9, Int.negSucc 30, Int.negSucc 25, 45, Int.negSucc 13, Int.negSucc 26, 18, Int.negSucc 56, Int.negSucc 7, Int.negSucc 37, 13, Int.negSucc 24]
+
+/-- dense3's column 6: unit 6's weights over the 392 pooled features, numerators over 128. -/
+def w3c6Z : List ℤ := [Int.negSucc 13, 20, Int.negSucc 20, Int.negSucc 40, Int.negSucc 13, 15, Int.negSucc 72, 44, Int.negSucc 5, 11, 12, Int.negSucc 24, 10, 58, 29, Int.negSucc 5, 12, Int.negSucc 40, 25, Int.negSucc 29, Int.negSucc 10, Int.negSucc 24, Int.negSucc 61, 62, 47, Int.negSucc 13, Int.negSucc 42, 1, Int.negSucc 93, 21, 40, 7, Int.negSucc 21, 25, 5, Int.negSucc 52, 47, 6, 0, 39, Int.negSucc 27, Int.negSucc 31, 51, Int.negSucc 42, Int.negSucc 7, Int.negSucc 37, 42, Int.negSucc 49, 21, 2, Int.negSucc 47, 9, 17, Int.negSucc 4, 11, 41, 23, 62, 25, Int.negSucc 3, Int.negSucc 4, 29, Int.negSucc 16, Int.negSucc 27, 37, 61, Int.negSucc 19, Int.negSucc 26, 4, Int.negSucc 7, 58, Int.negSucc 9, 56, Int.negSucc 17, 46, Int.negSucc 14, Int.negSucc 39, 0, 56, Int.negSucc 7, 37, Int.negSucc 14, 2, 35, Int.negSucc 11, Int.negSucc 54, 27, 21, 72, Int.negSucc 72, Int.negSucc 42, Int.negSucc 10, 23, 10, 49, 24, Int.negSucc 18, Int.negSucc 5, Int.negSucc 27, 13, Int.negSucc 20, 3, 0, 16, Int.negSucc 26, Int.negSucc 10, 3, 20, Int.negSucc 0, 14, 4, Int.negSucc 96, Int.negSucc 28, Int.negSucc 48, Int.negSucc 56, 27, 12, Int.negSucc 10, Int.negSucc 10, 19, Int.negSucc 61, 12, 13, Int.negSucc 17, Int.negSucc 15, Int.negSucc 37, 3, Int.negSucc 44, Int.negSucc 34, 15, Int.negSucc 4, 37, 15, 30, Int.negSucc 53, Int.negSucc 40, 35, Int.negSucc 19, 23, 55, Int.negSucc 19, 48, 19, Int.negSucc 45, Int.negSucc 2, Int.negSucc 58, 30, 18, Int.negSucc 32, 22, Int.negSucc 38, 12, 26, 5, Int.negSucc 23, 7, 12, 2, 6, 31, Int.negSucc 17, 14, Int.negSucc 68, 1, 57, 1, Int.negSucc 39, 47, 16, Int.negSucc 28, 19, Int.negSucc 14, 32, Int.negSucc 7, 41, Int.negSucc 66, 15, Int.negSucc 8, 20, 12, 40, Int.negSucc 17, 17, Int.negSucc 54, 3, 9, 29, 60, 39, 14, 52, 43, Int.negSucc 45, Int.negSucc 40, 77, 69, 7, 25, 19, Int.negSucc 89, 22, Int.negSucc 46, Int.negSucc 5, 38, Int.negSucc 18, Int.negSucc 14, Int.negSucc 90, Int.negSucc 46, 10, 11, Int.negSucc 24, 27, 51, 87, Int.negSucc 23, Int.negSucc 5, Int.negSucc 20, 33, Int.negSucc 15, Int.negSucc 47, 54, 25, 65, 23, 9, Int.negSucc 23, 11, Int.negSucc 58, Int.negSucc 62, 10, Int.negSucc 16, Int.negSucc 78, 33, 66, 9, Int.negSucc 20, Int.negSucc 65, Int.negSucc 27, Int.negSucc 26, Int.negSucc 5, 21, 62, Int.negSucc 16, Int.negSucc 59, Int.negSucc 28, Int.negSucc 4, 25, 60, 15, Int.negSucc 23, Int.negSucc 11, Int.negSucc 23, 40, 23, Int.negSucc 48, 31, 18, Int.negSucc 25, Int.negSucc 40, 10, Int.negSucc 15, Int.negSucc 3, Int.negSucc 28, Int.negSucc 13, 19, Int.negSucc 48, Int.negSucc 19, 3, Int.negSucc 39, 8, Int.negSucc 58, Int.negSucc 28, 4, 65, 2, Int.negSucc 16, Int.negSucc 40, Int.negSucc 13, Int.negSucc 45, Int.negSucc 8, 39, 20, Int.negSucc 6, 12, Int.negSucc 21, Int.negSucc 53, Int.negSucc 1, Int.negSucc 2, 15, Int.negSucc 67, 28, 45, 3, Int.negSucc 46, Int.negSucc 2, 22, Int.negSucc 25, Int.negSucc 39, Int.negSucc 26, Int.negSucc 2, 15, 3, Int.negSucc 44, Int.negSucc 27, 2, Int.negSucc 29, Int.negSucc 28, Int.negSucc 21, Int.negSucc 7, 35, 25, 37, Int.negSucc 2, 61, 10, 6, 31, 22, Int.negSucc 29, 23, Int.negSucc 68, Int.negSucc 17, Int.negSucc 10, Int.negSucc 6, 49, Int.negSucc 7, Int.negSucc 15, Int.negSucc 19, 9, Int.negSucc 15, 22, Int.negSucc 47, 14, Int.negSucc 0, Int.negSucc 82, Int.negSucc 33, Int.negSucc 26, 34, 2, Int.negSucc 18, 6, 34, Int.negSucc 8, 3, Int.negSucc 17, Int.negSucc 55, 10, Int.negSucc 4, Int.negSucc 14, Int.negSucc 4, 24, 24, 39, Int.negSucc 13, Int.negSucc 2, Int.negSucc 1, 22, Int.negSucc 51, Int.negSucc 16, Int.negSucc 33, 37, Int.negSucc 6, 16, Int.negSucc 12, Int.negSucc 27, Int.negSucc 20, Int.negSucc 5, 32, 2, 51, Int.negSucc 3, 45, 19, Int.negSucc 6, Int.negSucc 46, Int.negSucc 6, Int.negSucc 21, 22, 8, Int.negSucc 0, Int.negSucc 37, Int.negSucc 38, 28, Int.negSucc 52, 36, 16, 16, Int.negSucc 21, Int.negSucc 64, 3, Int.negSucc 26, Int.negSucc 4]
+
+/-- dense3's column 7: unit 7's weights over the 392 pooled features, numerators over 128. -/
+def w3c7Z : List ℤ := [Int.negSucc 36, Int.negSucc 69, 30, 20, Int.negSucc 23, 31, 11, 20, Int.negSucc 32, 32, 9, 33, Int.negSucc 3, Int.negSucc 1, 12, Int.negSucc 32, Int.negSucc 14, Int.negSucc 18, Int.negSucc 19, 8, Int.negSucc 68, Int.negSucc 24, Int.negSucc 41, Int.negSucc 15, Int.negSucc 39, Int.negSucc 19, Int.negSucc 26, Int.negSucc 24, 4, 24, 20, 10, Int.negSucc 24, Int.negSucc 33, Int.negSucc 18, 24, 29, Int.negSucc 3, Int.negSucc 44, 35, Int.negSucc 39, 13, Int.negSucc 34, 29, Int.negSucc 94, 38, Int.negSucc 47, 35, 57, 18, Int.negSucc 38, Int.negSucc 6, Int.negSucc 7, Int.negSucc 18, 2, 25, Int.negSucc 22, 60, Int.negSucc 17, 48, Int.negSucc 2, 26, Int.negSucc 13, 66, 26, Int.negSucc 27, 34, Int.negSucc 13, 55, 0, 3, 19, 1, Int.negSucc 84, 16, 42, 33, 79, 15, 16, 0, 12, 32, 4, 2, 39, Int.negSucc 15, 68, Int.negSucc 4, 27, Int.negSucc 60, 13, Int.negSucc 22, Int.negSucc 50, Int.negSucc 43, Int.negSucc 64, Int.negSucc 34, Int.negSucc 2, 26, 12, Int.negSucc 60, Int.negSucc 17, Int.negSucc 1, Int.negSucc 11, Int.negSucc 24, 56, 55, Int.negSucc 1, Int.negSucc 6, 51, Int.negSucc 49, Int.negSucc 23, Int.negSucc 8, 10, Int.negSucc 29, Int.negSucc 43, Int.negSucc 7, 32, 8, 19, 1, Int.negSucc 57, 5, Int.negSucc 71, Int.negSucc 37, 21, Int.negSucc 11, Int.negSucc 69, 2, 10, 19, 40, 26, 38, 6, Int.negSucc 14, 19, Int.negSucc 85, Int.negSucc 31, Int.negSucc 37, Int.negSucc 17, Int.negSucc 15, 1, Int.negSucc 44, 2, Int.negSucc 36, 12, 5, Int.negSucc 12, Int.negSucc 11, 10, Int.negSucc 42, Int.negSucc 15, Int.negSucc 22, Int.negSucc 25, Int.negSucc 52, 6, 17, Int.negSucc 28, 14, 24, 20, 76, 4, Int.negSucc 22, Int.negSucc 54, 21, Int.negSucc 35, 47, Int.negSucc 2, 11, 16, 11, 4, 1, 33, 7, Int.negSucc 5, 20, Int.negSucc 32, Int.negSucc 19, 17, Int.negSucc 6, 4, Int.negSucc 13, 16, 13, Int.negSucc 38, 4, Int.negSucc 5, Int.negSucc 24, Int.negSucc 25, Int.negSucc 11, Int.negSucc 10, Int.negSucc 27, Int.negSucc 31, 11, 6, Int.negSucc 27, 5, Int.negSucc 28, Int.negSucc 7, 3, Int.negSucc 56, 30, Int.negSucc 29, Int.negSucc 17, Int.negSucc 4, 9, Int.negSucc 34, Int.negSucc 13, Int.negSucc 30, 29, Int.negSucc 17, Int.negSucc 20, Int.negSucc 33, Int.negSucc 31, 46, 50, 18, 30, 24, 39, 5, Int.negSucc 2, Int.negSucc 19, Int.negSucc 29, Int.negSucc 14, Int.negSucc 11, Int.negSucc 39, Int.negSucc 13, 47, Int.negSucc 84, Int.negSucc 39, Int.negSucc 9, 16, Int.negSucc 14, 15, 50, Int.negSucc 9, Int.negSucc 0, Int.negSucc 35, Int.negSucc 68, 1, 0, Int.negSucc 32, 19, 21, 16, 42, 47, Int.negSucc 3, 30, 29, 44, Int.negSucc 16, Int.negSucc 45, Int.negSucc 25, Int.negSucc 2, 33, Int.negSucc 3, Int.negSucc 1, 29, 95, Int.negSucc 25, Int.negSucc 21, Int.negSucc 34, 8, Int.negSucc 7, 59, Int.negSucc 58, Int.negSucc 35, 26, 14, 1, 11, Int.negSucc 44, 13, Int.negSucc 32, 5, 45, 14, 42, 30, Int.negSucc 16, 15, Int.negSucc 11, 8, Int.negSucc 5, Int.negSucc 45, Int.negSucc 3, Int.negSucc 1, 22, 16, Int.negSucc 50, 41, 10, Int.negSucc 6, Int.negSucc 2, Int.negSucc 41, 14, 31, 47, Int.negSucc 31, Int.negSucc 38, Int.negSucc 75, 16, Int.negSucc 47, Int.negSucc 6, Int.negSucc 34, Int.negSucc 12, Int.negSucc 3, Int.negSucc 43, Int.negSucc 26, 51, 11, Int.negSucc 29, 7, Int.negSucc 11, Int.negSucc 11, 18, Int.negSucc 31, 68, Int.negSucc 13, 17, 22, Int.negSucc 5, 5, 6, Int.negSucc 30, 27, Int.negSucc 7, Int.negSucc 35, 13, Int.negSucc 51, 38, 15, Int.negSucc 27, 26, 3, Int.negSucc 8, 25, Int.negSucc 15, Int.negSucc 31, Int.negSucc 14, 19, 23, Int.negSucc 15, 91, Int.negSucc 41, 36, Int.negSucc 43, Int.negSucc 52, 49, 5, 16, Int.negSucc 0, 33, Int.negSucc 7, Int.negSucc 48, Int.negSucc 42, 12, 31, Int.negSucc 5, Int.negSucc 17, 17, Int.negSucc 19, Int.negSucc 55, Int.negSucc 66, Int.negSucc 1, 32, 3, Int.negSucc 31, 2, 45, 6, Int.negSucc 2, 52, 14, 45, 32, 30, 48, 21, 44, Int.negSucc 10, 28, 22, 19, Int.negSucc 36, 3, Int.negSucc 6]
+
+/-- The eight dense3 weight columns by unit. -/
+def w3Z : Fin 8 → List ℤ
+  | 0 => w3c0Z
+  | 1 => w3c1Z
+  | 2 => w3c2Z
+  | 3 => w3c3Z
+  | 4 => w3c4Z
+  | 5 => w3c5Z
+  | 6 => w3c6Z
+  | 7 => w3c7Z
+
+theorem w3Z_len : ∀ k, (w3Z k).length = 392 := by decide +kernel
+
+/-- dense3 (392→8, input×output), entries k/128. -/
+noncomputable def W3 : Mat (2*14*14) 8 := fun i k => ((w3Z k).getD i 0 : ℝ) / 128
+
+noncomputable def b3 : Vec 8 := ![((515 : ℝ)/4096), ((3891 : ℝ)/16384), ((2649 : ℝ)/16384), ((561 : ℝ)/8192), ((713 : ℝ)/4096), ((591 : ℝ)/16384), ((1677 : ℝ)/16384), ((2591 : ℝ)/16384)]
 
 noncomputable def W4 : Mat 8 8 :=
-  ![![((-87 : ℝ)/128), ((-17 : ℝ)/128), ((35 : ℝ)/64), ((-27 : ℝ)/128), ((17 : ℝ)/128), ((9 : ℝ)/128), ((57 : ℝ)/128), ((23 : ℝ)/128)],
-    ![((65 : ℝ)/128), ((125 : ℝ)/128), ((-29 : ℝ)/128), ((-25 : ℝ)/128), ((-19 : ℝ)/128), ((-81 : ℝ)/128), ((15 : ℝ)/64), ((-117 : ℝ)/128)],
-    ![((-3 : ℝ)/64), ((-5 : ℝ)/32), ((19 : ℝ)/32), ((109 : ℝ)/128), ((-17 : ℝ)/128), ((-47 : ℝ)/64), ((61 : ℝ)/64), ((95 : ℝ)/128)],
-    ![((7 : ℝ)/8), ((-21 : ℝ)/64), ((99 : ℝ)/128), ((-1 : ℝ)/4), ((-11 : ℝ)/64), ((51 : ℝ)/128), ((-103 : ℝ)/128), ((-21 : ℝ)/128)],
-    ![((77 : ℝ)/128), ((-27 : ℝ)/64), ((-25 : ℝ)/128), ((9 : ℝ)/32), ((-5 : ℝ)/128), ((37 : ℝ)/128), ((-15 : ℝ)/64), ((5 : ℝ)/64)],
-    ![((-71 : ℝ)/128), ((97 : ℝ)/128), ((5 : ℝ)/32), ((-41 : ℝ)/128), ((-17 : ℝ)/64), ((101 : ℝ)/128), ((23 : ℝ)/64), ((3 : ℝ)/128)],
-    ![((-3 : ℝ)/64), ((5 : ℝ)/64), ((-41 : ℝ)/128), ((-15 : ℝ)/64), ((21 : ℝ)/64), ((9 : ℝ)/128), ((13 : ℝ)/64), ((-3 : ℝ)/32)],
-    ![((11 : ℝ)/32), ((11 : ℝ)/128), ((15 : ℝ)/128), ((9 : ℝ)/64), ((-13 : ℝ)/64), ((-15 : ℝ)/32), ((-17 : ℝ)/64), ((13 : ℝ)/32)]]
+  ![![((17 : ℝ)/128), ((119 : ℝ)/128), ((19 : ℝ)/128), ((1 : ℝ)/4), ((-33 : ℝ)/128), ((1 : ℝ)/16), ((-31 : ℝ)/128), ((-15 : ℝ)/128)],
+    ![((19 : ℝ)/32), ((-71 : ℝ)/128), ((49 : ℝ)/128), ((85 : ℝ)/128), ((3 : ℝ)/128), ((-21 : ℝ)/64), ((-1 : ℝ)/16), (0 : ℝ)],
+    ![((-47 : ℝ)/128), ((7 : ℝ)/128), ((-9 : ℝ)/64), ((71 : ℝ)/128), ((-1 : ℝ)/8), ((-7 : ℝ)/16), ((19 : ℝ)/128), ((117 : ℝ)/128)],
+    ![((-35 : ℝ)/128), ((-1 : ℝ)/8), ((25 : ℝ)/64), ((-15 : ℝ)/64), ((51 : ℝ)/64), ((9 : ℝ)/128), ((11 : ℝ)/16), ((7 : ℝ)/128)],
+    ![((9 : ℝ)/128), ((17 : ℝ)/16), ((23 : ℝ)/64), ((-43 : ℝ)/128), ((3 : ℝ)/16), ((1 : ℝ)/64), ((-31 : ℝ)/64), ((13 : ℝ)/128)],
+    ![((25 : ℝ)/32), (0 : ℝ), ((1 : ℝ)/64), ((-33 : ℝ)/64), ((-33 : ℝ)/64), ((-51 : ℝ)/128), ((49 : ℝ)/128), (0 : ℝ)],
+    ![((-91 : ℝ)/128), ((-15 : ℝ)/128), ((11 : ℝ)/128), ((-7 : ℝ)/64), ((15 : ℝ)/64), ((7 : ℝ)/32), ((5 : ℝ)/16), ((-11 : ℝ)/32)],
+    ![((-1 : ℝ)/32), ((-47 : ℝ)/128), ((37 : ℝ)/64), ((13 : ℝ)/32), ((1 : ℝ)/128), ((91 : ℝ)/128), ((123 : ℝ)/128), ((-17 : ℝ)/128)]]
 
-noncomputable def b4 : Vec 8 := ![((1289 : ℝ)/4096), ((1707 : ℝ)/16384), ((-6681 : ℝ)/8192), ((2755 : ℝ)/16384), ((1579 : ℝ)/16384), ((5441 : ℝ)/16384), ((1429 : ℝ)/8192), ((9217 : ℝ)/16384)]
+noncomputable def b4 : Vec 8 := ![((2913 : ℝ)/16384), ((-275 : ℝ)/4096), ((-1735 : ℝ)/16384), ((2879 : ℝ)/16384), ((185 : ℝ)/1024), ((263 : ℝ)/4096), ((-435 : ℝ)/8192), ((1777 : ℝ)/16384)]
 
 noncomputable def W5 : Mat 8 10 :=
-  ![![((-3 : ℝ)/128), ((5 : ℝ)/128), ((109 : ℝ)/128), ((-19 : ℝ)/128), ((1 : ℝ)/32), ((-49 : ℝ)/128), ((73 : ℝ)/128), ((-1 : ℝ)/128), ((-31 : ℝ)/64), ((-81 : ℝ)/128)],
-    ![((-17 : ℝ)/32), ((103 : ℝ)/128), ((3 : ℝ)/128), ((1 : ℝ)/8), ((-15 : ℝ)/64), ((-57 : ℝ)/128), ((-111 : ℝ)/128), ((57 : ℝ)/128), ((3 : ℝ)/8), ((19 : ℝ)/64)],
-    ![((1 : ℝ)/16), ((-19 : ℝ)/64), ((-41 : ℝ)/64), ((7 : ℝ)/128), ((37 : ℝ)/128), ((23 : ℝ)/32), ((27 : ℝ)/128), ((-133 : ℝ)/128), ((99 : ℝ)/128), ((3 : ℝ)/16)],
-    ![((13 : ℝ)/32), ((3 : ℝ)/64), ((-27 : ℝ)/128), ((3 : ℝ)/64), ((29 : ℝ)/64), ((-79 : ℝ)/128), ((7 : ℝ)/64), ((-21 : ℝ)/128), ((-5 : ℝ)/16), ((31 : ℝ)/128)],
-    ![((-35 : ℝ)/128), ((-1 : ℝ)/16), ((-21 : ℝ)/64), ((-1 : ℝ)/8), ((-17 : ℝ)/64), ((-15 : ℝ)/64), ((-49 : ℝ)/128), ((35 : ℝ)/128), ((15 : ℝ)/128), ((-55 : ℝ)/128)],
-    ![((-67 : ℝ)/128), ((-67 : ℝ)/128), ((5 : ℝ)/128), ((3 : ℝ)/128), ((77 : ℝ)/128), ((-37 : ℝ)/128), ((-25 : ℝ)/32), ((49 : ℝ)/64), ((-51 : ℝ)/128), ((17 : ℝ)/32)],
-    ![((15 : ℝ)/32), ((-97 : ℝ)/128), ((25 : ℝ)/32), ((23 : ℝ)/32), ((-21 : ℝ)/32), ((91 : ℝ)/128), ((1 : ℝ)/64), ((47 : ℝ)/128), ((-1 : ℝ)/64), ((-3 : ℝ)/64)],
-    ![((19 : ℝ)/32), ((-3 : ℝ)/16), ((-9 : ℝ)/128), ((-89 : ℝ)/128), ((9 : ℝ)/64), ((7 : ℝ)/128), ((9 : ℝ)/64), ((39 : ℝ)/64), ((-55 : ℝ)/128), ((13 : ℝ)/128)]]
+  ![![((103 : ℝ)/128), ((-25 : ℝ)/32), ((1 : ℝ)/4), ((-33 : ℝ)/128), ((-19 : ℝ)/64), ((23 : ℝ)/128), ((13 : ℝ)/16), ((-23 : ℝ)/32), ((3 : ℝ)/64), ((-9 : ℝ)/16)],
+    ![((-53 : ℝ)/128), ((81 : ℝ)/128), ((91 : ℝ)/128), ((13 : ℝ)/32), ((-7 : ℝ)/16), ((-41 : ℝ)/128), ((-3 : ℝ)/64), ((83 : ℝ)/128), ((5 : ℝ)/32), ((-13 : ℝ)/64)],
+    ![((-1 : ℝ)/16), ((17 : ℝ)/32), ((-39 : ℝ)/128), ((53 : ℝ)/128), ((-41 : ℝ)/64), ((1 : ℝ)/2), ((-67 : ℝ)/128), ((-17 : ℝ)/128), ((55 : ℝ)/128), ((7 : ℝ)/128)],
+    ![((3 : ℝ)/128), ((19 : ℝ)/128), ((9 : ℝ)/32), ((-15 : ℝ)/128), ((-29 : ℝ)/64), ((-3 : ℝ)/128), ((-37 : ℝ)/128), ((41 : ℝ)/64), ((-33 : ℝ)/128), ((-37 : ℝ)/128)],
+    ![((-1 : ℝ)/4), ((-67 : ℝ)/128), ((-1 : ℝ)/4), ((17 : ℝ)/32), ((5 : ℝ)/64), ((47 : ℝ)/128), ((-3 : ℝ)/128), ((-35 : ℝ)/64), ((-37 : ℝ)/128), ((15 : ℝ)/128)],
+    ![((-3 : ℝ)/16), ((53 : ℝ)/128), ((5 : ℝ)/32), ((-5 : ℝ)/64), ((5 : ℝ)/64), ((-35 : ℝ)/128), ((-1 : ℝ)/64), ((7 : ℝ)/128), ((-17 : ℝ)/64), ((-3 : ℝ)/64)],
+    ![((-79 : ℝ)/128), ((29 : ℝ)/64), ((-33 : ℝ)/128), ((-5 : ℝ)/16), ((137 : ℝ)/128), ((13 : ℝ)/64), ((39 : ℝ)/128), ((1 : ℝ)/16), ((13 : ℝ)/64), ((19 : ℝ)/128)],
+    ![((-3 : ℝ)/64), ((-21 : ℝ)/32), ((-7 : ℝ)/64), ((-3 : ℝ)/32), ((7 : ℝ)/64), ((-57 : ℝ)/128), ((-3 : ℝ)/4), ((25 : ℝ)/128), ((1 : ℝ)/64), ((91 : ℝ)/128)]]
 
-noncomputable def b5 : Vec 10 := ![((-8093 : ℝ)/16384), ((10649 : ℝ)/16384), ((-1357 : ℝ)/4096), ((-1141 : ℝ)/16384), ((-47 : ℝ)/512), ((2237 : ℝ)/4096), ((119 : ℝ)/2048), ((519 : ℝ)/2048), ((-15603 : ℝ)/16384), ((7069 : ℝ)/16384)]
+noncomputable def b5 : Vec 10 := ![((-51 : ℝ)/1024), ((-449 : ℝ)/4096), ((1545 : ℝ)/8192), ((4931 : ℝ)/16384), ((779 : ℝ)/8192), ((53 : ℝ)/256), ((1757 : ℝ)/4096), ((545 : ℝ)/8192), ((-8777 : ℝ)/8192), ((-461 : ℝ)/8192)]
 
 /-- The label of test image #0. -/
 def lbl : Fin 10 := 7
@@ -186,1995 +178,264 @@ def lbl : Fin 10 := 7
 -- § conv1: the rung's frozen input is relu(conv1 image)
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv1 pre-activation numerators at the image, over 32640 (= 255·128). -/
+def c1Z : List (List (List ℤ)) :=
+  [[[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 1596, 8891, 18557, 21185, 17800, 11168, 4944, 1584, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 9006, 33863, 52876, 56744, 50057, 43465, 34718, 28550, 25146, 25146, 25146, 25146, 25146, 25146, 24614, 20580, 10808, 2288, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 17119, 42308, 64598, 69122, 66055, 66990, 64587, 63537, 60102, 60682, 61958, 61882, 61227, 60182, 59262, 50042, 29928, 8344, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 12255, 27559, 40852, 44422, 47593, 55333, 62111, 65325, 64662, 66027, 69577, 69197, 66562, 68049, 79808, 76668, 44780, 12728, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 2546, 6744, 9654, 11712, 13322, 20251, 29299, 32106, 35725, 36070, 39514, 38906, 36967, 55516, 79625, 78890, 42130, 11124, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 646, 3120, 3622, 5822, 5546, 7772, 7886, 16302, 51581, 75481, 61927, 27832, 5208, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3705, 30639, 66398, 75302, 47065, 14848, 756, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1121, 16696, 54061, 79330, 62578, 28666, 5334, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5890, 35442, 69612, 73791, 43286, 14404, 1848, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 171, 14294, 51075, 76287, 57072, 23561, 2814, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2907, 30088, 64667, 69224, 38972, 10470, 210, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1425, 17093, 52942, 73289, 53900, 22656, 2436, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 361, 9690, 42726, 72953, 69183, 37511, 10038, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 57, 5132, 34366, 68134, 78861, 52358, 20644, 2394, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 893, 19704, 56793, 81264, 64670, 31015, 8442, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 589, 8520, 44764, 74411, 72558, 39601, 13736, 1470, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4294, 29131, 65158, 77729, 53832, 20609, 3276, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1159, 17261, 53887, 83766, 77928, 42670, 9338, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 5776, 34529, 70228, 93571, 74326, 38056, 6128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 11514, 44611, 78953, 89831, 56165, 24570, 3864, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 11495, 34657, 53713, 50385, 29684, 11394, 1680, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 4598, 14008, 22092, 18804, 9342, 756, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+   [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, Int.negSucc 1595, Int.negSucc 6286, Int.negSucc 12821, Int.negSucc 16255, Int.negSucc 13118, Int.negSucc 9307, Int.negSucc 3827, Int.negSucc 1583, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, Int.negSucc 10517, Int.negSucc 27118, Int.negSucc 49065, Int.negSucc 63675, Int.negSucc 53106, Int.negSucc 48756, Int.negSucc 31758, Int.negSucc 25939, Int.negSucc 19007, Int.negSucc 19007, Int.negSucc 19007, Int.negSucc 19007, Int.negSucc 19007, Int.negSucc 19007, Int.negSucc 18475, Int.negSucc 15309, Int.negSucc 9195, Int.negSucc 2287, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, Int.negSucc 17922, Int.negSucc 29504, Int.negSucc 74923, Int.negSucc 87571, Int.negSucc 85760, Int.negSucc 85400, Int.negSucc 78959, Int.negSucc 76544, Int.negSucc 68570, Int.negSucc 68251, Int.negSucc 69527, Int.negSucc 69451, Int.negSucc 68920, Int.negSucc 68526, Int.negSucc 66327, Int.negSucc 56047, Int.negSucc 40271, Int.negSucc 13439, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, Int.negSucc 5024, Int.negSucc 17856, Int.negSucc 42785, Int.negSucc 54401, Int.negSucc 52742, Int.negSucc 64382, Int.negSucc 75097, Int.negSucc 80988, Int.negSucc 84745, Int.negSucc 80523, Int.negSucc 86915, Int.negSucc 86463, Int.negSucc 83850, Int.negSucc 87371, Int.negSucc 90521, Int.negSucc 91649, Int.negSucc 66949, Int.negSucc 28215, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, Int.negSucc 2545, Int.negSucc 9423, Int.negSucc 11399, Int.negSucc 9803, Int.negSucc 16132, Int.negSucc 26184, Int.negSucc 31191, Int.negSucc 42300, Int.negSucc 34607, Int.negSucc 44231, Int.negSucc 43631, Int.negSucc 42102, Int.negSucc 61480, Int.negSucc 68085, Int.negSucc 91618, Int.negSucc 71351, Int.negSucc 26271, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 645, Int.negSucc 3799, Int.negSucc 5547, Int.negSucc 3609, Int.negSucc 7637, Int.negSucc 8055, Int.negSucc 18711, Int.negSucc 38837, Int.negSucc 61391, Int.negSucc 81033, Int.negSucc 56477, Int.negSucc 10575, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 4100, Int.negSucc 26843, Int.negSucc 46967, Int.negSucc 77947, Int.negSucc 75872, Int.negSucc 30123, Int.negSucc 1367, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 1120, Int.negSucc 16352, Int.negSucc 37201, Int.negSucc 70253, Int.negSucc 82573, Int.negSucc 59153, Int.negSucc 12467, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 6951, Int.negSucc 28656, Int.negSucc 53235, Int.negSucc 79709, Int.negSucc 73106, Int.negSucc 28659, Int.negSucc 3343, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 170, Int.negSucc 14166, Int.negSucc 34893, Int.negSucc 68198, Int.negSucc 79767, Int.negSucc 50456, Int.negSucc 5411, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 3068, Int.negSucc 24475, Int.negSucc 44962, Int.negSucc 73215, Int.negSucc 69891, Int.negSucc 22521, Int.negSucc 379, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 1424, Int.negSucc 16693, Int.negSucc 37172, Int.negSucc 63112, Int.negSucc 75370, Int.negSucc 49039, Int.negSucc 4407, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 360, Int.negSucc 10450, Int.negSucc 32754, Int.negSucc 57810, Int.negSucc 78416, Int.negSucc 67864, Int.negSucc 21811, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 56, Int.negSucc 5380, Int.negSucc 28478, Int.negSucc 48907, Int.negSucc 80997, Int.negSucc 76704, Int.negSucc 45185, Int.negSucc 4331, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 946, Int.negSucc 21343, Int.negSucc 37710, Int.negSucc 79009, Int.negSucc 81196, Int.negSucc 60114, Int.negSucc 17515, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 588, Int.negSucc 8128, Int.negSucc 33239, Int.negSucc 56036, Int.negSucc 84706, Int.negSucc 69279, Int.negSucc 28797, Int.negSucc 2659, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 4851, Int.negSucc 26417, Int.negSucc 46805, Int.negSucc 76372, Int.negSucc 78977, Int.negSucc 40630, Int.negSucc 5991, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 1158, Int.negSucc 16585, Int.negSucc 37452, Int.negSucc 75695, Int.negSucc 89983, Int.negSucc 72801, Int.negSucc 18345, Int.negSucc 75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 6873, Int.negSucc 27761, Int.negSucc 54321, Int.negSucc 99710, Int.negSucc 90880, Int.negSucc 68471, Int.negSucc 12991, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 11373, Int.negSucc 31759, Int.negSucc 70762, Int.negSucc 101679, Int.negSucc 80064, Int.negSucc 53251, Int.negSucc 9551, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 9074, Int.negSucc 25220, Int.negSucc 54614, Int.negSucc 68556, Int.negSucc 56839, Int.negSucc 20683, Int.negSucc 3039, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Int.negSucc 4597, Int.negSucc 18847, Int.negSucc 27169, Int.negSucc 16415, Int.negSucc 1367, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]]
+
 /-- conv1 pre-activations at the image, exact. -/
-noncomputable def c1V : Tensor3 2 12 12 :=
-  ![![![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((6187 : ℝ)/43520), ((4069 : ℝ)/10880), ((12251 : ℝ)/32640), ((1387 : ℝ)/8160), ((1 : ℝ)/34), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((4249 : ℝ)/7680), ((17549 : ℝ)/13056), ((205061 : ℝ)/130560), ((38537 : ℝ)/26112), ((31363 : ℝ)/21760), ((47327 : ℝ)/32640), ((188611 : ℝ)/130560), ((28027 : ℝ)/21760), ((4083 : ℝ)/5440), ((77 : ℝ)/408), (0 : ℝ)],
-      ![(0 : ℝ), ((2233 : ℝ)/3840), ((55723 : ℝ)/43520), ((189589 : ℝ)/130560), ((16749 : ℝ)/10880), ((53503 : ℝ)/32640), ((112751 : ℝ)/65280), ((256877 : ℝ)/130560), ((275119 : ℝ)/130560), ((80951 : ℝ)/65280), ((227 : ℝ)/960), (0 : ℝ)],
-      ![(0 : ℝ), ((4161 : ℝ)/21760), ((59879 : ℝ)/130560), ((30763 : ℝ)/65280), ((78539 : ℝ)/130560), ((88991 : ℝ)/130560), ((35591 : ℝ)/43520), ((18703 : ℝ)/10880), ((49307 : ℝ)/21760), ((4765 : ℝ)/4352), ((175 : ℝ)/6528), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((19 : ℝ)/3840), ((3907 : ℝ)/130560), ((1489 : ℝ)/21760), ((24519 : ℝ)/43520), ((61909 : ℝ)/32640), ((252713 : ℝ)/130560), ((13537 : ℝ)/26112), ((-3347 : ℝ)/65280), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((621 : ℝ)/8704), ((150349 : ℝ)/130560), ((90757 : ℝ)/43520), ((13199 : ℝ)/10880), ((23 : ℝ)/2560), ((-889 : ℝ)/65280), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((437 : ℝ)/43520), ((23569 : ℝ)/43520), ((81523 : ℝ)/43520), ((47845 : ℝ)/26112), ((25873 : ℝ)/65280), ((-401 : ℝ)/8160), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((18131 : ℝ)/65280), ((24199 : ℝ)/16320), ((2913 : ℝ)/1360), ((28385 : ℝ)/26112), ((-211 : ℝ)/10880), ((-203 : ℝ)/32640), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((943 : ℝ)/10880), ((33821 : ℝ)/32640), ((16783 : ℝ)/7680), ((212671 : ℝ)/130560), ((32617 : ℝ)/130560), ((-3031 : ℝ)/65280), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((31591 : ℝ)/65280), ((90803 : ℝ)/43520), ((79177 : ℝ)/32640), ((57149 : ℝ)/65280), ((-755 : ℝ)/26112), ((-49 : ℝ)/13056), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((4627 : ℝ)/8160), ((13657 : ℝ)/8160), ((8981 : ℝ)/6528), ((347 : ℝ)/2720), ((-13 : ℝ)/1360), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]],
-    ![![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((-5111 : ℝ)/130560), ((-14767 : ℝ)/130560), ((-2389 : ℝ)/13056), ((-2101 : ℝ)/16320), ((-11 : ℝ)/340), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((-5443 : ℝ)/21760), ((-10269 : ℝ)/21760), ((-23503 : ℝ)/26112), ((-20169 : ℝ)/21760), ((-98431 : ℝ)/130560), ((-10679 : ℝ)/16320), ((-86177 : ℝ)/130560), ((-80311 : ℝ)/130560), ((-4917 : ℝ)/10880), ((-847 : ℝ)/4080), (0 : ℝ)],
-      ![(0 : ℝ), ((-3285 : ℝ)/8704), ((-70813 : ℝ)/130560), ((-49981 : ℝ)/32640), ((-203579 : ℝ)/130560), ((-43261 : ℝ)/26112), ((-8837 : ℝ)/5440), ((-112753 : ℝ)/65280), ((-219893 : ℝ)/130560), ((-176531 : ℝ)/130560), ((-9339 : ℝ)/10880), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), ((-4161 : ℝ)/21760), ((-77579 : ℝ)/130560), ((-6173 : ℝ)/8704), ((-5699 : ℝ)/6528), ((-126113 : ℝ)/130560), ((-9569 : ℝ)/6528), ((-212573 : ℝ)/130560), ((-2237 : ℝ)/1280), ((-16823 : ℝ)/16320), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((-19 : ℝ)/3840), ((-361 : ℝ)/10880), ((-17851 : ℝ)/65280), ((-61511 : ℝ)/65280), ((-2409 : ℝ)/2560), ((-228577 : ℝ)/130560), ((-7799 : ℝ)/16320), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((-171 : ℝ)/8704), ((-73471 : ℝ)/130560), ((-22313 : ℝ)/32640), ((-6455 : ℝ)/4352), ((-76489 : ℝ)/65280), ((-2413 : ℝ)/32640), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((-361 : ℝ)/130560), ((-8657 : ℝ)/43520), ((-2177 : ℝ)/2720), ((-5587 : ℝ)/6528), ((-7257 : ℝ)/4352), ((-1947 : ℝ)/5440), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((-3629 : ℝ)/43520), ((-719 : ℝ)/1020), ((-102037 : ℝ)/130560), ((-16561 : ℝ)/10880), ((-709 : ℝ)/680), ((-551 : ℝ)/16320), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((-779 : ℝ)/32640), ((-7687 : ℝ)/16320), ((-18407 : ℝ)/21760), ((-163607 : ℝ)/130560), ((-198877 : ℝ)/130560), ((-5011 : ℝ)/16320), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((-4197 : ℝ)/21760), ((-23419 : ℝ)/26112), ((-26251 : ℝ)/26112), ((-31853 : ℝ)/16320), ((-45001 : ℝ)/65280), ((-133 : ℝ)/6528), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((-1695 : ℝ)/4352), ((-5213 : ℝ)/7680), ((-10967 : ℝ)/8704), ((-13741 : ℝ)/8160), ((-1603 : ℝ)/8160), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]]]
+noncomputable def c1V : Tensor3 2 (2*14) (2*14) := tabR (g3 c1Z) 32640
 
-theorem conv1_eq_r0_0 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ])
+/-- conv1's bias numerators over 32640: none. -/
+def b1N : ℕ → ℤ := fun o => [0, 0].getD o 0
 
-theorem conv1_eq_r0_1 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+theorem conv1_chk : convTabZ 2 1 3 3 28 28 b1N 1 (g4 W1Z) (g3 x0Z) (g3 c1Z) = true := by
+  decide +kernel
 
-theorem conv1_eq_r0_2 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_3 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_4 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_5 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_6 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_7 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_8 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_9 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_10 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r0_11 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_0 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ])
-
-theorem conv1_eq_r1_1 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_2 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_3 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_4 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_5 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_6 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_7 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_8 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_9 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_10 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq_r1_11 : ∀ wi : Fin 12,
-    conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv1_eq : ∀ (o : Fin 2) (hi wi : Fin 12),
-    conv2d W1 b1 T0 o hi wi = c1V o hi wi := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact conv1_eq_r0_0 wi
-  · exact conv1_eq_r0_1 wi
-  · exact conv1_eq_r0_2 wi
-  · exact conv1_eq_r0_3 wi
-  · exact conv1_eq_r0_4 wi
-  · exact conv1_eq_r0_5 wi
-  · exact conv1_eq_r0_6 wi
-  · exact conv1_eq_r0_7 wi
-  · exact conv1_eq_r0_8 wi
-  · exact conv1_eq_r0_9 wi
-  · exact conv1_eq_r0_10 wi
-  · exact conv1_eq_r0_11 wi
-  · exact conv1_eq_r1_0 wi
-  · exact conv1_eq_r1_1 wi
-  · exact conv1_eq_r1_2 wi
-  · exact conv1_eq_r1_3 wi
-  · exact conv1_eq_r1_4 wi
-  · exact conv1_eq_r1_5 wi
-  · exact conv1_eq_r1_6 wi
-  · exact conv1_eq_r1_7 wi
-  · exact conv1_eq_r1_8 wi
-  · exact conv1_eq_r1_9 wi
-  · exact conv1_eq_r1_10 wi
-  · exact conv1_eq_r1_11 wi
+theorem conv1_fun : conv2d W1 b1 T0 = c1V :=
+  conv2d_tab (fun o => by fin_cases o <;> simp [b1, b1N]) (by norm_num) conv1_chk
 
 /-- relu(conv1) at the image: the conv2 rung's input, exact. -/
-noncomputable def x1V : Tensor3 2 12 12 :=
-  ![![![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((6187 : ℝ)/43520), ((4069 : ℝ)/10880), ((12251 : ℝ)/32640), ((1387 : ℝ)/8160), ((1 : ℝ)/34), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), ((4249 : ℝ)/7680), ((17549 : ℝ)/13056), ((205061 : ℝ)/130560), ((38537 : ℝ)/26112), ((31363 : ℝ)/21760), ((47327 : ℝ)/32640), ((188611 : ℝ)/130560), ((28027 : ℝ)/21760), ((4083 : ℝ)/5440), ((77 : ℝ)/408), (0 : ℝ)],
-      ![(0 : ℝ), ((2233 : ℝ)/3840), ((55723 : ℝ)/43520), ((189589 : ℝ)/130560), ((16749 : ℝ)/10880), ((53503 : ℝ)/32640), ((112751 : ℝ)/65280), ((256877 : ℝ)/130560), ((275119 : ℝ)/130560), ((80951 : ℝ)/65280), ((227 : ℝ)/960), (0 : ℝ)],
-      ![(0 : ℝ), ((4161 : ℝ)/21760), ((59879 : ℝ)/130560), ((30763 : ℝ)/65280), ((78539 : ℝ)/130560), ((88991 : ℝ)/130560), ((35591 : ℝ)/43520), ((18703 : ℝ)/10880), ((49307 : ℝ)/21760), ((4765 : ℝ)/4352), ((175 : ℝ)/6528), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((19 : ℝ)/3840), ((3907 : ℝ)/130560), ((1489 : ℝ)/21760), ((24519 : ℝ)/43520), ((61909 : ℝ)/32640), ((252713 : ℝ)/130560), ((13537 : ℝ)/26112), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((621 : ℝ)/8704), ((150349 : ℝ)/130560), ((90757 : ℝ)/43520), ((13199 : ℝ)/10880), ((23 : ℝ)/2560), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((437 : ℝ)/43520), ((23569 : ℝ)/43520), ((81523 : ℝ)/43520), ((47845 : ℝ)/26112), ((25873 : ℝ)/65280), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((18131 : ℝ)/65280), ((24199 : ℝ)/16320), ((2913 : ℝ)/1360), ((28385 : ℝ)/26112), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((943 : ℝ)/10880), ((33821 : ℝ)/32640), ((16783 : ℝ)/7680), ((212671 : ℝ)/130560), ((32617 : ℝ)/130560), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((31591 : ℝ)/65280), ((90803 : ℝ)/43520), ((79177 : ℝ)/32640), ((57149 : ℝ)/65280), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((4627 : ℝ)/8160), ((13657 : ℝ)/8160), ((8981 : ℝ)/6528), ((347 : ℝ)/2720), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]],
-    ![![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]]]
-
-theorem x1_cell_r0_0 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_1 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_2 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_3 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_4 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_5 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_6 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_7 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_8 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_9 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_10 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r0_11 : ∀ wi : Fin 12, x1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = if c1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_0 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_1 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_2 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_3 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_4 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_5 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_6 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_7 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_8 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_9 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_10 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell_r1_11 : ∀ wi : Fin 12, x1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = if c1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi > 0 then c1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c1V, x1V])
-
-theorem x1_cell : ∀ (o : Fin 2) (hi wi : Fin 12), x1V o hi wi = if c1V o hi wi > 0 then c1V o hi wi else 0 := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact x1_cell_r0_0 wi
-  · exact x1_cell_r0_1 wi
-  · exact x1_cell_r0_2 wi
-  · exact x1_cell_r0_3 wi
-  · exact x1_cell_r0_4 wi
-  · exact x1_cell_r0_5 wi
-  · exact x1_cell_r0_6 wi
-  · exact x1_cell_r0_7 wi
-  · exact x1_cell_r0_8 wi
-  · exact x1_cell_r0_9 wi
-  · exact x1_cell_r0_10 wi
-  · exact x1_cell_r0_11 wi
-  · exact x1_cell_r1_0 wi
-  · exact x1_cell_r1_1 wi
-  · exact x1_cell_r1_2 wi
-  · exact x1_cell_r1_3 wi
-  · exact x1_cell_r1_4 wi
-  · exact x1_cell_r1_5 wi
-  · exact x1_cell_r1_6 wi
-  · exact x1_cell_r1_7 wi
-  · exact x1_cell_r1_8 wi
-  · exact x1_cell_r1_9 wi
-  · exact x1_cell_r1_10 wi
-  · exact x1_cell_r1_11 wi
+noncomputable def x1V : Tensor3 2 (2*14) (2*14) := tabR (reluZ (g3 c1Z)) 32640
 
 /-- **The rung's input is the real image's conv1 activation.** -/
 theorem x1_eq : x1V = fun o hi wi =>
     if conv2d W1 b1 T0 o hi wi > 0 then conv2d W1 b1 T0 o hi wi else 0 := by
-  funext o hi wi
-  rw [conv1_eq, x1_cell]
+  rw [conv1_fun]
+  exact (relu_ite_tabR (g3 c1Z) (by norm_num)).symm
 
-theorem x1_bound_r0_0 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
+theorem x1_chk : absLeZ 2 28 28 (reluZ (g3 c1Z)) 93571 = true := by decide +kernel
 
-theorem x1_bound_r0_1 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_2 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_3 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_4 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_5 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_6 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_7 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_8 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_9 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_10 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r0_11 : ∀ wi : Fin 12, |x1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_0 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_1 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_2 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_3 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_4 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_5 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_6 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_7 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_8 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_9 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_10 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound_r1_11 : ∀ wi : Fin 12, |x1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi| ≤ ((5 : ℝ)/2) := by
-  intro wi
-  fin_cases wi <;> (rw [abs_le]; constructor <;> norm_num [x1V])
-
-theorem x1_bound : ∀ (o : Fin 2) (hi wi : Fin 12), |x1V o hi wi| ≤ ((5 : ℝ)/2) := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact x1_bound_r0_0 wi
-  · exact x1_bound_r0_1 wi
-  · exact x1_bound_r0_2 wi
-  · exact x1_bound_r0_3 wi
-  · exact x1_bound_r0_4 wi
-  · exact x1_bound_r0_5 wi
-  · exact x1_bound_r0_6 wi
-  · exact x1_bound_r0_7 wi
-  · exact x1_bound_r0_8 wi
-  · exact x1_bound_r0_9 wi
-  · exact x1_bound_r0_10 wi
-  · exact x1_bound_r0_11 wi
-  · exact x1_bound_r1_0 wi
-  · exact x1_bound_r1_1 wi
-  · exact x1_bound_r1_2 wi
-  · exact x1_bound_r1_3 wi
-  · exact x1_bound_r1_4 wi
-  · exact x1_bound_r1_5 wi
-  · exact x1_bound_r1_6 wi
-  · exact x1_bound_r1_7 wi
-  · exact x1_bound_r1_8 wi
-  · exact x1_bound_r1_9 wi
-  · exact x1_bound_r1_10 wi
-  · exact x1_bound_r1_11 wi
+theorem x1_bound : ∀ cc i j, |x1V cc i j| ≤ ((23 : ℝ)/8) := fun cc i j =>
+  tabR_abs_le x1_chk (by norm_num) (by norm_num) cc i j
 
 -- ════════════════════════════════════════════════════════════════
 -- § conv2: exact table, the relu₂ margin, the pooled vector
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv2 pre-activation numerators at the image, over 4177920 (= 255·128²). -/
+def c2Z : List (List (List ℤ)) :=
+  [[[Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1065437, Int.negSucc 969684, Int.negSucc 614770, 53613, 606134, 601586, 196302, Int.negSucc 346353, Int.negSucc 775169, Int.negSucc 994241, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1051871, Int.negSucc 866220, 3839, 1870640, 3522593, 3959122, 3566856, 2840724, 1960564, 1391060, 1111092, 1111092, 1111092, 1111092, 1107368, 1064234, 855214, 312190, Int.negSucc 450529, Int.negSucc 957633, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1334116, Int.negSucc 2328402, Int.negSucc 2046074, 1431341, 5309246, 6964629, 6938087, 6474284, 5501064, 4711436, 4181496, 4246852, 4306491, 4276884, 4219892, 4193880, 4112424, 3261626, 1321990, Int.negSucc 494001, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 2311286, Int.negSucc 5380792, Int.negSucc 4894387, Int.negSucc 413819, 4402852, 5953012, 6212637, 6700198, 6390354, 5890342, 5307665, 5462593, 5719884, 5683748, 5746759, 6712308, 8615310, 8220904, 4346238, 351830, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 3081926, Int.negSucc 5830165, Int.negSucc 5452171, Int.negSucc 2026754, 1478509, 1843093, 1883256, 2783004, 3758928, 3937137, 3528467, 3697502, 4344258, 4512322, 4579416, 6702217, 10973466, 12174142, 7022770, 1146870, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 2375468, Int.negSucc 3721895, Int.negSucc 3434934, Int.negSucc 1752875, Int.negSucc 586490, Int.negSucc 1007741, Int.negSucc 1487326, Int.negSucc 711319, 670230, 937026, 819235, 1053122, 2127797, 1936747, 667513, 4162112, 11535645, 13798566, 7607308, 1164610, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1333755, Int.negSucc 1673735, Int.negSucc 1579603, Int.negSucc 1280027, Int.negSucc 1089543, Int.negSucc 1550062, Int.negSucc 2163335, Int.negSucc 1540708, Int.negSucc 839464, Int.negSucc 530742, Int.negSucc 411647, Int.negSucc 288784, 454812, Int.negSucc 1529424, Int.negSucc 2551189, 3686096, 12111630, 12548943, 5808038, 391374, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1141855, Int.negSucc 1370411, Int.negSucc 1276163, Int.negSucc 1239345, Int.negSucc 1089673, Int.negSucc 1100160, Int.negSucc 1013771, Int.negSucc 1684251, Int.negSucc 4647212, Int.negSucc 2467994, 6391508, 12255742, 9456981, 3034282, Int.negSucc 517085, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1062283, Int.negSucc 1484465, Int.negSucc 4172078, Int.negSucc 5135154, 1260181, 10214531, 11787851, 6394736, 846248, Int.negSucc 1002521, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1075412, Int.negSucc 1226344, Int.negSucc 3051361, Int.negSucc 5909507, Int.negSucc 2798624, 6709232, 12190681, 8945916, 2915500, Int.negSucc 433757, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1060364, Int.negSucc 1729554, Int.negSucc 4816323, Int.negSucc 5496648, 1637151, 10625976, 11125859, 5420513, 589796, Int.negSucc 895505, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1066634, Int.negSucc 1004097, Int.negSucc 2432661, Int.negSucc 5459150, Int.negSucc 2869936, 6590602, 12007879, 8354935, 2123842, Int.negSucc 787187, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1074082, Int.negSucc 1032871, Int.negSucc 1249699, Int.negSucc 3687483, Int.negSucc 4399982, 2150439, 10337207, 10683724, 4961686, 114720, Int.negSucc 1056029, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076210, Int.negSucc 1047753, Int.negSucc 1080673, Int.negSucc 2449176, Int.negSucc 4346009, Int.negSucc 813291, 7802825, 11631594, 7874379, 2001024, Int.negSucc 837881, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1071726, Int.negSucc 1075643, Int.negSucc 2079178, Int.negSucc 4563769, Int.negSucc 2856334, 4722914, 11341397, 10275915, 4613412, 62724, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1072486, Int.negSucc 1027666, Int.negSucc 1520033, Int.negSucc 4268175, Int.negSucc 4400076, 1560563, 9779103, 11478015, 6919217, 1650674, Int.negSucc 841997, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1060687, Int.negSucc 1071282, Int.negSucc 2927553, Int.negSucc 5259005, Int.negSucc 1420243, 7244026, 12051070, 8570908, 3244368, Int.negSucc 153743, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1068496, Int.negSucc 1085875, Int.negSucc 1872105, Int.negSucc 4745174, Int.negSucc 3230339, 5030386, 12273420, 11009656, 4801127, 533152, Int.negSucc 932549, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1063993, Int.negSucc 1568655, Int.negSucc 4044032, Int.negSucc 4956329, 1067916, 10875773, 14300933, 9088327, 1975084, Int.negSucc 752831, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1251694, Int.negSucc 3212566, Int.negSucc 6161215, Int.negSucc 3788520, 5056430, 13931639, 13784716, 7017186, 439148, Int.negSucc 1072493, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1855856, Int.negSucc 5351709, Int.negSucc 7495518, Int.negSucc 3660393, 5899209, 13179950, 11269237, 4933256, Int.negSucc 137545, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 2483217, Int.negSucc 6278621, Int.negSucc 7627237, Int.negSucc 2852361, 6406376, 10127904, 6777044, 2169804, Int.negSucc 588737, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609],
+    [Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 2347956, Int.negSucc 4722341, Int.negSucc 5037097, Int.negSucc 1443127, 3292693, 4510992, 2614978, 144582, Int.negSucc 911969, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609, Int.negSucc 1076609]],
+   [[8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 83937, 481066, 1282350, 2186800, 2716349, 2452491, 1724605, 943885, 369309, 107133, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 518391, 2329348, 5013493, 7760401, 9252312, 8928918, 7510943, 6027009, 4652499, 3942571, 3604803, 3604803, 3604803, 3604803, 3579799, 3372113, 2742689, 1759893, 756813, 150781, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 1229618, 3595273, 6464534, 9446991, 11374330, 12158210, 11961192, 12195042, 11767015, 11502753, 11174771, 11250543, 11296286, 11220189, 11072081, 10343987, 8603085, 5902113, 2930429, 709293, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 1113072, 1349878, 2127028, 2604626, 4280570, 6004749, 7488938, 9582903, 10695951, 11517688, 11629862, 11813692, 11966473, 11884282, 12283091, 12289099, 11286935, 8491225, 4642733, 1353469, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 37121, Int.negSucc 1446347, Int.negSucc 3217835, Int.negSucc 4616348, Int.negSucc 4417358, Int.negSucc 3395684, Int.negSucc 2094990, Int.negSucc 530115, 1020062, 1923520, 2487807, 2455685, 2683730, 3686328, 5836873, 7811153, 8377525, 7419223, 4147937, 1307997, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, Int.negSucc 392810, Int.negSucc 1678705, Int.negSucc 3587944, Int.negSucc 4963581, Int.negSucc 5726580, Int.negSucc 5924293, Int.negSucc 6343854, Int.negSucc 6750056, Int.negSucc 6156990, Int.negSucc 6128235, Int.negSucc 5640499, Int.negSucc 5972500, Int.negSucc 5277188, Int.negSucc 2189126, 655465, 2942629, 3349689, 3386335, 1910889, 598069, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, Int.negSucc 103098, Int.negSucc 443116, Int.negSucc 951988, Int.negSucc 1425752, Int.negSucc 1764720, Int.negSucc 2233764, Int.negSucc 3023095, Int.negSucc 4048328, Int.negSucc 4523495, Int.negSucc 4950921, Int.negSucc 4994693, Int.negSucc 5116855, Int.negSucc 3142899, 626364, 2527128, 2602577, 1720116, 775763, 251343, Int.negSucc 72638, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, Int.negSucc 19498, Int.negSucc 167760, Int.negSucc 372416, Int.negSucc 621064, Int.negSucc 767718, Int.negSucc 903939, Int.negSucc 61008, 3128922, 5739149, 5859790, 3688219, 1544991, 277742, Int.negSucc 181198, Int.negSucc 185786, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 346289, 2573167, 5684694, 6742582, 4851540, 2456451, 317474, Int.negSucc 179115, Int.negSucc 223446, Int.negSucc 28118, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 16962, 955293, 3804871, 5719459, 5159414, 2794911, 637789, Int.negSucc 440132, Int.negSucc 460822, Int.negSucc 104600, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 154788, 2028459, 4589908, 5237405, 3395341, 1621790, Int.negSucc 229421, Int.negSucc 632188, Int.negSucc 571458, Int.negSucc 81626, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 75900, 1010200, 4047444, 5827099, 4960970, 2568709, 679690, Int.negSucc 108963, Int.negSucc 336145, Int.negSucc 112160, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 25892, 553579, 3112703, 6347501, 6985915, 4689951, 2085460, 73879, Int.negSucc 201472, Int.negSucc 322034, Int.negSucc 1364, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 11604, 271561, 2249713, 5846078, 7897220, 6611252, 3583606, 919906, Int.negSucc 120538, Int.negSucc 298346, Int.negSucc 110438, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 53974, 1224567, 4630689, 7344840, 7596479, 4555075, 1563173, Int.negSucc 326194, Int.negSucc 352691, Int.negSucc 291416, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 36608, 475105, 3241614, 6157427, 7298831, 4750750, 1894518, Int.negSucc 453133, Int.negSucc 842336, Int.negSucc 382164, Int.negSucc 108380, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 242549, 1923662, 5564240, 7027379, 6036582, 2520839, 30469, Int.negSucc 1281161, Int.negSucc 776699, Int.negSucc 287132, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 63398, 1065558, 4208027, 7143406, 7620569, 5253724, 2308760, 140084, Int.negSucc 722931, Int.negSucc 489124, Int.negSucc 63104, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 342983, 2529606, 5679263, 8045275, 7719160, 6023276, 3402160, 1617388, Int.negSucc 75287, Int.negSucc 148238, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 810991, 3323565, 5480966, 7149612, 5682287, 4772193, 2582905, 1825217, 278609, 6867, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 916802, 2151512, 2523725, 1836489, 143256, 375560, Int.negSucc 99996, 360417, 121933, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 339145, Int.negSucc 383946, Int.negSucc 2378341, Int.negSucc 4882616, Int.negSucc 5276492, Int.negSucc 3803478, Int.negSucc 1751781, Int.negSucc 532796, Int.negSucc 46010, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925],
+    [8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, Int.negSucc 248562, Int.negSucc 1626273, Int.negSucc 3975258, Int.negSucc 5841956, Int.negSucc 5407708, Int.negSucc 3563167, Int.negSucc 1494400, Int.negSucc 591380, Int.negSucc 73394, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925]]]
+
 /-- conv2 pre-activations at the image, exact. -/
-noncomputable def c2V : Tensor3 2 12 12 :=
-  ![![![((2711 : ℝ)/696320), ((40869 : ℝ)/1114112), ((223793 : ℝ)/1671168), ((45601 : ℝ)/208896), ((247233 : ℝ)/1392640), ((59437 : ℝ)/835584), ((3047 : ℝ)/278528), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384)],
-      ![((224069 : ℝ)/16711680), ((204079 : ℝ)/1392640), ((1211147 : ℝ)/2088960), ((986827 : ℝ)/983040), ((5888491 : ℝ)/5570560), ((3911999 : ℝ)/4177920), ((1832731 : ℝ)/2088960), ((4822307 : ℝ)/5570560), ((1710133 : ℝ)/2088960), ((167989 : ℝ)/261120), ((272857 : ℝ)/835584), ((61141 : ℝ)/835584)],
-      ![((-63181 : ℝ)/8355840), ((4322863 : ℝ)/16711680), ((763939 : ℝ)/696320), ((5846455 : ℝ)/3342336), ((28960853 : ℝ)/16711680), ((13269227 : ℝ)/8355840), ((5288593 : ℝ)/3342336), ((3474293 : ℝ)/2088960), ((5849317 : ℝ)/3342336), ((425341 : ℝ)/278528), ((1629497 : ℝ)/2088960), ((126001 : ℝ)/835584)],
-      ![((-186329 : ℝ)/3342336), ((2435091 : ℝ)/5570560), ((2671897 : ℝ)/1671168), ((304409 : ℝ)/130560), ((40061071 : ℝ)/16711680), ((40934567 : ℝ)/16711680), ((42909767 : ℝ)/16711680), ((23892829 : ℝ)/8355840), ((3668863 : ℝ)/1114112), ((2332729 : ℝ)/835584), ((1645533 : ℝ)/1392640), ((35665 : ℝ)/278528)],
-      ![((-45961 : ℝ)/835584), ((3324151 : ℝ)/8355840), ((2520833 : ℝ)/2088960), ((8879893 : ℝ)/5570560), ((9602003 : ℝ)/5570560), ((5292407 : ℝ)/2785280), ((35794189 : ℝ)/16711680), ((16223811 : ℝ)/5570560), ((67038773 : ℝ)/16711680), ((17862651 : ℝ)/5570560), ((1739155 : ℝ)/1671168), ((52849 : ℝ)/835584)],
-      ![((-47301 : ℝ)/2785280), ((2078411 : ℝ)/16711680), ((1107961 : ℝ)/2785280), ((3843899 : ℝ)/8355840), ((4792039 : ℝ)/8355840), ((231939 : ℝ)/327680), ((8760169 : ℝ)/8355840), ((231481 : ℝ)/87040), ((2264763 : ℝ)/557056), ((213171 : ℝ)/81920), ((247679 : ℝ)/557056), ((1597 : ℝ)/278528)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-479 : ℝ)/491520), ((8049 : ℝ)/5570560), ((156683 : ℝ)/4177920), ((436963 : ℝ)/2785280), ((3450755 : ℝ)/3342336), ((10734715 : ℝ)/3342336), ((3785723 : ℝ)/1044480), ((23955629 : ℝ)/16711680), ((68943 : ℝ)/557056), ((-9 : ℝ)/16384)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((26387 : ℝ)/3342336), ((1301671 : ℝ)/16711680), ((6983863 : ℝ)/16711680), ((7156577 : ℝ)/3342336), ((31346477 : ℝ)/8355840), ((2860445 : ℝ)/1114112), ((694133 : ℝ)/1671168), ((51 : ℝ)/32768), ((-9 : ℝ)/16384)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((3007 : ℝ)/1392640), ((669017 : ℝ)/16711680), ((4066459 : ℝ)/16711680), ((747431 : ℝ)/557056), ((11324785 : ℝ)/3342336), ((1437203 : ℝ)/417792), ((504187 : ℝ)/417792), ((3215 : ℝ)/34816), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((655 : ℝ)/52224), ((117251 : ℝ)/1044480), ((6948433 : ℝ)/8355840), ((12285497 : ℝ)/4177920), ((67542251 : ℝ)/16711680), ((12879257 : ℝ)/5570560), ((555325 : ℝ)/1671168), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-13537 : ℝ)/8355840), ((2328379 : ℝ)/16711680), ((3329681 : ℝ)/2088960), ((62888323 : ℝ)/16711680), ((11020691 : ℝ)/3342336), ((256059 : ℝ)/278528), ((32311 : ℝ)/557056), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384)],
-      ![((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-463139 : ℝ)/8355840), ((4251221 : ℝ)/16711680), ((5605093 : ℝ)/2785280), ((3298079 : ℝ)/1044480), ((72221 : ℝ)/40960), ((17025 : ℝ)/69632), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384), ((-9 : ℝ)/16384)]],
-    ![![((585889 : ℝ)/5570560), ((134847 : ℝ)/557056), ((261169 : ℝ)/835584), ((116003 : ℝ)/417792), ((95069 : ℝ)/522240), ((9097 : ℝ)/104448), ((1391 : ℝ)/34816), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((3558493 : ℝ)/8355840), ((5856391 : ℝ)/5570560), ((2192943 : ℝ)/1392640), ((32352901 : ℝ)/16711680), ((1990927 : ℝ)/1044480), ((675989 : ℝ)/417792), ((23946689 : ℝ)/16711680), ((1374613 : ℝ)/1044480), ((4244563 : ℝ)/4177920), ((320729 : ℝ)/522240), ((29867 : ℝ)/104448), ((9373 : ℝ)/104448)],
-      ![((1173911 : ℝ)/1671168), ((24817189 : ℝ)/16711680), ((10228187 : ℝ)/4177920), ((7698767 : ℝ)/2088960), ((1179337 : ℝ)/278528), ((71831437 : ℝ)/16711680), ((37032019 : ℝ)/8355840), ((1240563 : ℝ)/278528), ((61968793 : ℝ)/16711680), ((21703463 : ℝ)/8355840), ((568273 : ℝ)/417792), ((35725 : ℝ)/104448)],
-      ![((1316461 : ℝ)/3342336), ((1439383 : ℝ)/3342336), ((6397769 : ℝ)/8355840), ((29129917 : ℝ)/16711680), ((17936687 : ℝ)/8355840), ((20421757 : ℝ)/8355840), ((3387083 : ℝ)/1044480), ((21724123 : ℝ)/5570560), ((19604227 : ℝ)/5570560), ((50788207 : ℝ)/16711680), ((5010001 : ℝ)/2785280), ((706139 : ℝ)/2088960)],
-      ![((-6259 : ℝ)/1392640), ((-1055611 : ℝ)/2785280), ((-10237229 : ℝ)/16711680), ((-4793737 : ℝ)/16711680), ((-4768217 : ℝ)/16711680), ((1302337 : ℝ)/8355840), ((25847297 : ℝ)/16711680), ((5938339 : ℝ)/2785280), ((36444857 : ℝ)/16711680), ((44069467 : ℝ)/16711680), ((752443 : ℝ)/522240), ((92371 : ℝ)/1392640)],
-      ![((-76599 : ℝ)/2785280), ((-1214573 : ℝ)/5570560), ((-411351 : ℝ)/1114112), ((-6621569 : ℝ)/16711680), ((-3562891 : ℝ)/8355840), ((1263853 : ℝ)/2785280), ((2361791 : ℝ)/1392640), ((4856453 : ℝ)/3342336), ((28251787 : ℝ)/16711680), ((4498849 : ℝ)/2088960), ((2269147 : ℝ)/3342336), ((25879 : ℝ)/835584)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((4793 : ℝ)/163840), ((201193 : ℝ)/8355840), ((1840579 : ℝ)/5570560), ((9510571 : ℝ)/5570560), ((32284699 : ℝ)/16711680), ((11666597 : ℝ)/8355840), ((3090509 : ℝ)/1671168), ((23373809 : ℝ)/16711680), ((385309 : ℝ)/8355840), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((3068179 : ℝ)/16711680), ((20321383 : ℝ)/16711680), ((38969351 : ℝ)/16711680), ((579617 : ℝ)/327680), ((6882647 : ℝ)/4177920), ((10795777 : ℝ)/5570560), ((104917 : ℝ)/196608), ((10103 : ℝ)/327680), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((106021 : ℝ)/1392640), ((13130293 : ℝ)/16711680), ((722069 : ℝ)/327680), ((19098377 : ℝ)/8355840), ((29314523 : ℝ)/16711680), ((10855787 : ℝ)/5570560), ((1760871 : ℝ)/1392640), ((282913 : ℝ)/8355840), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((2911147 : ℝ)/8355840), ((30872789 : ℝ)/16711680), ((44233333 : ℝ)/16711680), ((2921971 : ℝ)/1392640), ((17009861 : ℝ)/8355840), ((28625431 : ℝ)/16711680), ((984557 : ℝ)/2785280), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((1103519 : ℝ)/1671168), ((6953417 : ℝ)/3342336), ((16330657 : ℝ)/8355840), ((32597311 : ℝ)/16711680), ((2682577 : ℝ)/1114112), ((2176741 : ℝ)/2088960), ((546697 : ℝ)/16711680), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((2541511 : ℝ)/8355840), ((925975 : ℝ)/3342336), ((-401699 : ℝ)/983040), ((437277 : ℝ)/1114112), ((2108939 : ℝ)/1671168), ((1654997 : ℝ)/8355840), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)]]]
+noncomputable def c2V : Tensor3 2 (2*14) (2*14) := tabR (g3 c2Z) 4177920
 
-theorem conv2_eq_r0_0 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+/-- conv2's bias numerators over 4177920. -/
+def b2N : ℕ → ℤ := fun o => [Int.negSucc 1076609, 8925].getD o 0
 
-theorem conv2_eq_r0_1 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+theorem conv2_chk : convTabZ 2 2 3 3 28 28 b2N 1 (g4 W2Z) (reluZ (g3 c1Z)) (g3 c2Z) = true := by
+  decide +kernel
 
-theorem conv2_eq_r0_2 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+theorem conv2_fun : conv2d W2 b2 x1V = c2V :=
+  conv2d_tab (fun o => by fin_cases o <;> norm_num [b2, b2N]) (by norm_num) conv2_chk
 
-theorem conv2_eq_r0_3 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+theorem c2_chk : ltAbsZ 2 28 28 (g3 c2Z) 5 = true := by decide +kernel
 
-theorem conv2_eq_r0_4 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+theorem c2_margin : ∀ o hi wi, ((165715674705 : ℝ)/144115188075855872) < |c2V o hi wi| := fun o hi wi =>
+  tabR_lt_abs c2_chk (by norm_num) (by norm_num) o hi wi
 
-theorem conv2_eq_r0_5 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
+/-- The pooled features' numerators over 4177920: the 2×2 max-pool of relu(conv2), row-major. -/
+def pZ : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53613, 606134, 196302, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1870640, 6964629, 6938087, 5501064, 4246852, 4306491, 4219892, 4112424, 1321990, 0, 0, 0, 0, 0, 0, 5953012, 6700198, 6390354, 5462593, 5719884, 6712308, 12174142, 7022770, 0, 0, 0, 0, 0, 0, 0, 0, 937026, 1053122, 2127797, 4162112, 13798566, 7607308, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10214531, 12255742, 3034282, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1637151, 12190681, 8945916, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10337207, 12007879, 2123842, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4722914, 11631594, 7874379, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12051070, 11478015, 1650674, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10875773, 14300933, 4801127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13931639, 13784716, 439148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10127904, 6777044, 0, 0, 0, 0, 0, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 481066, 2186800, 2716349, 1724605, 369309, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 3595273, 9446991, 12158210, 12195042, 11767015, 11250543, 11296286, 11072081, 8603085, 2930429, 8925, 8925, 8925, 8925, 1349878, 2604626, 6004749, 9582903, 11517688, 11813692, 11966473, 12289099, 11286935, 4642733, 8925, 8925, 8925, 8925, 0, 0, 0, 0, 0, 0, 626364, 2942629, 3386335, 1910889, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 2573167, 6742582, 5859790, 1544991, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 154788, 4589908, 5719459, 2794911, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 25892, 3112703, 6985915, 4960970, 679690, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 1224567, 7344840, 7897220, 3583606, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 242549, 5564240, 7298831, 4750750, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 2529606, 8045275, 7719160, 3402160, 0, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 3323565, 7149612, 5682287, 2582905, 278609, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 8925, 339145, 0, 0, 0, 8925, 8925, 8925, 8925, 8925, 8925]
 
-theorem conv2_eq_r0_6 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r0_7 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r0_8 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r0_9 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r0_10 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r0_11 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_0 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_1 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_2 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_3 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_4 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_5 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_6 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_7 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_8 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_9 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_10 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq_r1_11 : ∀ wi : Fin 12,
-    conv2d W2 b2 x1V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, x1V, c2V, Fin.sum_univ_succ]; try norm_num)
-
-theorem conv2_eq : ∀ (o : Fin 2) (hi wi : Fin 12),
-    conv2d W2 b2 x1V o hi wi = c2V o hi wi := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact conv2_eq_r0_0 wi
-  · exact conv2_eq_r0_1 wi
-  · exact conv2_eq_r0_2 wi
-  · exact conv2_eq_r0_3 wi
-  · exact conv2_eq_r0_4 wi
-  · exact conv2_eq_r0_5 wi
-  · exact conv2_eq_r0_6 wi
-  · exact conv2_eq_r0_7 wi
-  · exact conv2_eq_r0_8 wi
-  · exact conv2_eq_r0_9 wi
-  · exact conv2_eq_r0_10 wi
-  · exact conv2_eq_r0_11 wi
-  · exact conv2_eq_r1_0 wi
-  · exact conv2_eq_r1_1 wi
-  · exact conv2_eq_r1_2 wi
-  · exact conv2_eq_r1_3 wi
-  · exact conv2_eq_r1_4 wi
-  · exact conv2_eq_r1_5 wi
-  · exact conv2_eq_r1_6 wi
-  · exact conv2_eq_r1_7 wi
-  · exact conv2_eq_r1_8 wi
-  · exact conv2_eq_r1_9 wi
-  · exact conv2_eq_r1_10 wi
-  · exact conv2_eq_r1_11 wi
-
-theorem conv2_fun : conv2d W2 b2 x1V = c2V := by
-  funext o hi wi
-  exact conv2_eq o hi wi
-
-theorem c2_margin_r0_0 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_1 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_2 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_3 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_4 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_5 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_6 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_7 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_8 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_9 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_10 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r0_11 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_0 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_1 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_2 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_3 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_4 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_5 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_6 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_7 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_8 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_9 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_10 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin_r1_11 : ∀ wi : Fin 12, ((26090859375 : ℝ)/4503599627370496) < |c2V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi| := by
-  intro wi
-  fin_cases wi <;> (rw [lt_abs]; norm_num [c2V])
-
-theorem c2_margin : ∀ (o : Fin 2) (hi wi : Fin 12), ((26090859375 : ℝ)/4503599627370496) < |c2V o hi wi| := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact c2_margin_r0_0 wi
-  · exact c2_margin_r0_1 wi
-  · exact c2_margin_r0_2 wi
-  · exact c2_margin_r0_3 wi
-  · exact c2_margin_r0_4 wi
-  · exact c2_margin_r0_5 wi
-  · exact c2_margin_r0_6 wi
-  · exact c2_margin_r0_7 wi
-  · exact c2_margin_r0_8 wi
-  · exact c2_margin_r0_9 wi
-  · exact c2_margin_r0_10 wi
-  · exact c2_margin_r0_11 wi
-  · exact c2_margin_r1_0 wi
-  · exact c2_margin_r1_1 wi
-  · exact c2_margin_r1_2 wi
-  · exact c2_margin_r1_3 wi
-  · exact c2_margin_r1_4 wi
-  · exact c2_margin_r1_5 wi
-  · exact c2_margin_r1_6 wi
-  · exact c2_margin_r1_7 wi
-  · exact c2_margin_r1_8 wi
-  · exact c2_margin_r1_9 wi
-  · exact c2_margin_r1_10 wi
-  · exact c2_margin_r1_11 wi
-
-/-- relu(conv2) at the image (the max-pool input), exact. -/
-noncomputable def r2V : Tensor3 2 12 12 :=
-  ![![![((2711 : ℝ)/696320), ((40869 : ℝ)/1114112), ((223793 : ℝ)/1671168), ((45601 : ℝ)/208896), ((247233 : ℝ)/1392640), ((59437 : ℝ)/835584), ((3047 : ℝ)/278528), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![((224069 : ℝ)/16711680), ((204079 : ℝ)/1392640), ((1211147 : ℝ)/2088960), ((986827 : ℝ)/983040), ((5888491 : ℝ)/5570560), ((3911999 : ℝ)/4177920), ((1832731 : ℝ)/2088960), ((4822307 : ℝ)/5570560), ((1710133 : ℝ)/2088960), ((167989 : ℝ)/261120), ((272857 : ℝ)/835584), ((61141 : ℝ)/835584)],
-      ![(0 : ℝ), ((4322863 : ℝ)/16711680), ((763939 : ℝ)/696320), ((5846455 : ℝ)/3342336), ((28960853 : ℝ)/16711680), ((13269227 : ℝ)/8355840), ((5288593 : ℝ)/3342336), ((3474293 : ℝ)/2088960), ((5849317 : ℝ)/3342336), ((425341 : ℝ)/278528), ((1629497 : ℝ)/2088960), ((126001 : ℝ)/835584)],
-      ![(0 : ℝ), ((2435091 : ℝ)/5570560), ((2671897 : ℝ)/1671168), ((304409 : ℝ)/130560), ((40061071 : ℝ)/16711680), ((40934567 : ℝ)/16711680), ((42909767 : ℝ)/16711680), ((23892829 : ℝ)/8355840), ((3668863 : ℝ)/1114112), ((2332729 : ℝ)/835584), ((1645533 : ℝ)/1392640), ((35665 : ℝ)/278528)],
-      ![(0 : ℝ), ((3324151 : ℝ)/8355840), ((2520833 : ℝ)/2088960), ((8879893 : ℝ)/5570560), ((9602003 : ℝ)/5570560), ((5292407 : ℝ)/2785280), ((35794189 : ℝ)/16711680), ((16223811 : ℝ)/5570560), ((67038773 : ℝ)/16711680), ((17862651 : ℝ)/5570560), ((1739155 : ℝ)/1671168), ((52849 : ℝ)/835584)],
-      ![(0 : ℝ), ((2078411 : ℝ)/16711680), ((1107961 : ℝ)/2785280), ((3843899 : ℝ)/8355840), ((4792039 : ℝ)/8355840), ((231939 : ℝ)/327680), ((8760169 : ℝ)/8355840), ((231481 : ℝ)/87040), ((2264763 : ℝ)/557056), ((213171 : ℝ)/81920), ((247679 : ℝ)/557056), ((1597 : ℝ)/278528)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((8049 : ℝ)/5570560), ((156683 : ℝ)/4177920), ((436963 : ℝ)/2785280), ((3450755 : ℝ)/3342336), ((10734715 : ℝ)/3342336), ((3785723 : ℝ)/1044480), ((23955629 : ℝ)/16711680), ((68943 : ℝ)/557056), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((26387 : ℝ)/3342336), ((1301671 : ℝ)/16711680), ((6983863 : ℝ)/16711680), ((7156577 : ℝ)/3342336), ((31346477 : ℝ)/8355840), ((2860445 : ℝ)/1114112), ((694133 : ℝ)/1671168), ((51 : ℝ)/32768), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), ((3007 : ℝ)/1392640), ((669017 : ℝ)/16711680), ((4066459 : ℝ)/16711680), ((747431 : ℝ)/557056), ((11324785 : ℝ)/3342336), ((1437203 : ℝ)/417792), ((504187 : ℝ)/417792), ((3215 : ℝ)/34816), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), ((655 : ℝ)/52224), ((117251 : ℝ)/1044480), ((6948433 : ℝ)/8355840), ((12285497 : ℝ)/4177920), ((67542251 : ℝ)/16711680), ((12879257 : ℝ)/5570560), ((555325 : ℝ)/1671168), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((2328379 : ℝ)/16711680), ((3329681 : ℝ)/2088960), ((62888323 : ℝ)/16711680), ((11020691 : ℝ)/3342336), ((256059 : ℝ)/278528), ((32311 : ℝ)/557056), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), ((4251221 : ℝ)/16711680), ((5605093 : ℝ)/2785280), ((3298079 : ℝ)/1044480), ((72221 : ℝ)/40960), ((17025 : ℝ)/69632), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ)]],
-    ![![((585889 : ℝ)/5570560), ((134847 : ℝ)/557056), ((261169 : ℝ)/835584), ((116003 : ℝ)/417792), ((95069 : ℝ)/522240), ((9097 : ℝ)/104448), ((1391 : ℝ)/34816), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((3558493 : ℝ)/8355840), ((5856391 : ℝ)/5570560), ((2192943 : ℝ)/1392640), ((32352901 : ℝ)/16711680), ((1990927 : ℝ)/1044480), ((675989 : ℝ)/417792), ((23946689 : ℝ)/16711680), ((1374613 : ℝ)/1044480), ((4244563 : ℝ)/4177920), ((320729 : ℝ)/522240), ((29867 : ℝ)/104448), ((9373 : ℝ)/104448)],
-      ![((1173911 : ℝ)/1671168), ((24817189 : ℝ)/16711680), ((10228187 : ℝ)/4177920), ((7698767 : ℝ)/2088960), ((1179337 : ℝ)/278528), ((71831437 : ℝ)/16711680), ((37032019 : ℝ)/8355840), ((1240563 : ℝ)/278528), ((61968793 : ℝ)/16711680), ((21703463 : ℝ)/8355840), ((568273 : ℝ)/417792), ((35725 : ℝ)/104448)],
-      ![((1316461 : ℝ)/3342336), ((1439383 : ℝ)/3342336), ((6397769 : ℝ)/8355840), ((29129917 : ℝ)/16711680), ((17936687 : ℝ)/8355840), ((20421757 : ℝ)/8355840), ((3387083 : ℝ)/1044480), ((21724123 : ℝ)/5570560), ((19604227 : ℝ)/5570560), ((50788207 : ℝ)/16711680), ((5010001 : ℝ)/2785280), ((706139 : ℝ)/2088960)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((1302337 : ℝ)/8355840), ((25847297 : ℝ)/16711680), ((5938339 : ℝ)/2785280), ((36444857 : ℝ)/16711680), ((44069467 : ℝ)/16711680), ((752443 : ℝ)/522240), ((92371 : ℝ)/1392640)],
-      ![(0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((1263853 : ℝ)/2785280), ((2361791 : ℝ)/1392640), ((4856453 : ℝ)/3342336), ((28251787 : ℝ)/16711680), ((4498849 : ℝ)/2088960), ((2269147 : ℝ)/3342336), ((25879 : ℝ)/835584)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((4793 : ℝ)/163840), ((201193 : ℝ)/8355840), ((1840579 : ℝ)/5570560), ((9510571 : ℝ)/5570560), ((32284699 : ℝ)/16711680), ((11666597 : ℝ)/8355840), ((3090509 : ℝ)/1671168), ((23373809 : ℝ)/16711680), ((385309 : ℝ)/8355840), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((3068179 : ℝ)/16711680), ((20321383 : ℝ)/16711680), ((38969351 : ℝ)/16711680), ((579617 : ℝ)/327680), ((6882647 : ℝ)/4177920), ((10795777 : ℝ)/5570560), ((104917 : ℝ)/196608), ((10103 : ℝ)/327680), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((106021 : ℝ)/1392640), ((13130293 : ℝ)/16711680), ((722069 : ℝ)/327680), ((19098377 : ℝ)/8355840), ((29314523 : ℝ)/16711680), ((10855787 : ℝ)/5570560), ((1760871 : ℝ)/1392640), ((282913 : ℝ)/8355840), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((2911147 : ℝ)/8355840), ((30872789 : ℝ)/16711680), ((44233333 : ℝ)/16711680), ((2921971 : ℝ)/1392640), ((17009861 : ℝ)/8355840), ((28625431 : ℝ)/16711680), ((984557 : ℝ)/2785280), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((1103519 : ℝ)/1671168), ((6953417 : ℝ)/3342336), ((16330657 : ℝ)/8355840), ((32597311 : ℝ)/16711680), ((2682577 : ℝ)/1114112), ((2176741 : ℝ)/2088960), ((546697 : ℝ)/16711680), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)],
-      ![((63 : ℝ)/2048), ((63 : ℝ)/2048), ((2541511 : ℝ)/8355840), ((925975 : ℝ)/3342336), (0 : ℝ), ((437277 : ℝ)/1114112), ((2108939 : ℝ)/1671168), ((1654997 : ℝ)/8355840), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((63 : ℝ)/2048)]]]
-
-theorem r2_cell_r0_0 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_1 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_2 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_3 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_4 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_5 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_6 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_7 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_8 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_9 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_10 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r0_11 : ∀ wi : Fin 12, r2V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = if c2V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨0, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_0 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_1 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_2 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_3 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_4 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_5 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_6 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨6, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_7 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨7, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_8 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨8, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_9 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨9, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_10 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨10, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell_r1_11 : ∀ wi : Fin 12, r2V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi = if c2V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi > 0 then c2V (⟨1, by norm_num⟩ : Fin 2) (⟨11, by norm_num⟩ : Fin 12) wi else 0 := by
-  intro wi
-  fin_cases wi <;> (simp [c2V, r2V])
-
-theorem r2_cell : ∀ (o : Fin 2) (hi wi : Fin 12), r2V o hi wi = if c2V o hi wi > 0 then c2V o hi wi else 0 := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-  · exact r2_cell_r0_0 wi
-  · exact r2_cell_r0_1 wi
-  · exact r2_cell_r0_2 wi
-  · exact r2_cell_r0_3 wi
-  · exact r2_cell_r0_4 wi
-  · exact r2_cell_r0_5 wi
-  · exact r2_cell_r0_6 wi
-  · exact r2_cell_r0_7 wi
-  · exact r2_cell_r0_8 wi
-  · exact r2_cell_r0_9 wi
-  · exact r2_cell_r0_10 wi
-  · exact r2_cell_r0_11 wi
-  · exact r2_cell_r1_0 wi
-  · exact r2_cell_r1_1 wi
-  · exact r2_cell_r1_2 wi
-  · exact r2_cell_r1_3 wi
-  · exact r2_cell_r1_4 wi
-  · exact r2_cell_r1_5 wi
-  · exact r2_cell_r1_6 wi
-  · exact r2_cell_r1_7 wi
-  · exact r2_cell_r1_8 wi
-  · exact r2_cell_r1_9 wi
-  · exact r2_cell_r1_10 wi
-  · exact r2_cell_r1_11 wi
-
-theorem relu_c2 : relu (2 * (2*6) * (2*6)) (Tensor3.flatten c2V) = Tensor3.flatten r2V := by
-  funext k
-  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
-  rw [relu, flatten_t3Idx, flatten_t3Idx, r2_cell]
+theorem pZ_len : pZ.length = 392 := by decide +kernel
 
 /-- The pooled feature vector (flattened maxpool output), exact. -/
-noncomputable def p2f : Vec (2 * 6 * 6) := ![((204079 : ℝ)/1392640), ((986827 : ℝ)/983040), ((5888491 : ℝ)/5570560), ((1832731 : ℝ)/2088960), ((1710133 : ℝ)/2088960), ((272857 : ℝ)/835584), ((2435091 : ℝ)/5570560), ((304409 : ℝ)/130560), ((40934567 : ℝ)/16711680), ((23892829 : ℝ)/8355840), ((3668863 : ℝ)/1114112), ((1645533 : ℝ)/1392640), ((3324151 : ℝ)/8355840), ((8879893 : ℝ)/5570560), ((5292407 : ℝ)/2785280), ((16223811 : ℝ)/5570560), ((2264763 : ℝ)/557056), ((1739155 : ℝ)/1671168), (0 : ℝ), ((26387 : ℝ)/3342336), ((6983863 : ℝ)/16711680), ((31346477 : ℝ)/8355840), ((3785723 : ℝ)/1044480), ((68943 : ℝ)/557056), (0 : ℝ), ((117251 : ℝ)/1044480), ((12285497 : ℝ)/4177920), ((67542251 : ℝ)/16711680), ((504187 : ℝ)/417792), (0 : ℝ), (0 : ℝ), ((4251221 : ℝ)/16711680), ((62888323 : ℝ)/16711680), ((11020691 : ℝ)/3342336), ((32311 : ℝ)/557056), (0 : ℝ), ((5856391 : ℝ)/5570560), ((32352901 : ℝ)/16711680), ((1990927 : ℝ)/1044480), ((23946689 : ℝ)/16711680), ((4244563 : ℝ)/4177920), ((29867 : ℝ)/104448), ((24817189 : ℝ)/16711680), ((7698767 : ℝ)/2088960), ((71831437 : ℝ)/16711680), ((1240563 : ℝ)/278528), ((61968793 : ℝ)/16711680), ((5010001 : ℝ)/2785280), (0 : ℝ), (0 : ℝ), ((1263853 : ℝ)/2785280), ((5938339 : ℝ)/2785280), ((44069467 : ℝ)/16711680), ((752443 : ℝ)/522240), ((63 : ℝ)/2048), ((3068179 : ℝ)/16711680), ((38969351 : ℝ)/16711680), ((32284699 : ℝ)/16711680), ((10795777 : ℝ)/5570560), ((385309 : ℝ)/8355840), ((63 : ℝ)/2048), ((30872789 : ℝ)/16711680), ((44233333 : ℝ)/16711680), ((17009861 : ℝ)/8355840), ((1760871 : ℝ)/1392640), ((63 : ℝ)/2048), ((63 : ℝ)/2048), ((6953417 : ℝ)/3342336), ((16330657 : ℝ)/8355840), ((2682577 : ℝ)/1114112), ((546697 : ℝ)/16711680), ((63 : ℝ)/2048)]
+noncomputable def p2f : Vec (2 * 14 * 14) := fun i => (pZ.getD i 0 : ℝ) / 4177920
 
--- Decoding a flat index near the end of `Fin 72` back to `(ci, ho, wo)` recurses deeper than
--- the default; `max_def` is needed only where a window's maximum is not its first cell.
-set_option maxRecDepth 8192 in
-set_option linter.unusedSimpArgs false in
-theorem pooled_eq : maxPoolFlat 2 6 6 (Tensor3.flatten r2V) = p2f := by
-  show Tensor3.flatten (maxPool2 (Tensor3.unflatten (Tensor3.flatten r2V))) = p2f
-  rw [Tensor3.unflatten_flatten]
-  funext i
-  fin_cases i
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((204079 : ℝ)/1392640)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((986827 : ℝ)/983040)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((5888491 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((1832731 : ℝ)/2088960)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((1710133 : ℝ)/2088960)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((272857 : ℝ)/835584)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((2435091 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((304409 : ℝ)/130560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((40934567 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((23892829 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((3668863 : ℝ)/1114112)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((1645533 : ℝ)/1392640)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((3324151 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((8879893 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((5292407 : ℝ)/2785280)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((16223811 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((2264763 : ℝ)/557056)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((1739155 : ℝ)/1671168)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((26387 : ℝ)/3342336)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((6983863 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((31346477 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((3785723 : ℝ)/1044480)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((68943 : ℝ)/557056)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((117251 : ℝ)/1044480)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((12285497 : ℝ)/4177920)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((67542251 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((504187 : ℝ)/417792)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((4251221 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((62888323 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((11020691 : ℝ)/3342336)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((32311 : ℝ)/557056)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((5856391 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((32352901 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((1990927 : ℝ)/1044480)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((23946689 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((4244563 : ℝ)/4177920)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((29867 : ℝ)/104448)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((24817189 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((7698767 : ℝ)/2088960)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((71831437 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((1240563 : ℝ)/278528)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((61968793 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((5010001 : ℝ)/2785280)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = (0 : ℝ)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((1263853 : ℝ)/2785280)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((5938339 : ℝ)/2785280)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((44069467 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((752443 : ℝ)/522240)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((63 : ℝ)/2048)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((3068179 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((38969351 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((32284699 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((10795777 : ℝ)/5570560)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((385309 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((63 : ℝ)/2048)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((30872789 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((44233333 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((17009861 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((1760871 : ℝ)/1392640)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((63 : ℝ)/2048)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨0, by norm_num⟩ : Fin 6)
-        = ((63 : ℝ)/2048)
-    simp [maxPool2, r2V, max_def]
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨1, by norm_num⟩ : Fin 6)
-        = ((6953417 : ℝ)/3342336)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨2, by norm_num⟩ : Fin 6)
-        = ((16330657 : ℝ)/8355840)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨3, by norm_num⟩ : Fin 6)
-        = ((2682577 : ℝ)/1114112)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨4, by norm_num⟩ : Fin 6)
-        = ((546697 : ℝ)/16711680)
-    simp [maxPool2, r2V, max_def]
-    try norm_num
-  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) (⟨5, by norm_num⟩ : Fin 6)
-        = ((63 : ℝ)/2048)
-    simp [maxPool2, r2V, max_def]
+theorem pool_chk : poolTabZ 2 14 14 (g3 c2Z) pZ = true := by decide +kernel
+
+theorem head_feat : maxPoolFlat 2 14 14 (relu (2 * (2*14) * (2*14))
+    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
+  rw [conv2_fun]
+  exact maxPoolFlat_relu_tab (by norm_num) pool_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The pool margin up to twins: tied windows read all-zero patches
 -- ════════════════════════════════════════════════════════════════
 
-theorem zp_6_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨6, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_6_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨6, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_7_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨7, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_7_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨7, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_8_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨8, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_8_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨8, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_8_10 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨8, by norm_num⟩ : Fin 12) (⟨10, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_8_11 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨8, by norm_num⟩ : Fin 12) (⟨11, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_9_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨9, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_9_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨9, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_9_10 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨9, by norm_num⟩ : Fin 12) (⟨10, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_9_11 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨9, by norm_num⟩ : Fin 12) (⟨11, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_10_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨10, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_10_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨10, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_10_10 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨10, by norm_num⟩ : Fin 12) (⟨10, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_10_11 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨10, by norm_num⟩ : Fin 12) (⟨11, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_11_0 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨11, by norm_num⟩ : Fin 12) (⟨0, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_11_1 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨11, by norm_num⟩ : Fin 12) (⟨1, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_11_10 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨11, by norm_num⟩ : Fin 12) (⟨10, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem zp_11_11 : ∀ cc kh kw, convPad 3 3 x1V cc kh kw (⟨11, by norm_num⟩ : Fin 12) (⟨11, by norm_num⟩ : Fin 12) = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-
-theorem cert_0_0 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_0_1 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_0_2 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_0_3 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_0_4 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-theorem cert_0_5 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-theorem cert_1_0 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_1_1 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_1_2 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_1_3 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨3, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_6_0 zp_6_1))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_6_0 zp_7_0))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_6_0 zp_7_1))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-theorem cert_1_4 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨4, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_0 zp_8_1))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_0 zp_9_0))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_0 zp_9_1))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨1, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_10 zp_8_11))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_10 zp_9_10))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_8_10 zp_9_11))
-theorem cert_1_5 : ∀ wo : Fin 6,
-    (∀ cd : Fin 2 × Fin 2, c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2) = (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      ConvPatchEq 3 3 x1V (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1, winColInv wo m.2)
-        (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1, winColInv wo cd.2) ∨
-      c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) cd.1) (winColInv wo cd.2) + 2 * ((26090859375 : ℝ)/4503599627370496) <
-        c2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨5, by norm_num⟩ : Fin 6) m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_0 zp_10_1))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_0 zp_11_0))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_0 zp_11_1))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨1, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))
-  · right
-    refine ⟨((⟨0, by norm_num⟩ : Fin 2), (⟨0, by norm_num⟩ : Fin 2)), ?_⟩
-    intro cd
-    fin_cases cd
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_10 zp_10_11))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_10 zp_11_10))
-    · exact Or.inr (Or.inl (ConvPatchEq.of_zero zp_10_10 zp_11_11))
+theorem cert_chk : poolCertZ 2 14 14 (zeroTwinZ 2 3 3 28 28 (reluZ (g3 c1Z))) (g3 c2Z)
+    10 = true := by
+  decide +kernel
 
 /-- **The pool margin up to twins holds at the trained weights**, ties and all. -/
 theorem pool_margin :
-    MaxPool2MarginQUpTo (c := 2) (h := 6) (w := 6) ((26090859375 : ℝ)/4503599627370496) (ConvPatchEq 3 3 x1V) c2V := by
-  refine windowMarginUpTo_of_cert winRowInv winColInv (by norm_num) _
-    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂) ?_
-  intro ci ho wo
-  fin_cases ci <;> fin_cases ho
-  · exact cert_0_0 wo
-  · exact cert_0_1 wo
-  · exact cert_0_2 wo
-  · exact cert_0_3 wo
-  · exact cert_0_4 wo
-  · exact cert_0_5 wo
-  · exact cert_1_0 wo
-  · exact cert_1_1 wo
-  · exact cert_1_2 wo
-  · exact cert_1_3 wo
-  · exact cert_1_4 wo
-  · exact cert_1_5 wo
+    MaxPool2MarginQUpTo (c := 2) (h := 14) (w := 14) ((165715674705 : ℝ)/144115188075855872) (ConvPatchEq 3 3 x1V) c2V :=
+  maxPool2MarginQUpTo_of_poolCertZ (by norm_num) (by norm_num) _
+    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂)
+    (zeroTwinZ 2 3 3 28 28 (reluZ (g3 c1Z))) convPatchEq_of_zeroTwinZ (by norm_num) cert_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The dense head: the relu₃ and relu₄ margins
 -- ════════════════════════════════════════════════════════════════
 
+theorem d3c0 : dotZ pZ w3c0Z = Int.negSucc 1974936260 := by decide +kernel
+theorem d3c1 : dotZ pZ w3c1Z = 7014964617 := by decide +kernel
+theorem d3c2 : dotZ pZ w3c2Z = 7784998925 := by decide +kernel
+theorem d3c3 : dotZ pZ w3c3Z = Int.negSucc 1060480829 := by decide +kernel
+theorem d3c4 : dotZ pZ w3c4Z = 5991274862 := by decide +kernel
+theorem d3c5 : dotZ pZ w3c5Z = Int.negSucc 1117732334 := by decide +kernel
+theorem d3c6 : dotZ pZ w3c6Z = Int.negSucc 1193951886 := by decide +kernel
+theorem d3c7 : dotZ pZ w3c7Z = 130555079 := by decide +kernel
+
+theorem d3_0 : dense W3 b3 p2f 0 = ((-635899287 : ℝ)/178257920) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c0Z.getD i 0 : ℝ) / 128)) + b3 0 = _
+  rw [sum_getD_div (ys := w3c0Z) pZ_len (w3Z_len 0) d3c0 4177920 128]
+  norm_num [b3]
+
+theorem d3_1 : dense W3 b3 p2f 1 = ((2380655619 : ℝ)/178257920) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c1Z.getD i 0 : ℝ) / 128)) + b3 1 = _
+  rw [sum_getD_div (ys := w3c1Z) pZ_len (w3Z_len 1) d3c1 4177920 128]
+  norm_num [b3]
+
+theorem d3_2 : dense W3 b3 p2f 2 = ((1574292457 : ℝ)/106954752) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c2Z.getD i 0 : ℝ) / 128)) + b3 2 = _
+  rw [sum_getD_div (ys := w3c2Z) pZ_len (w3Z_len 2) d3c2 4177920 128]
+  norm_num [b3]
+
+theorem d3_3 : dense W3 b3 p2f 3 = ((-34128625 : ℝ)/17825792) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c3Z.getD i 0 : ℝ) / 128)) + b3 3 = _
+  rw [sum_getD_div (ys := w3c3Z) pZ_len (w3Z_len 3) d3c3 4177920 128]
+  norm_num [b3]
+
+theorem d3_4 : dense W3 b3 p2f 4 = ((3042182071 : ℝ)/267386880) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c4Z.getD i 0 : ℝ) / 128)) + b3 4 = _
+  rw [sum_getD_div (ys := w3c4Z) pZ_len (w3Z_len 4) d3c4 4177920 128]
+  norm_num [b3]
+
+theorem d3_5 : dense W3 b3 p2f 5 = ((-73229473 : ℝ)/35651584) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c5Z.getD i 0 : ℝ) / 128)) + b3 5 = _
+  rw [sum_getD_div (ys := w3c5Z) pZ_len (w3Z_len 5) d3c5 4177920 128]
+  norm_num [b3]
+
+theorem d3_6 : dense W3 b3 p2f 6 = ((-1139214607 : ℝ)/534773760) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c6Z.getD i 0 : ℝ) / 128)) + b3 6 = _
+  rw [sum_getD_div (ys := w3c6Z) pZ_len (w3Z_len 6) d3c6 4177920 128]
+  norm_num [b3]
+
+theorem d3_7 : dense W3 b3 p2f 7 = ((215125319 : ℝ)/534773760) := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / 4177920 * ((w3c7Z.getD i 0 : ℝ) / 128)) + b3 7 = _
+  rw [sum_getD_div (ys := w3c7Z) pZ_len (w3Z_len 7) d3c7 4177920 128]
+  norm_num [b3]
+
 /-- dense3 pre-activations at the image, exact. -/
-noncomputable def d3V : Fin 8 → ℝ := ![((-5006232193 : ℝ)/2139095040), ((-885762143 : ℝ)/1069547520), ((469269101 : ℝ)/534773760), ((-10029286031 : ℝ)/2139095040), ((-3237321239 : ℝ)/534773760), ((18293036663 : ℝ)/2139095040), ((-4675047777 : ℝ)/713031680), ((-4210891093 : ℝ)/534773760)]
+noncomputable def d3V : Fin 8 → ℝ := ![((-635899287 : ℝ)/178257920), ((2380655619 : ℝ)/178257920), ((1574292457 : ℝ)/106954752), ((-34128625 : ℝ)/17825792), ((3042182071 : ℝ)/267386880), ((-73229473 : ℝ)/35651584), ((-1139214607 : ℝ)/534773760), ((215125319 : ℝ)/534773760)]
 
 theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
   intro k
-  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k
+  exacts [d3_0, d3_1, d3_2, d3_3, d3_4, d3_5, d3_6, d3_7]
 
 /-- relu(dense3) at the image, exact. -/
-noncomputable def r3V : Vec 8 := ![(0 : ℝ), (0 : ℝ), ((469269101 : ℝ)/534773760), (0 : ℝ), (0 : ℝ), ((18293036663 : ℝ)/2139095040), (0 : ℝ), (0 : ℝ)]
+noncomputable def r3V : Vec 8 := ![(0 : ℝ), ((2380655619 : ℝ)/178257920), ((1574292457 : ℝ)/106954752), (0 : ℝ), ((3042182071 : ℝ)/267386880), (0 : ℝ), (0 : ℝ), ((215125319 : ℝ)/534773760)]
 
 theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
   funext k
@@ -2183,31 +444,27 @@ theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
   fin_cases k <;> (simp [d3V, r3V])
 
 /-- dense4 pre-activations at the image, exact. -/
-noncomputable def d4V : Fin 8 → ℝ := ![((-1223902639417 : ℝ)/273804165120), ((1765409865991 : ℝ)/273804165120), ((1398122901 : ℝ)/1342177280), ((-499372496747 : ℝ)/273804165120), ((-1230364319 : ℝ)/536870912), ((1762079771867 : ℝ)/273804165120), ((186374164871 : ℝ)/45634027520), ((387232922929 : ℝ)/273804165120)]
+noncomputable def d4V : Fin 8 → ℝ := ![((79633270233 : ℝ)/22817013760), ((120262503489 : ℝ)/22817013760), ((165607129267 : ℝ)/22817013760), ((463764047621 : ℝ)/34225520640), ((9014835323 : ℝ)/11408506880), ((-704624191801 : ℝ)/68451041280), ((-32747863051 : ℝ)/8556380160), ((62739053413 : ℝ)/4278190080)]
 
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
   fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
 
-theorem head_feat : maxPoolFlat 2 6 6 (relu (2 * (2*6) * (2*6))
-    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
-  rw [conv2_fun, relu_c2, pooled_eq]
-
 -- ════════════════════════════════════════════════════════════════
 -- § Weight bounds
 -- ════════════════════════════════════════════════════════════════
 
-theorem hW3 : ∀ i j, |W3 i j| ≤ ((155 : ℝ)/128) := by
-  simp only [W3, Fin.forall_fin_succ, Matrix.cons_val_zero, Matrix.cons_val_succ,
-    IsEmpty.forall_iff, and_true, abs_le]
-  norm_num
+theorem w3Z_range : ∀ k, ∀ z ∈ w3Z k, Int.negSucc 121 ≤ z ∧ z ≤ 122 := by decide +kernel
 
-theorem hW4 : ∀ i j, |W4 i j| ≤ ((125 : ℝ)/128) := by
+theorem hW3 : ∀ i j, |W3 i j| ≤ ((61 : ℝ)/64) := fun i j =>
+  abs_getD_div_le (w3Z j) 122 (by norm_num) (w3Z_range j) (by norm_num) (by norm_num) i
+
+theorem hW4 : ∀ i j, |W4 i j| ≤ ((17 : ℝ)/16) := by
   simp only [W4, Fin.forall_fin_succ, Matrix.cons_val_zero, Matrix.cons_val_succ,
     IsEmpty.forall_iff, and_true, abs_le]
   norm_num
 
-theorem hW5 : ∀ i j, |W5 i j| ≤ ((133 : ℝ)/128) := by
+theorem hW5 : ∀ i j, |W5 i j| ≤ ((137 : ℝ)/128) := by
   simp only [W5, Fin.forall_fin_succ, Matrix.cons_val_zero, Matrix.cons_val_succ,
     IsEmpty.forall_iff, and_true, abs_le]
   norm_num
@@ -2217,21 +474,22 @@ theorem hW5 : ∀ i j, |W5 i j| ≤ ((133 : ℝ)/128) := by
 -- ════════════════════════════════════════════════════════════════
 
 /-- The margin radius `a·(lr·G)` of the instance, exact. -/
-theorem radius_eq : (((5 : ℝ)/2) : ℝ) * ((1 / 2 ^ 42 : ℝ) *
-    cnnConv2GradBound 2 6 6 8 8 10 3 3 ((5 : ℝ)/2) ((155 : ℝ)/128) ((125 : ℝ)/128) ((133 : ℝ)/128)) = ((26090859375 : ℝ)/4503599627370496) := by
+theorem radius_eq : (((23 : ℝ)/8) : ℝ) * ((1 / 2 ^ 47 : ℝ) *
+    cnnConv2GradBound 2 14 14 8 8 10 3 3 ((23 : ℝ)/8) ((61 : ℝ)/64) ((17 : ℝ)/16) ((137 : ℝ)/128)) = ((165715674705 : ℝ)/144115188075855872) := by
   norm_num [cnnConv2GradBound]
 
-/-- **One exact-gradient SGD step on the conv2 kernel of a trained MNIST CNN, at a real test image
-    with tied pool windows, decreases the cross-entropy loss** by at least `lr·‖∇L‖₂²/2`, at
-    `lr = 2⁻42`. Every hypothesis of `cnn_conv2_exact_sgd_descends` is discharged above. -/
+/-- **One exact-gradient SGD step on the conv2 kernel of a trained MNIST CNN, at a real 28×28
+    test image with tied pool windows, decreases the cross-entropy loss** by at least
+    `lr·‖∇L‖₂²/2`, at `lr = 2⁻47`. Every hypothesis of `cnn_conv2_exact_sgd_descends` is
+    discharged above. -/
 theorem trained_cnn_conv2_sgd_descends_concrete :
-    (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2 -
-        (1 / 2 ^ 42 : ℝ) • gradAt (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl)
+    (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2 -
+        (1 / 2 ^ 47 : ℝ) • gradAt (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl)
           (Kernel4.flatten W2)) ≤
-      (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2) -
-        (1 / 2 ^ 42 : ℝ) * (∑ idx, gradAt (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4
+      (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2) -
+        (1 / 2 ^ 47 : ℝ) * (∑ idx, gradAt (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4
           W5 b5 lbl) (Kernel4.flatten W2) idx ^ 2) / 2 := by
-  refine cnn_conv2_exact_sgd_descends (h := 6) (w := 6) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
+  refine cnn_conv2_exact_sgd_descends (h := 14) (w := 14) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
     (ConvPatchEq 3 3 x1V) (by norm_num) x1_bound (fun _ _ h => h) (by norm_num) hW3
     (by norm_num) hW4 (by norm_num) hW5 (by norm_num) ?_ ?_ ?_ ?_ ?_ ?_
   · intro k
@@ -2254,22 +512,22 @@ theorem trained_cnn_conv2_sgd_descends_concrete :
 -- ════════════════════════════════════════════════════════════════
 
 /-- The conv2-bias rung's radius `lr·G_b`, exact; it sits inside the kernel rung's. -/
-theorem radius_bias_eq : (1 / 2 ^ 36 : ℝ) *
-    cnnConv2BiasGradBound 2 6 6 8 8 10 ((155 : ℝ)/128) ((125 : ℝ)/128) ((133 : ℝ)/128) = ((115959375 : ℝ)/35184372088832) := by
+theorem radius_bias_eq : (1 / 2 ^ 40 : ℝ) *
+    cnnConv2BiasGradBound 2 14 14 8 8 10 ((61 : ℝ)/64) ((17 : ℝ)/16) ((137 : ℝ)/128) = ((34806905 : ℝ)/35184372088832) := by
   norm_num [cnnConv2BiasGradBound]
 
 /-- **One exact-gradient SGD step on the conv2 BIAS of the same trained MNIST CNN, at the same
-    test image, decreases the cross-entropy loss** by at least `lr·‖∇L‖₂²/2`, at `lr = 2⁻36`.
+    test image, decreases the cross-entropy loss** by at least `lr·‖∇L‖₂²/2`, at `lr = 2⁻40`.
     Every hypothesis of `cnn_conv2_bias_exact_sgd_descends` is discharged above; the relu₂ and
     pool margins are the kernel rung's (`c2_margin`, `pool_margin`) at a smaller radius. -/
 theorem trained_cnn_conv2_bias_sgd_descends_concrete :
-    (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5 b5 lbl) (b2 -
-        (1 / 2 ^ 36 : ℝ) • gradAt (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5
+    (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5 b5 lbl) (b2 -
+        (1 / 2 ^ 40 : ℝ) • gradAt (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5
           b5 lbl) b2) ≤
-      (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5 b5 lbl) b2 -
-        (1 / 2 ^ 36 : ℝ) * (∑ o, gradAt (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4
+      (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5 b5 lbl) b2 -
+        (1 / 2 ^ 40 : ℝ) * (∑ o, gradAt (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4
           b4 W5 b5 lbl) b2 o ^ 2) / 2 := by
-  refine cnn_conv2_bias_exact_sgd_descends (h := 6) (w := 6) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
+  refine cnn_conv2_bias_exact_sgd_descends (h := 14) (w := 14) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
     (ConvPatchEq 3 3 x1V) (fun _ _ h => h) (by norm_num) hW3 (by norm_num) hW4 (by norm_num) hW5
     (by norm_num) ?_ ?_ ?_ ?_ ?_ ?_
   · intro k

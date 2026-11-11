@@ -24,14 +24,17 @@ The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifie
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances
-(`LipschitzCert{Instance,Scorecard*,Float}`, `Trained.MlpWitness`, `TrainedLinearDescent`)
+(`LipschitzCert{Instance,Scorecard*,Float}`)
 — deliberately lives on a REDUCED model (4×4-pooled 49-dim inputs, width-8 hidden,
 /128–/256 rational weights): every margin, Schatten/Gram sum, and LDLᵀ SOS witness is
 exact rational arithmetic checked in-kernel, which is infeasible today at 512-wide
 fan-ins (and the unconstrained canonical net's spectral-product cert is MEASURED
 vacuous — the uncapped row of `runs/spectral_mlp_phase3.log` certifies almost nothing —
 which is why randomized smoothing, which DOES run on
-the canonical net, exists). Those files carry a reduced-model banner pointing here. -/
+the canonical net, exists). Those files carry a reduced-model banner pointing here.
+`TrainedLinearDescent` and `Trained.MlpWitness` are not among them: they run on the 28×28
+image, at the full 784→10 linear net and at this net's architecture at width 8
+(784→8→8→10), their 784-term sums by kernel list arithmetic (`Foundation/ListDot`). -/
 
 namespace Proofs
 namespace MlpCanonical

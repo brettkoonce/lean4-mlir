@@ -1,27 +1,38 @@
 """Trained-weight CNN descent, all four conv rungs: concrete satisfiable instances on real MNIST.
 
-Emits two files, every hypothesis discharged by exact in-kernel rational arithmetic at TRAINED,
-/128-rationalized weights (biases /16384) and a REAL MNIST test image:
+Emits two files, every hypothesis discharged by exact in-kernel integer arithmetic at TRAINED,
+/128-rationalized weights (biases /16384) and a REAL 28x28 MNIST test image, all 784 pixels:
 
 - LeanMlir/Proofs/Training/Trained/CnnDescent.lean, net A (conv1 WITHOUT bias):
   `cnn_conv2_exact_sgd_descends` and `cnn_conv2_bias_exact_sgd_descends` (one exact-gradient SGD
   step on the conv2 kernel / bias decreases the cross-entropy loss). The point is the pool
-  hypothesis `MaxPool2MarginQUpTo` with twins `ConvPatchEq`: the chosen image has a live 2x2
-  window whose conv2 outputs are EQUAL (they read identical all-zero input patches), the case the
-  old `MaxPool2MarginQ` could not state and real MNIST forces
+  hypothesis `MaxPool2MarginQUpTo` with twins `ConvPatchEq`: the image's blank border gives live
+  2x2 windows whose conv2 outputs are EQUAL (they read identical all-zero input patches), the case
+  the old `MaxPool2MarginQ` could not state and real MNIST forces
   (scripts/probes/mnist_pool_twin_probe.py). conv1 is bias-free so that a zero input patch gives
-  x1 = 0, the same value as the zero padding: then the cells of a blank corner read identical
+  x1 = 0, the same value as the zero padding: then the cells of a blank region read identical
   patches, and their conv2 outputs tie at b2.
 - LeanMlir/Proofs/Training/Trained/CnnDescentConv1.lean, net B (conv1 WITH a trained bias):
   `cnn_conv1_exact_sgd_descends` and `cnn_conv1_bias_exact_sgd_descends`. Net A cannot serve the
   conv1 rungs: their relu1 margin needs every conv1 pre-activation nonzero, and a bias-free conv1
   is exactly 0 on a blank patch. The twins are two-layer (`ConvPatchEq2`): two cells whose 5x5
-  two-conv receptive fields lie in a blank region, with every outer read in bounds.
+  two-conv receptive fields lie in a blank region and meet the zero padding the same way.
 
-No pool-tie regularizer is used: the ties are the data's. Net (reduced so every table is exact in
-the kernel): 24x24-center-cropped MNIST, 2x2 block sums -> 12x12 (exact pixel sums /1020), conv1
-1->2 3x3 SAME, relu, conv2 2->2 3x3 SAME + bias, relu, maxpool 2x2 -> 2x6x6, dense 72->8, relu,
-dense 8->8, relu, dense 8->10; both nets trained by the same seed-0 numpy SGD.
+No pool-tie regularizer is used: the ties are the data's. The net is the CNN chapter's
+`mnistCnnNoBn` architecture at 2 channels and an 8-wide head: the 1x28x28 image (pixels k/255),
+conv1 1->2 3x3 SAME, relu, conv2 2->2 3x3 SAME + bias, relu, maxpool 2x2 -> 2x14x14, dense
+392->8, relu, dense 8->8, relu, dense 8->10; both nets trained by the same seed-0 numpy SGD.
+
+Data conventions (LeanMlir/Proofs/Architectures/ListConv.lean). Every table is nested `List ℤ`
+numerators over one denominator, and each whole-table fact is ONE kernel evaluation
+(`decide +kernel`) of a `Bool` this script evaluates first with the same integer formula:
+
+    pixels            k/255            x0Z   [1][28][28]
+    conv kernels      k/128            W1Z, W2Z   [out][in][3][3]
+    conv1 preacts     k/D1             c1Z   [2][28][28];  D1 = 255*128 (net A), 255*16384 (net B)
+    conv2 preacts     k/D2             c2Z   [2][28][28];  D2 = D1*128
+    pooled features   k/D2             pZ    392, row-major
+    dense3 columns    k/128            w3c{k}Z  392 each (`Mat` is input x output)
 
 Each step is the exact gradient (eta = 0). The kernel rungs take learning rate 2^-K, the largest
 power of two for which every hypothesis holds at the explicit radius lr * cnnConv{1,2}GradBound;
@@ -42,31 +53,24 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "lib"))
 from _mnist_io import mnist  # noqa: E402
+from _leanlit import zlist, zlit  # noqa: E402
 
 OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/CnnDescent.lean")
 DEN_W = 128          # weight rationalization grid
 DEN_B = 16384        # bias grid: a trained conv2 bias sits below 1/256, and at /128 it rounds to 0
-DEN_X = 1020         # 4 * 255: exact 2x2 pixel-sum denominator
-S = 12               # input side
+DEN_X = 255          # pixel denominator
+S = 28               # input side
 C = 2                # conv channels
 D1 = 8               # dense width
 NC = 10
 H = S // 2           # pooled side
+NF = C * H * H       # pooled features
 
 Xtr_raw, ytr = mnist("train")
 Xte_raw, yte = mnist("test")
-
-
-def pool12_sums(X):
-    """center-crop 28->24 (rows/cols 2..26), 2x2 block sums -> (N,12,12) ints 0..1020."""
-    Xc = X[:, 2:26, 2:26].astype(np.int64)
-    return Xc.reshape(-1, S, 2, S, 2).sum(axis=(2, 4))
-
-
-Str = pool12_sums(Xtr_raw)
-Ste = pool12_sums(Xte_raw)
-Xtr4 = (Str / float(DEN_X))[:, None]
-Xte4 = (Ste / float(DEN_X))[:, None]
+Ste = Xte_raw.astype(np.int64)                 # (N, 28, 28) pixel integers 0..255
+Xtr4 = (Xtr_raw / float(DEN_X))[:, None]
+Xte4 = (Xte_raw / float(DEN_X))[:, None]
 
 # ---------------------------------------------------------------- training (numpy, seed 0)
 
@@ -127,6 +131,13 @@ def forward(net, x4):
     return z1, P1, a1, z2, P2, a2, am, f, z3, a3, z4, a4, z5
 
 
+def test_acc(net):
+    """Test accuracy, in chunks (one im2col of the whole test set is a few GB)."""
+    hits = sum(int((forward(net, Xte4[b:b + 1000])[-1].argmax(1) == yte[b:b + 1000]).sum())
+               for b in range(0, len(Xte4), 1000))
+    return hits / len(Xte4)
+
+
 def train(conv1_bias, tag):
     """Seed-0 numpy SGD, 12 epochs, batch 128. conv1_bias=False: conv1 has no bias (net A, the
     conv2 rungs); True: conv1 has a trained bias initialised at 0.1 (net B, the conv1 rungs)."""
@@ -135,7 +146,7 @@ def train(conv1_bias, tag):
     net = {}
     net["W1"] = he(C, 9)
     net["W2"] = he(C, C * 9); net["b2"] = np.full(C, 0.1)
-    net["W3"] = he(C * H * H, D1) * 0.5; net["b3"] = np.full(D1, 0.1)
+    net["W3"] = he(NF, D1) * 0.5; net["b3"] = np.full(D1, 0.1)
     net["W4"] = he(D1, D1) * 0.5; net["b4"] = np.full(D1, 0.1)
     net["W5"] = he(D1, NC) * 0.5; net["b5"] = np.zeros(NC)
     net["b1"] = np.full(C, 0.1) if conv1_bias else np.zeros(C)
@@ -166,8 +177,7 @@ def train(conv1_bias, tag):
                 upd.append(("b1", db1))
             for k_, g_ in upd:
                 net[k_] -= lr * g_
-        acc = (forward(net, Xte4)[-1].argmax(1) == yte).mean()
-        print(f"[{tag}] ep {ep}: test acc {acc:.4f}", flush=True)
+        print(f"[{tag}] ep {ep}: test acc {test_acc(net):.4f}", flush=True)
     return net
 
 
@@ -179,18 +189,20 @@ def quantize(net, tag):
     """/128 weights, /16384 biases; prints the float and the quantized test accuracy."""
     q = {k: ratz(net[k], DEN_B if k.startswith("b") else DEN_W) for k in NAMES}
     fl = {k: q[k].astype(float) for k in NAMES}
-    acc_float = (forward(net, Xte4)[-1].argmax(1) == yte).mean()
-    acc_q = (forward(fl, Xte4)[-1].argmax(1) == yte).mean()
-    print(f"[{tag}] float acc {acc_float:.4f}  quantized acc {acc_q:.4f}", flush=True)
+    print(f"[{tag}] float acc {test_acc(net):.4f}  quantized acc {test_acc(fl):.4f}", flush=True)
     return q
 
 
-QA = quantize(train(False, "A"), "A")
-W1r, W2r, b2r, W3r, b3r = QA["W1"], QA["W2"], QA["b2"], QA["W3"], QA["b3"]
-W4r, b4r, W5r, b5r = QA["W4"], QA["b4"], QA["W5"], QA["b5"]
+def numer(q, den):
+    """integer numerators of an array of Fractions over `den`."""
+    out = np.vectorize(lambda v: int(v * den))(q)
+    assert all(Fraction(int(n), den) == v for n, v in zip(out.flat, q.flat))
+    return out
+
 
 # ---------------------------------------------------------------- exact forward
 ZF = Fraction(0)
+CELLS = [(0, 0), (0, 1), (1, 0), (1, 1)]   # (a, b) in the order `allN 2 (allN 2 ·)` reads them
 
 
 def conv_exact(x, Wr, br):
@@ -211,107 +223,186 @@ def conv_exact(x, Wr, br):
     return out
 
 
-def relu_exact(t):
-    return np.vectorize(lambda v: v if v > 0 else ZF)(t)
+def conv_int(xN, Wq, bN, mc):
+    """`convCellZ` on every cell: xN (cin,S,S) int64 numerators, Wq (oc, cin*9) weight numerators,
+    bN the bias numerators over the output denominator. Vectorized; the chosen image is rechecked
+    against `conv_exact`."""
+    xp = np.pad(xN, ((0, 0), (1, 1), (1, 1)))
+    cin, oc = xN.shape[0], Wq.shape[0]
+    out = np.empty((oc, S, S), dtype=np.int64)
+    for o in range(oc):
+        acc = np.zeros((S, S), dtype=np.int64)
+        for c_ in range(cin):
+            for kh in range(3):
+                for kw in range(3):
+                    acc += int(Wq[o, c_ * 9 + kh * 3 + kw]) * xp[c_, kh:kh + S, kw:kw + S]
+        out[o] = int(bN[o]) + mc * acc
+    return out
 
 
-def patch(x, hi, wi):
-    """zero-padded 3x3 x C patch of x at (hi, wi), the `convPad` reads."""
-    return tuple(x[c_, hi + kh - 1, wi + kw - 1] if 0 <= hi + kh - 1 < S and 0 <= wi + kw - 1 < S
-                 else ZF for c_ in range(x.shape[0]) for kh in range(3) for kw in range(3))
+def zero_patch(xN):
+    """`zeroPatchZ`: cell (r, s)'s zero-padded 3x3 patch is zero in every channel."""
+    nz = np.pad((xN != 0).any(axis=0), 1)
+    return np.array([[not nz[r:r + 3, s:s + 3].any() for s in range(S)] for r in range(S)])
 
 
-CELLS = [(0, 0), (0, 1), (1, 0), (1, 1)]   # fin_cases order on Fin 2 × Fin 2
+def zero_twin(zp):
+    """`zeroTwinZ`: both cells have all-zero patches. They are `ConvPatchEq` twins."""
+    return lambda m, p: bool(zp[m] and zp[p])
 
 
-def analyse(i):
-    """Exact tables + per-window certificates for test image i, or None."""
-    x0 = np.vectorize(lambda s: Fraction(int(s), DEN_X))(Ste[i])[None, :, :]
-    c1 = conv_exact(x0, W1r, [ZF] * C)
-    x1 = relu_exact(c1)
-    c2 = conv_exact(x1, W2r, b2r)
-    if any(v == 0 for v in c2.flat):
-        return None
-    certs, live_twin = {}, 0
-    gaps = []
-    for ci in range(C):
-        for ho in range(H):
-            for wo in range(H):
-                pos = [(2 * ho + a, 2 * wo + b) for a, b in CELLS]
-                vals = [c2[ci, r, s] for r, s in pos]
-                if all(v <= 0 for v in vals):
-                    certs[ci, ho, wo] = ("dead",)
-                    continue
-                m = max(range(4), key=lambda k: vals[k])
-                kinds = []
-                for k in range(4):
-                    if k == m:
-                        kinds.append("self")
-                    elif patch(x1, *pos[m]) == patch(x1, *pos[k]):
-                        if all(v == 0 for v in patch(x1, *pos[k])):
-                            kinds.append("twin")
-                        else:
-                            return None          # only all-zero-patch twins are emitted
-                    elif vals[k] < vals[m]:
-                        kinds.append("gap"); gaps.append(vals[m] - vals[k])
-                    else:
-                        return None
-                if "twin" in kinds:
-                    live_twin += 1
-                certs[ci, ho, wo] = ("live", m, kinds)
-    r2 = relu_exact(c2)
-    pool = np.empty((C, H, H), dtype=object)
-    for ci in range(C):
-        for ho in range(H):
-            for wo in range(H):
-                pool[ci, ho, wo] = max(r2[ci, 2 * ho + a, 2 * wo + b] for a, b in CELLS)
-    f = pool.reshape(-1)
-    d3 = np.array([sum(f[j] * W3r[j, k] for j in range(C * H * H)) + b3r[k] for k in range(D1)],
-                  dtype=object)
-    if any(v == 0 for v in d3):
-        return None
-    r3 = np.array([v if v > 0 else ZF for v in d3], dtype=object)
-    d4 = np.array([sum(r3[j] * W4r[j, k] for j in range(D1)) + b4r[k] for k in range(D1)],
-                  dtype=object)
-    if any(v == 0 for v in d4):
-        return None
-    r4 = np.array([v if v > 0 else ZF for v in d4], dtype=object)
-    z5 = np.array([sum(r4[j] * W5r[j, k] for j in range(D1)) + b5r[k] for k in range(NC)],
-                  dtype=object)
-    return dict(x0=x0, c1=c1, x1=x1, c2=c2, r2=r2, f=f, d3=d3, r3=r3, d4=d4, r4=r4, z5=z5,
-                certs=certs, live_twin=live_twin, mingap=min(gaps) if gaps else None)
+def blank_twin(zp):
+    """`blankTwinZ`: the two cells' two-conv receptive fields are blank and of the same shape. At
+    every outer offset both reads fall in the padding, or both land on zero-patch cells. Interior
+    cells of a blank region are such pairs, and so are two cells on the same edge of the image.
+    They are `ConvPatchEq2` twins."""
+    def tw(m, p):
+        for kh in range(3):
+            for kw in range(3):
+                a, b = (m[0] + kh - 1, m[1] + kw - 1), (p[0] + kh - 1, p[1] + kw - 1)
+                in_a = 0 <= a[0] < S and 0 <= a[1] < S
+                in_b = 0 <= b[0] < S and 0 <= b[1] < S
+                if in_a != in_b or (in_a and not (zp[a] and zp[b])):
+                    return False
+        return True
+    return tw
+
+
+def win_cert(x, tw, n, ho, wo):
+    """`winCertZ` on one channel `x` (S×S ints): the window is dead, or some cell m has every
+    cell at m's position, more than n below it, or paired with m by `tw`."""
+    pos = [(2 * ho + a, 2 * wo + b) for a, b in CELLS]
+    if all(x[p] <= 0 for p in pos):
+        return True
+    return any(all(p == m or x[p] + n < x[m] or tw(m, p) for p in pos) for m in pos)
+
+
+def bias_over(bq, den):
+    """bias numerators (over DEN_B) re-expressed over the table denominator `den`."""
+    assert all((int(b) * den) % DEN_B == 0 for b in bq)
+    return [int(b) * den // DEN_B for b in bq]
+
+
+def ceil_frac(v):
+    v = Fraction(v)
+    return -((-v.numerator) // v.denominator)
 
 
 def frac_up(v, den=8):
     """smallest k/den >= v."""
-    return Fraction(-((-v.numerator * den) // v.denominator), den)
+    return Fraction(ceil_frac(v * den), den)
 
 
-chosen = None
-for i in range(len(Ste)):
-    t = analyse(i)
-    if t is None or t["live_twin"] == 0:
-        continue
-    pred = int(np.argmax([float(v) for v in t["z5"]]))
-    if pred != int(yte[i]):
-        continue
-    chosen = (i, t, pred)
-    break
-if chosen is None:
-    sys.exit("NO INSTANCE FOUND")
-IDX, T, PRED = chosen
-print(f"instance: test #{IDX} label {yte[IDX]} pred {PRED}, live twin windows {T['live_twin']}",
-      flush=True)
+def analyse(i, q, den1, two_layer):
+    """Integer tables + window classification of net `q` at test image i, or None. `den1` is the
+    conv1 output denominator; the twins are one-conv (`zero_twin` of relu(conv1)) or, with
+    `two_layer`, two-conv (`blank_twin` of the image)."""
+    x0 = Ste[i][None, :, :]
+    mc1 = den1 // (DEN_X * DEN_W)
+    den2 = den1 * DEN_W
+    c1 = conv_int(x0, q["W1q"], bias_over(q["b1q"], den1), mc1)
+    if two_layer and (c1 == 0).any():
+        return None
+    x1 = np.maximum(c1, 0)
+    c2 = conv_int(x1, q["W2q"], bias_over(q["b2q"], den2), 1)
+    if (c2 == 0).any():
+        return None
+    tw = blank_twin(zero_patch(x0)) if two_layer else zero_twin(zero_patch(x1))
+    live_twin, n_dead, gaps = 0, 0, []
+    for ci in range(C):
+        for ho in range(H):
+            for wo in range(H):
+                pos = [(2 * ho + a, 2 * wo + b) for a, b in CELLS]
+                vals = [int(c2[ci][p]) for p in pos]
+                if all(v <= 0 for v in vals):
+                    n_dead += 1
+                    continue
+                m = max(range(4), key=lambda k: vals[k])
+                twin = False
+                for k in range(4):
+                    if k == m:
+                        continue
+                    if tw(pos[m], pos[k]):
+                        twin = True
+                    elif vals[k] < vals[m]:
+                        gaps.append(vals[m] - vals[k])
+                    else:
+                        return None
+                live_twin += twin
+    p = np.maximum(c2, 0).reshape(C, H, 2, H, 2).max(axis=(2, 4)).reshape(-1)
+    f = [Fraction(int(v), den2) for v in p]
+    d3 = [sum(f[j] * q["W3"][j, k] for j in range(NF)) + q["b3"][k] for k in range(D1)]
+    if any(v == 0 for v in d3):
+        return None
+    r3 = [v if v > 0 else ZF for v in d3]
+    d4 = [sum(r3[j] * q["W4"][j, k] for j in range(D1)) + q["b4"][k] for k in range(D1)]
+    if any(v == 0 for v in d4):
+        return None
+    r4 = [v if v > 0 else ZF for v in d4]
+    z5 = [sum(r4[j] * q["W5"][j, k] for j in range(D1)) + q["b5"][k] for k in range(NC)]
+    return dict(x0=x0, c1=c1, x1=x1, c2=c2, p=p, f=f, d3=d3, r3=r3, d4=d4, r4=r4, z5=z5, tw=tw,
+                live_twin=live_twin, n_dead=n_dead, mingap=min(gaps) if gaps else None,
+                den1=den1, den2=den2, mc1=mc1)
+
+
+def prepare(q):
+    """add the integer numerators the tables are built from."""
+    q = dict(q)
+    for k in ("W1", "W2", "W3"):
+        q[k + "q"] = numer(q[k], DEN_W)
+    for k in ("b1", "b2"):
+        q[k + "q"] = numer(q[k], DEN_B)
+    return q
+
+
+def choose(q, den1, two_layer, what):
+    for i in range(len(Ste)):
+        t = analyse(i, q, den1, two_layer)
+        if t is None or t["live_twin"] == 0 or t["mingap"] is None:
+            continue
+        if int(np.argmax([float(v) for v in t["z5"]])) != int(yte[i]):
+            continue
+        return i, t
+    sys.exit(f"NO {what} INSTANCE FOUND")
+
+
+def recheck(t, q):
+    """The chosen image again, in exact `Fraction`s through `conv_exact`: the integer tables are
+    the rational forward's numerators, and the pooled vector is the max-pool of relu(conv2)."""
+    x0 = np.vectorize(lambda s: Fraction(int(s), DEN_X))(t["x0"])
+    c1 = conv_exact(x0, q["W1"], q["b1"])
+    assert all(Fraction(int(n), t["den1"]) == v for n, v in zip(t["c1"].flat, c1.flat))
+    x1 = np.vectorize(lambda v: v if v > 0 else ZF)(c1)
+    assert all(Fraction(int(n), t["den1"]) == v for n, v in zip(t["x1"].flat, x1.flat))
+    c2 = conv_exact(x1, q["W2"], q["b2"])
+    assert all(Fraction(int(n), t["den2"]) == v for n, v in zip(t["c2"].flat, c2.flat))
+    for ci in range(C):
+        for ho in range(H):
+            for wo in range(H):
+                best = max(max(c2[ci, 2 * ho + a, 2 * wo + b], ZF) for a, b in CELLS)
+                assert t["f"][wo + H * (ho + H * ci)] == best
+    return c1, x1, c2
+
+
+QA = prepare(quantize(train(False, "A"), "A"))
+assert all(v == 0 for v in QA["b1"])
+IDX, T = choose(QA, DEN_X * DEN_W, False, "CONV2")
+PRED = LBL = int(yte[IDX])
+print(f"instance: test #{IDX} label {LBL}, live twin windows {T['live_twin']}, "
+      f"dead {T['n_dead']}", flush=True)
+c1F, x1F, c2F = recheck(T, QA)
+W3r, b3r, W4r, b4r, W5r, b5r = QA["W3"], QA["b3"], QA["W4"], QA["b4"], QA["W5"], QA["b5"]
+DA1, DA2 = T["den1"], T["den2"]
 
 # ---------------------------------------------------------------- constants and the learning rate
-A = frac_up(max(T["x1"].flat))
+A = frac_up(max(x1F.flat))
 W3B = frac_up(max(abs(v) for v in W3r.flat), DEN_W)
 W4B = frac_up(max(abs(v) for v in W4r.flat), DEN_W)
 W5B = frac_up(max(abs(v) for v in W5r.flat), DEN_W)
 P = C * C * 9
 K2 = (2 * H) * (2 * H)
 G = P * (K2 * A * (D1 * (W3B * (D1 * (W4B * (NC * (W5B * 1)))))))
-minz2 = min(abs(v) for v in T["c2"].flat)
+minz2N = int(abs(T["c2"]).min())
 minz3 = min(abs(v) for v in T["d3"])
 minz4 = min(abs(v) for v in T["d4"])
 
@@ -319,9 +410,10 @@ minz4 = min(abs(v) for v in T["d4"])
 def ok(lr):
     R = lr * G
     aR = A * R
-    if not aR < minz2:
+    # the relu₂ and pool margins, as the integer checks the kernel evaluates
+    if not ceil_frac(aR * DA2) < minz2N:
         return False
-    if not 2 * aR < T["mingap"]:
+    if not ceil_frac(2 * aR * DA2) < T["mingap"]:
         return False
     if not W3B * (K2 * aR) < minz3:
         return False
@@ -334,7 +426,7 @@ def ok(lr):
     return num / (1 - 2 * dl) * lr * P <= Fraction(1, 4)
 
 
-KEXP = next(k for k in range(1, 200) if ok(Fraction(1, 2 ** k)))
+KEXP = next(k for k in range(1, 300) if ok(Fraction(1, 2 ** k)))
 LR = Fraction(1, 2 ** KEXP)
 print(f"a = {A}, w3 = {W3B}, w4 = {W4B}, w5 = {W5B}, lr = 2^-{KEXP}", flush=True)
 
@@ -360,16 +452,13 @@ def ok_bias2(lr):
     return num / (1 - 2 * dl) * lr * C <= Fraction(1, 4)
 
 
-KEXPB = next(k for k in range(1, 200) if ok_bias2(Fraction(1, 2 ** k)))
+KEXPB = next(k for k in range(1, 300) if ok_bias2(Fraction(1, 2 ** k)))
 RB2 = Fraction(1, 2 ** KEXPB) * GB2
 print(f"conv2 bias rung: lr = 2^-{KEXPB}", flush=True)
 
 # ---------------------------------------------------------------- Lean emission
 R = LR * G
 AR = A * R            # the pool / relu₂ margin radius a·(lr·G), exact
-SR3 = W3B * (K2 * AR)
-SR4 = W4B * (D1 * (W3B * (K2 * AR)))
-LBL = int(yte[IDX])
 
 
 def lit(fr):
@@ -383,153 +472,26 @@ def vec_lit(vals):
     return "![" + ", ".join(lit(v) for v in vals) + "]"
 
 
-def t3_lit(t):
-    return "![" + ",\n    ".join(
-        "![" + ",\n      ".join(vec_lit(t[ci, hi, :]) for hi in range(t.shape[1])) + "]"
-        for ci in range(t.shape[0])) + "]"
-
-
-def k4_lit(Wr, oc, cin):
-    chunks = []
-    for o in range(oc):
-        rows = []
-        for c_ in range(cin):
-            rows.append("![" + ", ".join(vec_lit([Wr[o, c_ * 9 + kh * 3 + kw] for kw in range(3)])
-                                         for kh in range(3)) + "]")
-        chunks.append("![" + ",\n     ".join(rows) + "]")
-    return "![" + ",\n   ".join(chunks) + "]"
-
-
 def mat_lit(Wr):
     return "![" + ",\n    ".join(vec_lit(Wr[i, :]) for i in range(Wr.shape[0])) + "]"
 
 
-def fm(k, n):
-    return f"(⟨{k}, by norm_num⟩ : Fin {n})"
+def z3_lit(t):
+    """a (c, h, w) integer table as nested `List ℤ`, one row per line."""
+    return "[" + ",\n   ".join(
+        "[" + ",\n    ".join(zlist(int(v) for v in t[ci][hi]) for hi in range(len(t[ci]))) + "]"
+        for ci in range(len(t))) + "]"
 
 
-def conv_rows(name, Wn, bn, xn, tab, oc, x):
-    """per-row conv lemmas + aggregator for conv2d Wn bn xn = tab (S×S). `x` is xn's table: a row
-    whose every patch is zero is the bias alone, which `simp` closes without `norm_num`."""
-    out = []
-    for o in range(oc):
-        for hi in range(S):
-            blank = all(v == 0 for wi in range(S) for v in patch(x, hi, wi))
-            fin = "" if blank else "; try norm_num"
-            out.append(f"""theorem {name}_r{o}_{hi} : ∀ wi : Fin {S},
-    conv2d {Wn} {bn} {xn} {fm(o, oc)} {fm(hi, S)} wi = {tab} {fm(o, oc)} {fm(hi, S)} wi := by
-  intro wi
-  fin_cases wi <;> (simp [conv2d, {Wn}, {bn}, {xn}, {tab}, Fin.sum_univ_succ]{fin})
-""")
-    bullets = "\n".join(f"  · exact {name}_r{o}_{hi} wi" for o in range(oc) for hi in range(S))
-    out.append(f"""theorem {name} : ∀ (o : Fin {oc}) (hi wi : Fin {S}),
-    conv2d {Wn} {bn} {xn} o hi wi = {tab} o hi wi := by
-  intro o hi wi
-  fin_cases o <;> fin_cases hi
-{bullets}
-""")
-    return "\n".join(out)
+def k4_lit(Wq, oc, cin):
+    """a conv kernel's numerators as `[out][in][3][3]` nested `List ℤ`."""
+    return "[" + ",\n   ".join(
+        "[" + ", ".join(
+            "[" + ", ".join(zlist(int(Wq[o, c_ * 9 + kh * 3 + kw]) for kw in range(3))
+                            for kh in range(3)) + "]"
+            for c_ in range(cin)) + "]"
+        for o in range(oc)) + "]"
 
-
-def table_rows(name, stmt, tactic, oc):
-    """per-(o, hi) lemmas `∀ wi, stmt o hi wi` + an aggregator over all cells."""
-    out = []
-    for o in range(oc):
-        for hi in range(S):
-            out.append(f"""theorem {name}_r{o}_{hi} : ∀ wi : Fin {S}, {stmt(fm(o, oc), fm(hi, S), 'wi')} := by
-  intro wi
-  fin_cases wi <;> {tactic}
-""")
-    bullets = "\n".join(f"  · exact {name}_r{o}_{hi} wi" for o in range(oc) for hi in range(S))
-    seq = ";" if oc == 1 else " <;>"     # one channel: `<;>` trips the unnecessarySeqFocus linter
-    out.append(f"""theorem {name} : ∀ (o : Fin {oc}) (hi wi : Fin {S}), {stmt('o', 'hi', 'wi')} := by
-  intro o hi wi
-  fin_cases o{seq} fin_cases hi
-{bullets}
-""")
-    return "\n".join(out)
-
-
-x1T, c1T, c2T, r2T = T["x1"], T["c1"], T["c2"], T["r2"]
-fF, d3F, r3F, d4F = T["f"], T["d3"], T["r3"], T["d4"]
-
-# cells with an all-zero conv2 input patch (the twins), and the window certificates
-zero_cells = sorted({(2 * ho + CELLS[k][0], 2 * wo + CELLS[k][1])
-                     for (ci, ho, wo), cert in T["certs"].items() if cert[0] == "live"
-                     for k in range(4) if cert[2][k] in ("twin",) or
-                     (cert[2][k] == "self" and "twin" in cert[2])})
-zp_lemmas = "\n".join(f"""theorem zp_{r}_{s} : ∀ cc kh kw, convPad 3 3 x1V cc kh kw {fm(r, S)} {fm(s, S)} = 0 := by
-  intro cc kh kw
-  fin_cases cc <;> fin_cases kh <;> fin_cases kw <;> simp [convPad, x1V]
-""" for r, s in zero_cells)
-
-
-def cert_bullet(certs, ci, ho, wo, twin_term):
-    """one window's certificate: dead, or a designated cell `m` with every other cell `m` itself,
-    a twin of `m` (`twin_term(mr, ms, r, s)` proves it) or below it by the margin."""
-    cert = certs[ci, ho, wo]
-    if cert[0] == "dead":
-        return f"""  · left
-    intro cd
-    fin_cases cd <;> norm_num [c2V, winRowInv, winColInv]"""
-    _, m, kinds = cert
-    ma, mb = CELLS[m]
-    lines = [f"""  · right
-    refine ⟨({fm(ma, 2)}, {fm(mb, 2)}), ?_⟩
-    intro cd
-    fin_cases cd"""]
-    for k in range(4):
-        r, s = 2 * ho + CELLS[k][0], 2 * wo + CELLS[k][1]
-        mr, ms = 2 * ho + ma, 2 * wo + mb
-        if kinds[k] == "self":
-            lines.append("    · exact Or.inl rfl")
-        elif kinds[k] == "twin":
-            lines.append(f"    · exact Or.inr (Or.inl ({twin_term(mr, ms, r, s)}))")
-        else:
-            lines.append("    · exact Or.inr (Or.inr (by norm_num [c2V, winRowInv, winColInv]))")
-    return "\n".join(lines)
-
-
-def cert_lemmas_text(certs, rel, radius, twin_term):
-    """`cert_{ci}_{ho}`: the certificates of one row of windows, twins `rel`, margin `radius`."""
-    out = []
-    for ci in range(C):
-        for ho in range(H):
-            bullets = "\n".join(cert_bullet(certs, ci, ho, wo, twin_term) for wo in range(H))
-            out.append(f"""theorem cert_{ci}_{ho} : ∀ wo : Fin {H},
-    (∀ cd : Fin 2 × Fin 2, c2V {fm(ci, C)} (winRowInv {fm(ho, H)} cd.1) (winColInv wo cd.2) ≤ 0) ∨
-    ∃ m : Fin 2 × Fin 2, ∀ cd : Fin 2 × Fin 2,
-      (winRowInv {fm(ho, H)} m.1, winColInv wo m.2) = (winRowInv {fm(ho, H)} cd.1, winColInv wo cd.2) ∨
-      {rel} (winRowInv {fm(ho, H)} m.1, winColInv wo m.2)
-        (winRowInv {fm(ho, H)} cd.1, winColInv wo cd.2) ∨
-      c2V {fm(ci, C)} (winRowInv {fm(ho, H)} cd.1) (winColInv wo cd.2) + 2 * {lit(radius)} <
-        c2V {fm(ci, C)} (winRowInv {fm(ho, H)} m.1) (winColInv wo m.2) := by
-  intro wo
-  fin_cases wo
-{bullets}
-""")
-    return out
-
-
-cert_lemmas = cert_lemmas_text(T["certs"], "ConvPatchEq 3 3 x1V", AR,
-                               lambda mr, ms, r, s: f"ConvPatchEq.of_zero zp_{mr}_{ms} zp_{r}_{s}")
-cert_bullets = "\n".join(f"  · exact cert_{ci}_{ho} wo" for ci in range(C) for ho in range(H))
-
-
-def pool_bullets_text(fF, r2):
-    """A window of four equal values is closed by `simp` alone; the rest need `norm_num`."""
-    def fin(k):
-        ci, ho, wo = k // 36, (k % 36) // 6, k % 6
-        win = {r2[ci, 2 * ho + a, 2 * wo + b] for a, b in CELLS}
-        return "" if len(win) == 1 else "\n    try norm_num"
-    return "\n".join(
-        f"""  · show maxPool2 (c := 2) (h := 6) (w := 6) r2V {fm(k // 36, 2)} {fm((k % 36) // 6, 6)} {fm(k % 6, 6)}
-        = {lit(fF[k])}
-    simp [maxPool2, r2V, max_def]{fin(k)}"""
-        for k in range(C * H * H))
-
-
-pool_bullets = pool_bullets_text(fF, T["r2"])
 
 def weight_bound(name, mat, bound):
     """`|W i j| ≤ bound` for every entry, peeling the `![…]` literal row by row
@@ -541,48 +503,126 @@ def weight_bound(name, mat, bound):
 """
 
 
-weight_bounds = "\n".join([weight_bound("hW3", "W3", W3B), weight_bound("hW4", "W4", W4B),
-                           weight_bound("hW5", "W5", W5B)])
+def bias_nums(name, nums, doc):
+    return f"""/-- {doc} -/
+def {name} : ℕ → ℤ := fun o => {zlist(nums)}.getD o 0
+"""
 
 
-live_twin_windows = [(ci, ho, wo) for (ci, ho, wo), c in sorted(T["certs"].items())
-                     if c[0] == "live" and "twin" in c[2]]
-n_dead = sum(1 for c in T["certs"].values() if c[0] == "dead")
+def dense3_text(t, q, den2):
+    """dense3 on the pooled list: the eight 392-term pre-activations, one kernel dot each."""
+    w3 = [[int(q["W3q"][j, k]) for j in range(NF)] for k in range(D1)]
+    pN = [int(v) for v in t["p"]]
+    n3 = max(abs(v) for col in w3 for v in col)
+    out = []
+    for k in range(D1):
+        out.append(f"/-- dense3's column {k}: unit {k}'s weights over the 392 pooled features, "
+                   f"numerators over 128. -/\ndef w3c{k}Z : List ℤ := {zlist(w3[k])}\n")
+    out.append("/-- The eight dense3 weight columns by unit. -/\ndef w3Z : Fin 8 → List ℤ\n"
+               + "\n".join(f"  | {k} => w3c{k}Z" for k in range(D1)) + "\n")
+    out.append("theorem w3Z_len : ∀ k, (w3Z k).length = 392 := by decide +kernel\n")
+    out.append("/-- dense3 (392→8, input×output), entries k/128. -/\n"
+               "noncomputable def W3 : Mat (2*14*14) 8 := fun i k => ((w3Z k).getD i 0 : ℝ) / 128\n")
+    dots = []
+    for k in range(D1):
+        d = sum(a * b for a, b in zip(pN, w3[k], strict=True))
+        assert Fraction(d, den2 * DEN_W) + q["b3"][k] == t["d3"][k]
+        dots.append(f"theorem d3c{k} : dotZ pZ w3c{k}Z = {zlit(d)} := by decide +kernel")
+    eqs = []
+    for k in range(D1):
+        eqs.append(f"""theorem d3_{k} : dense W3 b3 p2f {k} = {lit(t["d3"][k])} := by
+  show (∑ i : Fin 392, (pZ.getD i 0 : ℝ) / {den2} * ((w3c{k}Z.getD i 0 : ℝ) / 128)) + b3 {k} = _
+  rw [sum_getD_div (ys := w3c{k}Z) pZ_len (w3Z_len {k}) d3c{k} {den2} 128]
+  norm_num [b3]
+""")
+    assert Fraction(n3, DEN_W) == frac_up(max(abs(v) for v in q["W3"].flat), DEN_W)
+    bound = f"""theorem w3Z_range : ∀ k, ∀ z ∈ w3Z k, {zlit(-n3)} ≤ z ∧ z ≤ {n3} := by decide +kernel
 
-DESCENT_HEADER = module_header(["LeanMlir.Proofs.Training.SgdDescent.Cnn"],
+theorem hW3 : ∀ i j, |W3 i j| ≤ {lit(Fraction(n3, DEN_W))} := fun i j =>
+  abs_getD_div_le (w3Z j) {n3} (by norm_num) (w3Z_range j) (by norm_num) (by norm_num) i
+"""
+    return "\n".join(out), "\n".join(dots), "\n".join(eqs), bound
+
+
+def head_text(t, q):
+    """the dense head past dense3's dots: d3V, relu, d4V."""
+    return f"""/-- dense3 pre-activations at the image, exact. -/
+noncomputable def d3V : Fin 8 → ℝ := {vec_lit(t["d3"])}
+
+theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
+  intro k
+  fin_cases k
+  exacts [{", ".join(f"d3_{k}" for k in range(D1))}]
+
+/-- relu(dense3) at the image, exact. -/
+noncomputable def r3V : Vec 8 := {vec_lit(t["r3"])}
+
+theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
+  funext k
+  show (if dense W3 b3 p2f k > 0 then dense W3 b3 p2f k else 0) = r3V k
+  rw [d3_eq]
+  fin_cases k <;> (simp [d3V, r3V])
+
+/-- dense4 pre-activations at the image, exact. -/
+noncomputable def d4V : Fin 8 → ℝ := {vec_lit(t["d4"])}
+
+theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
+  intro k
+  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
+"""
+
+
+# net A's integer certificates, each evaluated here by the formula the kernel evaluates
+b2NA = bias_over(QA["b2q"], DA2)
+assert all(Fraction(n, DA2) == v for n, v in zip(b2NA, QA["b2"]))
+NX1 = int(T["x1"].max())                       # |x1| ≤ NX1/D1 ≤ a
+assert Fraction(NX1, DA1) <= A
+NM2 = ceil_frac(AR * DA2)                      # a·lr·G ≤ NM2/D2 < |c2|
+assert AR <= Fraction(NM2, DA2) and NM2 < minz2N
+NPOOL = ceil_frac(2 * AR * DA2)                # 2·(a·lr·G) ≤ NPOOL/D2 < every gap
+assert 2 * AR <= Fraction(NPOOL, DA2)
+assert all(win_cert(T["c2"][ci], T["tw"], NPOOL, ho, wo)
+           for ci in range(C) for ho in range(H) for wo in range(H))
+D3_DEFS, D3_DOTS, D3_EQS, W3_BOUND = dense3_text(T, QA, DA2)
+
+DESCENT_HEADER = module_header(["LeanMlir.Proofs.Training.SgdDescent.Cnn",
+                                "LeanMlir.Proofs.Architectures.ListConv"],
                                ["Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp"])
 
 body = f'''{DESCENT_HEADER}
 
 /-! # Descent at TRAINED weights — the CNN conv2 rungs, through tied pool windows
 
-**REDUCED CERTIFICATE MODEL** — this file's net is a 12×12-input, 2-channel MNIST CNN with an
-8-wide dense head, NOT the canonical 28×28, 32-channel `cnnVerified`; chosen so every table is
-exact rational arithmetic in the kernel. The canonical net's pool condition is measured on all
-10000 test images by scripts/probes/mnist_pool_twin_probe.py.
+The net is the CNN chapter's `mnistCnnNoBn` architecture at 2 channels and an 8-wide head, on the
+28×28 image: `conv 1→2 3×3 SAME → relu → conv 2→2 3×3 SAME → relu → maxpool 2×2 → dense 392→8 →
+relu → dense 8→8 → relu → dense 8→10`. Nothing is cropped or pooled away; only the widths differ
+from the chapter's 32 channels and 512-wide head. The canonical net's pool condition is measured
+on all 10000 test images by scripts/probes/mnist_pool_twin_probe.py.
 
 `cnn_conv2_exact_sgd_descends` — one exact-gradient SGD step on the conv2 kernel decreases the
 cross-entropy loss — instantiated at TRAINED, /128-rationalized weights (biases /16384) and REAL
-MNIST test image #{IDX} (label {LBL}, classified correctly), every hypothesis discharged by exact
-arithmetic: `trained_cnn_conv2_sgd_descends_concrete`, at learning rate `2⁻{KEXP}`. The conv2-bias
-rung `cnn_conv2_bias_exact_sgd_descends` on the same net and image is
-`trained_cnn_conv2_bias_sgd_descends_concrete`, at `2⁻{KEXPB}`: its radius sits inside the kernel
-rung's, so the relu₂ and pool margins carry over by monotonicity. The conv1 rungs need a net with
-a conv1 bias (`Trained.CnnDescentConv1`).
+MNIST test image #{IDX} (label {LBL}, classified correctly), all 784 pixels `k/255`, every
+hypothesis discharged by exact arithmetic: `trained_cnn_conv2_sgd_descends_concrete`, at learning
+rate `2⁻{KEXP}`. The conv2-bias rung `cnn_conv2_bias_exact_sgd_descends` on the same net and image
+is `trained_cnn_conv2_bias_sgd_descends_concrete`, at `2⁻{KEXPB}`: its radius sits inside the
+kernel rung's, so the relu₂ and pool margins carry over by monotonicity. The conv1 rungs need a
+net with a conv1 bias (`Trained.CnnDescentConv1`).
 
-What the instance shows is the pool hypothesis. The image's blank corners make conv1's output
+What the instance shows is the pool hypothesis. The image's blank border makes conv1's output
 zero there (conv1 is bias-free, so a zero patch gives the padding's value), the cells of a
-corner window then read identical all-zero patches, and their conv2 outputs are EQUAL — the
-conv2 bias, positive in one channel. {len(live_twin_windows)} live windows tie that way and
-{n_dead} are dead. The old `MaxPool2MarginQ` fails at every such window for every margin;
-`MaxPool2MarginQUpTo` takes the twins `ConvPatchEq 3 3 x1V` (`ConvPatchEq.of_zero` per tied cell,
-`zp_*`), and every other cell clears the margin (`cert_*`, through `windowMarginUpTo_of_cert`).
-No pool-tie regularizer was used in training; the ties are the data's.
+border window then read identical all-zero patches, and their conv2 outputs are EQUAL — the
+conv2 bias, positive in one channel. {T["live_twin"]} live windows tie that way and
+{T["n_dead"]} are dead, of 392. The old `MaxPool2MarginQ` fails at every such window for every
+margin; `MaxPool2MarginQUpTo` takes the twins `ConvPatchEq 3 3 x1V` (two cells whose patches are
+all zero, `convPatchEq_of_zeroTwinZ`), and every other cell clears the margin (`cert_chk`, through
+`maxPool2MarginQUpTo_of_poolCertZ`). No pool-tie regularizer was used in training; the ties are
+the data's.
 
-Net: 24×24-center-cropped MNIST, 2×2 block sums to 12×12 (exact pixel sums /1020), conv 1→2
-3×3 SAME without bias → relu → conv 2→2 3×3 SAME → relu → maxpool 2×2 → dense 72→8 → relu →
-dense 8→8 → relu → dense 8→10. The rungs move the conv2 kernel or bias; `x1V` = relu(conv1 image)
-is their frozen input (`x1_eq`). The generator prints the net's test accuracy.
+Every table is nested `List ℤ` numerators over one denominator, and each whole-table fact
+(`conv1_chk`, `conv2_chk`, `pool_chk`, `cert_chk`, the margins and bounds) is one kernel
+evaluation, transported to `ℝ` by `Architectures/ListConv`; the 392-term dense3 sums are
+`Foundation/ListDot` dots. The rungs move the conv2 kernel or bias; `x1V` = relu(conv1 image) is
+their frozen input (`x1_eq`). The generator prints the net's test accuracy.
 
 The step is the exact gradient, so the conclusion bounds the true loss, but the decrease
 `lr·‖∇L‖₂²/2` is not shown positive: that needs a lower bound on the gradient, which the
@@ -596,26 +636,32 @@ namespace TrainedCnnDescent
 -- § Trained weights and the input (data)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Test image #{IDX}, center-cropped and 2×2-summed to 12×12, exact pixel sums /1020. -/
-noncomputable def T0 : Tensor3 1 12 12 :=
-  {t3_lit(T["x0"])}
+/-- MNIST test image #{IDX} (digit {LBL}), the 28×28 pixels as integers `0..255`. -/
+def x0Z : List (List (List ℤ)) :=
+  {z3_lit(T["x0"])}
+
+/-- Test image #{IDX}, pixels `k/255`. -/
+noncomputable def T0 : Tensor3 1 (2*14) (2*14) := tabR (g3 x0Z) 255
+
+/-- conv1 kernel numerators (1→2, 3×3) over 128. -/
+def W1Z : List (List (List (List ℤ))) :=
+  {k4_lit(QA["W1q"], C, 1)}
 
 /-- conv1 kernel (1→2, 3×3), entries k/128; conv1 has no bias. -/
-noncomputable def W1 : Kernel4 2 1 3 3 :=
-  {k4_lit(W1r, C, 1)}
+noncomputable def W1 : Kernel4 2 1 3 3 := kerR (g4 W1Z) 128
 
 noncomputable def b1 : Vec 2 := ![(0 : ℝ), (0 : ℝ)]
 
+/-- conv2 kernel numerators (2→2, 3×3) over 128. -/
+def W2Z : List (List (List (List ℤ))) :=
+  {k4_lit(QA["W2q"], C, C)}
+
 /-- conv2 kernel (2→2, 3×3), entries k/128. -/
-noncomputable def W2 : Kernel4 2 2 3 3 :=
-  {k4_lit(W2r, C, C)}
+noncomputable def W2 : Kernel4 2 2 3 3 := kerR (g4 W2Z) 128
 
-noncomputable def b2 : Vec 2 := {vec_lit(b2r)}
+noncomputable def b2 : Vec 2 := {vec_lit(QA["b2"])}
 
-/-- dense3 (72→8, input×output). -/
-noncomputable def W3 : Mat (2*6*6) 8 :=
-  {mat_lit(W3r)}
-
+{D3_DEFS}
 noncomputable def b3 : Vec 8 := {vec_lit(b3r)}
 
 noncomputable def W4 : Mat 8 8 :=
@@ -635,132 +681,123 @@ def lbl : Fin 10 := {LBL}
 -- § conv1: the rung's frozen input is relu(conv1 image)
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv1 pre-activation numerators at the image, over {DA1} (= 255·128). -/
+def c1Z : List (List (List ℤ)) :=
+  {z3_lit(T["c1"])}
+
 /-- conv1 pre-activations at the image, exact. -/
-noncomputable def c1V : Tensor3 2 12 12 :=
-  {t3_lit(c1T)}
+noncomputable def c1V : Tensor3 2 (2*14) (2*14) := tabR (g3 c1Z) {DA1}
 
-{conv_rows("conv1_eq", "W1", "b1", "T0", "c1V", C, T["x0"])}
+{bias_nums("b1N", [0, 0], f"conv1's bias numerators over {DA1}: none.")}
+theorem conv1_chk : convTabZ 2 1 3 3 28 28 b1N 1 (g4 W1Z) (g3 x0Z) (g3 c1Z) = true := by
+  decide +kernel
+
+theorem conv1_fun : conv2d W1 b1 T0 = c1V :=
+  conv2d_tab (fun o => by fin_cases o <;> simp [b1, b1N]) (by norm_num) conv1_chk
+
 /-- relu(conv1) at the image: the conv2 rung's input, exact. -/
-noncomputable def x1V : Tensor3 2 12 12 :=
-  {t3_lit(x1T)}
+noncomputable def x1V : Tensor3 2 (2*14) (2*14) := tabR (reluZ (g3 c1Z)) {DA1}
 
-{table_rows("x1_cell", lambda o, hi, wi: f"x1V {o} {hi} {wi} = if c1V {o} {hi} {wi} > 0 then c1V {o} {hi} {wi} else 0", "(simp [c1V, x1V])", C)}
 /-- **The rung's input is the real image's conv1 activation.** -/
 theorem x1_eq : x1V = fun o hi wi =>
     if conv2d W1 b1 T0 o hi wi > 0 then conv2d W1 b1 T0 o hi wi else 0 := by
-  funext o hi wi
-  rw [conv1_eq, x1_cell]
+  rw [conv1_fun]
+  exact (relu_ite_tabR (g3 c1Z) (by norm_num)).symm
 
-{table_rows("x1_bound", lambda o, hi, wi: f"|x1V {o} {hi} {wi}| ≤ {lit(A)}", "(rw [abs_le]; constructor <;> norm_num [x1V])", C)}
+theorem x1_chk : absLeZ 2 28 28 (reluZ (g3 c1Z)) {NX1} = true := by decide +kernel
+
+theorem x1_bound : ∀ cc i j, |x1V cc i j| ≤ {lit(A)} := fun cc i j =>
+  tabR_abs_le x1_chk (by norm_num) (by norm_num) cc i j
+
 -- ════════════════════════════════════════════════════════════════
 -- § conv2: exact table, the relu₂ margin, the pooled vector
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv2 pre-activation numerators at the image, over {DA2} (= 255·128²). -/
+def c2Z : List (List (List ℤ)) :=
+  {z3_lit(T["c2"])}
+
 /-- conv2 pre-activations at the image, exact. -/
-noncomputable def c2V : Tensor3 2 12 12 :=
-  {t3_lit(c2T)}
+noncomputable def c2V : Tensor3 2 (2*14) (2*14) := tabR (g3 c2Z) {DA2}
 
-{conv_rows("conv2_eq", "W2", "b2", "x1V", "c2V", C, T["x1"])}
-theorem conv2_fun : conv2d W2 b2 x1V = c2V := by
-  funext o hi wi
-  exact conv2_eq o hi wi
+{bias_nums("b2N", b2NA, f"conv2's bias numerators over {DA2}.")}
+theorem conv2_chk : convTabZ 2 2 3 3 28 28 b2N 1 (g4 W2Z) (reluZ (g3 c1Z)) (g3 c2Z) = true := by
+  decide +kernel
 
-{table_rows("c2_margin", lambda o, hi, wi: f"{lit(AR)} < |c2V {o} {hi} {wi}|", "(rw [lt_abs]; norm_num [c2V])", C)}
-/-- relu(conv2) at the image (the max-pool input), exact. -/
-noncomputable def r2V : Tensor3 2 12 12 :=
-  {t3_lit(r2T)}
+theorem conv2_fun : conv2d W2 b2 x1V = c2V :=
+  conv2d_tab (fun o => by fin_cases o <;> norm_num [b2, b2N]) (by norm_num) conv2_chk
 
-{table_rows("r2_cell", lambda o, hi, wi: f"r2V {o} {hi} {wi} = if c2V {o} {hi} {wi} > 0 then c2V {o} {hi} {wi} else 0", "(simp [c2V, r2V])", C)}
-theorem relu_c2 : relu (2 * (2*6) * (2*6)) (Tensor3.flatten c2V) = Tensor3.flatten r2V := by
-  funext k
-  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
-  rw [relu, flatten_t3Idx, flatten_t3Idx, r2_cell]
+theorem c2_chk : ltAbsZ 2 28 28 (g3 c2Z) {NM2} = true := by decide +kernel
+
+theorem c2_margin : ∀ o hi wi, {lit(AR)} < |c2V o hi wi| := fun o hi wi =>
+  tabR_lt_abs c2_chk (by norm_num) (by norm_num) o hi wi
+
+/-- The pooled features' numerators over {DA2}: the 2×2 max-pool of relu(conv2), row-major. -/
+def pZ : List ℤ := {zlist(int(v) for v in T["p"])}
+
+theorem pZ_len : pZ.length = 392 := by decide +kernel
 
 /-- The pooled feature vector (flattened maxpool output), exact. -/
-noncomputable def p2f : Vec (2 * 6 * 6) := {vec_lit(fF)}
+noncomputable def p2f : Vec (2 * 14 * 14) := fun i => (pZ.getD i 0 : ℝ) / {DA2}
 
--- Decoding a flat index near the end of `Fin 72` back to `(ci, ho, wo)` recurses deeper than
--- the default; `max_def` is needed only where a window's maximum is not its first cell.
-set_option maxRecDepth 8192 in
-set_option linter.unusedSimpArgs false in
-theorem pooled_eq : maxPoolFlat 2 6 6 (Tensor3.flatten r2V) = p2f := by
-  show Tensor3.flatten (maxPool2 (Tensor3.unflatten (Tensor3.flatten r2V))) = p2f
-  rw [Tensor3.unflatten_flatten]
-  funext i
-  fin_cases i
-{pool_bullets}
+theorem pool_chk : poolTabZ 2 14 14 (g3 c2Z) pZ = true := by decide +kernel
+
+theorem head_feat : maxPoolFlat 2 14 14 (relu (2 * (2*14) * (2*14))
+    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
+  rw [conv2_fun]
+  exact maxPoolFlat_relu_tab (by norm_num) pool_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The pool margin up to twins: tied windows read all-zero patches
 -- ════════════════════════════════════════════════════════════════
 
-{zp_lemmas}
-{"".join(cert_lemmas)}
+theorem cert_chk : poolCertZ 2 14 14 (zeroTwinZ 2 3 3 28 28 (reluZ (g3 c1Z))) (g3 c2Z)
+    {NPOOL} = true := by
+  decide +kernel
+
 /-- **The pool margin up to twins holds at the trained weights**, ties and all. -/
 theorem pool_margin :
-    MaxPool2MarginQUpTo (c := 2) (h := 6) (w := 6) {lit(AR)} (ConvPatchEq 3 3 x1V) c2V := by
-  refine windowMarginUpTo_of_cert winRowInv winColInv (by norm_num) _
-    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂) ?_
-  intro ci ho wo
-  fin_cases ci <;> fin_cases ho
-{cert_bullets}
+    MaxPool2MarginQUpTo (c := 2) (h := 14) (w := 14) {lit(AR)} (ConvPatchEq 3 3 x1V) c2V :=
+  maxPool2MarginQUpTo_of_poolCertZ (by norm_num) (by norm_num) _
+    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂)
+    (zeroTwinZ 2 3 3 28 28 (reluZ (g3 c1Z))) convPatchEq_of_zeroTwinZ (by norm_num) cert_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The dense head: the relu₃ and relu₄ margins
 -- ════════════════════════════════════════════════════════════════
 
-/-- dense3 pre-activations at the image, exact. -/
-noncomputable def d3V : Fin 8 → ℝ := {vec_lit(d3F)}
+{D3_DOTS}
 
-theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
-  intro k
-  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
-
-/-- relu(dense3) at the image, exact. -/
-noncomputable def r3V : Vec 8 := {vec_lit(r3F)}
-
-theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
-  funext k
-  show (if dense W3 b3 p2f k > 0 then dense W3 b3 p2f k else 0) = r3V k
-  rw [d3_eq]
-  fin_cases k <;> (simp [d3V, r3V])
-
-/-- dense4 pre-activations at the image, exact. -/
-noncomputable def d4V : Fin 8 → ℝ := {vec_lit(d4F)}
-
-theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
-  intro k
-  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
-
-theorem head_feat : maxPoolFlat 2 6 6 (relu (2 * (2*6) * (2*6))
-    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
-  rw [conv2_fun, relu_c2, pooled_eq]
-
+{D3_EQS}
+{head_text(T, QA)}
 -- ════════════════════════════════════════════════════════════════
 -- § Weight bounds
 -- ════════════════════════════════════════════════════════════════
 
-{weight_bounds}
+{W3_BOUND}
+{weight_bound("hW4", "W4", W4B)}
+{weight_bound("hW5", "W5", W5B)}
 -- ════════════════════════════════════════════════════════════════
 -- § The descent instance
 -- ════════════════════════════════════════════════════════════════
 
 /-- The margin radius `a·(lr·G)` of the instance, exact. -/
 theorem radius_eq : ({lit(A)} : ℝ) * ((1 / 2 ^ {KEXP} : ℝ) *
-    cnnConv2GradBound 2 6 6 8 8 10 3 3 {lit(A)} {lit(W3B)} {lit(W4B)} {lit(W5B)}) = {lit(AR)} := by
+    cnnConv2GradBound 2 14 14 8 8 10 3 3 {lit(A)} {lit(W3B)} {lit(W4B)} {lit(W5B)}) = {lit(AR)} := by
   norm_num [cnnConv2GradBound]
 
-/-- **One exact-gradient SGD step on the conv2 kernel of a trained MNIST CNN, at a real test image
-    with tied pool windows, decreases the cross-entropy loss** by at least `lr·‖∇L‖₂²/2`, at
-    `lr = 2⁻{KEXP}`. Every hypothesis of `cnn_conv2_exact_sgd_descends` is discharged above. -/
+/-- **One exact-gradient SGD step on the conv2 kernel of a trained MNIST CNN, at a real 28×28
+    test image with tied pool windows, decreases the cross-entropy loss** by at least
+    `lr·‖∇L‖₂²/2`, at `lr = 2⁻{KEXP}`. Every hypothesis of `cnn_conv2_exact_sgd_descends` is
+    discharged above. -/
 theorem trained_cnn_conv2_sgd_descends_concrete :
-    (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2 -
-        (1 / 2 ^ {KEXP} : ℝ) • gradAt (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl)
+    (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2 -
+        (1 / 2 ^ {KEXP} : ℝ) • gradAt (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl)
           (Kernel4.flatten W2)) ≤
-      (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2) -
-        (1 / 2 ^ {KEXP} : ℝ) * (∑ idx, gradAt (cnnConv2KernelLoss (h := 6) (w := 6) b2 x1V W3 b3 W4 b4
+      (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4 W5 b5 lbl) (Kernel4.flatten W2) -
+        (1 / 2 ^ {KEXP} : ℝ) * (∑ idx, gradAt (cnnConv2KernelLoss (h := 14) (w := 14) b2 x1V W3 b3 W4 b4
           W5 b5 lbl) (Kernel4.flatten W2) idx ^ 2) / 2 := by
-  refine cnn_conv2_exact_sgd_descends (h := 6) (w := 6) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
+  refine cnn_conv2_exact_sgd_descends (h := 14) (w := 14) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
     (ConvPatchEq 3 3 x1V) (by norm_num) x1_bound (fun _ _ h => h) (by norm_num) hW3
     (by norm_num) hW4 (by norm_num) hW5 (by norm_num) ?_ ?_ ?_ ?_ ?_ ?_
   · intro k
@@ -784,7 +821,7 @@ theorem trained_cnn_conv2_sgd_descends_concrete :
 
 /-- The conv2-bias rung's radius `lr·G_b`, exact; it sits inside the kernel rung's. -/
 theorem radius_bias_eq : (1 / 2 ^ {KEXPB} : ℝ) *
-    cnnConv2BiasGradBound 2 6 6 8 8 10 {lit(W3B)} {lit(W4B)} {lit(W5B)} = {lit(RB2)} := by
+    cnnConv2BiasGradBound 2 14 14 8 8 10 {lit(W3B)} {lit(W4B)} {lit(W5B)} = {lit(RB2)} := by
   norm_num [cnnConv2BiasGradBound]
 
 /-- **One exact-gradient SGD step on the conv2 BIAS of the same trained MNIST CNN, at the same
@@ -792,13 +829,13 @@ theorem radius_bias_eq : (1 / 2 ^ {KEXPB} : ℝ) *
     Every hypothesis of `cnn_conv2_bias_exact_sgd_descends` is discharged above; the relu₂ and
     pool margins are the kernel rung's (`c2_margin`, `pool_margin`) at a smaller radius. -/
 theorem trained_cnn_conv2_bias_sgd_descends_concrete :
-    (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5 b5 lbl) (b2 -
-        (1 / 2 ^ {KEXPB} : ℝ) • gradAt (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5
+    (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5 b5 lbl) (b2 -
+        (1 / 2 ^ {KEXPB} : ℝ) • gradAt (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5
           b5 lbl) b2) ≤
-      (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4 b4 W5 b5 lbl) b2 -
-        (1 / 2 ^ {KEXPB} : ℝ) * (∑ o, gradAt (cnnConv2BiasLoss (h := 6) (w := 6) W2 x1V W3 b3 W4
+      (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4 b4 W5 b5 lbl) b2 -
+        (1 / 2 ^ {KEXPB} : ℝ) * (∑ o, gradAt (cnnConv2BiasLoss (h := 14) (w := 14) W2 x1V W3 b3 W4
           b4 W5 b5 lbl) b2 o ^ 2) / 2 := by
-  refine cnn_conv2_bias_exact_sgd_descends (h := 6) (w := 6) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
+  refine cnn_conv2_bias_exact_sgd_descends (h := 14) (w := 14) W2 b2 x1V W3 b3 W4 b4 W5 b5 lbl
     (ConvPatchEq 3 3 x1V) (fun _ _ h => h) (by norm_num) hW3 (by norm_num) hW4 (by norm_num) hW5
     (by norm_num) ?_ ?_ ?_ ?_ ?_ ?_
   · intro k
@@ -827,91 +864,15 @@ if os.environ.get("CNN_DESCENT_NO_WRITE") != "1":
 
 # ================================================================ net B: the conv1 rungs
 OUT1 = os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/CnnDescentConv1.lean")
-QB = quantize(train(True, "B"), "B")
+QB = prepare(quantize(train(True, "B"), "B"))
+IDXB, TB = choose(QB, DEN_X * DEN_B, True, "CONV1")
+LBLB = int(yte[IDXB])
+print(f"conv1 instance: test #{IDXB} label {LBLB}, live two-layer twin windows "
+      f"{TB['live_twin']}, dead {TB['n_dead']}", flush=True)
+recheck(TB, QB)
+DB1, DB2 = TB["den1"], TB["den2"]
 
-
-def blank_field(x0, r, s):
-    """conv2-output cell (r, s) has a blank two-conv receptive field with every outer read in
-    bounds: (r, s) and its 8 neighbours are image cells and each one's 3x3 patch of x0 is all zero.
-    Two such cells are `ConvPatchEq2 3 3 x0` twins (`tw_*`)."""
-    if not (1 <= r <= S - 2 and 1 <= s <= S - 2):
-        return False
-    return all(x0[0, a, b] == 0 for a in range(max(0, r - 2), min(S, r + 3))
-               for b in range(max(0, s - 2), min(S, s + 3)))
-
-
-def analyse_b(i):
-    """Exact tables + per-window certificates of net B at test image i, or None."""
-    x0 = np.vectorize(lambda s: Fraction(int(s), DEN_X))(Ste[i])[None, :, :]
-    c1 = conv_exact(x0, QB["W1"], QB["b1"])
-    if any(v == 0 for v in c1.flat):
-        return None
-    x1 = relu_exact(c1)
-    c2 = conv_exact(x1, QB["W2"], QB["b2"])
-    if any(v == 0 for v in c2.flat):
-        return None
-    certs, live_twin, gaps = {}, 0, []
-    for ci in range(C):
-        for ho in range(H):
-            for wo in range(H):
-                pos = [(2 * ho + a, 2 * wo + b) for a, b in CELLS]
-                vals = [c2[ci, r, s] for r, s in pos]
-                if all(v <= 0 for v in vals):
-                    certs[ci, ho, wo] = ("dead",)
-                    continue
-                m = max(range(4), key=lambda k: vals[k])
-                kinds = []
-                for k in range(4):
-                    if k == m:
-                        kinds.append("self")
-                    elif blank_field(x0, *pos[m]) and blank_field(x0, *pos[k]):
-                        kinds.append("twin")
-                    elif vals[k] < vals[m]:
-                        kinds.append("gap"); gaps.append(vals[m] - vals[k])
-                    else:
-                        return None
-                if "twin" in kinds:
-                    live_twin += 1
-                certs[ci, ho, wo] = ("live", m, kinds)
-    r2 = relu_exact(c2)
-    pool = np.empty((C, H, H), dtype=object)
-    for ci in range(C):
-        for ho in range(H):
-            for wo in range(H):
-                pool[ci, ho, wo] = max(r2[ci, 2 * ho + a, 2 * wo + b] for a, b in CELLS)
-    f = pool.reshape(-1)
-    d3 = np.array([sum(f[j] * QB["W3"][j, k] for j in range(C * H * H)) + QB["b3"][k]
-                   for k in range(D1)], dtype=object)
-    if any(v == 0 for v in d3):
-        return None
-    r3 = np.array([v if v > 0 else ZF for v in d3], dtype=object)
-    d4 = np.array([sum(r3[j] * QB["W4"][j, k] for j in range(D1)) + QB["b4"][k]
-                   for k in range(D1)], dtype=object)
-    if any(v == 0 for v in d4):
-        return None
-    r4 = np.array([v if v > 0 else ZF for v in d4], dtype=object)
-    z5 = np.array([sum(r4[j] * QB["W5"][j, k] for j in range(D1)) + QB["b5"][k]
-                   for k in range(NC)], dtype=object)
-    return dict(x0=x0, c1=c1, x1=x1, c2=c2, r2=r2, f=f, d3=d3, r3=r3, d4=d4, z5=z5,
-                certs=certs, live_twin=live_twin, mingap=min(gaps) if gaps else None)
-
-
-chosen_b = None
-for i in range(len(Ste)):
-    t = analyse_b(i)
-    if t is None or t["live_twin"] == 0:
-        continue
-    if int(np.argmax([float(v) for v in t["z5"]])) != int(yte[i]):
-        continue
-    chosen_b = (i, t)
-    break
-if chosen_b is None:
-    sys.exit("NO CONV1 INSTANCE FOUND")
-IDXB, TB = chosen_b
-print(f"conv1 instance: test #{IDXB} label {yte[IDXB]}, live two-layer twin windows "
-      f"{TB['live_twin']}", flush=True)
-
-A1 = frac_up(max(abs(v) for v in TB["x0"].flat))
+A1 = frac_up(Fraction(int(TB["x0"].max()), DEN_X))
 W2Bb = frac_up(max(abs(v) for v in QB["W2"].flat), DEN_W)
 W3Bb = frac_up(max(abs(v) for v in QB["W3"].flat), DEN_W)
 W4Bb = frac_up(max(abs(v) for v in QB["W4"].flat), DEN_W)
@@ -921,16 +882,18 @@ P1 = C * 1 * 9
 BHB = D1 * (W3Bb * (D1 * (W4Bb * (NC * (W5Bb * 1)))))
 G1 = P1 * (K2 * (M * (W2Bb * A1)) * BHB)
 G1B = C * (K2 * (M * (W2Bb * 1)) * BHB)
-minb1 = min(abs(v) for v in TB["c1"].flat)
-minb2 = min(abs(v) for v in TB["c2"].flat)
+minb1N = int(abs(TB["c1"]).min())
+minb2N = int(abs(TB["c2"]).min())
 minb3 = min(abs(v) for v in TB["d3"])
 minb4 = min(abs(v) for v in TB["d4"])
 
 
 def ok_conv1(lr, rho_r, num, n):
-    """every hypothesis of the conv1 rungs at the conv1-preactivation radius `rho_r`."""
+    """every hypothesis of the conv1 rungs at the conv1-preactivation radius `rho_r`; the relu₁,
+    relu₂ and pool margins as the integer checks the kernel evaluates."""
     z2r = M * (W2Bb * rho_r)
-    if not (rho_r < minb1 and z2r < minb2 and 2 * z2r < TB["mingap"]):
+    if not (ceil_frac(rho_r * DB1) < minb1N and ceil_frac(z2r * DB2) < minb2N and
+            ceil_frac(2 * z2r * DB2) < TB["mingap"]):
         return False
     s3 = M * (W2Bb * (K2 * rho_r))
     if not (W3Bb * s3 < minb3 and W4Bb * (D1 * (W3Bb * s3)) < minb4):
@@ -940,46 +903,37 @@ def ok_conv1(lr, rho_r, num, n):
 
 
 NUM1B = 2 * NC * K2 ** 2 * M ** 2 * D1 ** 2 * D1 ** 2 * W2Bb ** 2 * W3Bb ** 2 * W4Bb ** 2 * W5Bb ** 2
-KEXP1 = next(k for k in range(1, 300)
+KEXP1 = next(k for k in range(1, 400)
              if ok_conv1(Fraction(1, 2 ** k), A1 * (Fraction(1, 2 ** k) * G1), NUM1B * A1 ** 2, P1))
 R1A = A1 * (Fraction(1, 2 ** KEXP1) * G1)        # the relu₁ margin radius a·(lr·G), exact
 R1Z2 = M * (W2Bb * R1A)                            # the relu₂ / pool margin radius
-KEXP1B = next(k for k in range(1, 300)
+KEXP1B = next(k for k in range(1, 400)
               if Fraction(1, 2 ** k) * G1B <= R1A and
               ok_conv1(Fraction(1, 2 ** k), Fraction(1, 2 ** k) * G1B, NUM1B, C))
 RB1 = Fraction(1, 2 ** KEXP1B) * G1B
 print(f"conv1 rungs: a = {A1}, w2 = {W2Bb}, kernel lr = 2^-{KEXP1}, bias lr = 2^-{KEXP1B}",
       flush=True)
-LBLB = int(yte[IDXB])
 
-# two-layer twin certificates: one `tw_*` per ordered (designated cell, twin) pair
-tw_pairs = sorted({(2 * ho + CELLS[cert[1]][0], 2 * wo + CELLS[cert[1]][1],
-                    2 * ho + CELLS[k][0], 2 * wo + CELLS[k][1])
-                   for (ci, ho, wo), cert in TB["certs"].items() if cert[0] == "live"
-                   for k in range(4) if cert[2][k] == "twin"})
-tw_lemmas = "\n".join(f"""theorem tw_{mr}_{ms}_{r}_{s} : ConvPatchEq2 3 3 T0 ({fm(mr, S)}, {fm(ms, S)})
-    ({fm(r, S)}, {fm(s, S)}) := by
-  intro kh kw
-  fin_cases kh <;> fin_cases kw <;>
-    refine ⟨by simp, fun hp hq => ConvPatchEq.of_zero ?_ ?_⟩ <;>
-    intro cc kh' kw' <;> fin_cases cc <;> fin_cases kh' <;> fin_cases kw' <;> simp [convPad, T0]
-""" for mr, ms, r, s in tw_pairs)
-cert_lemmas_b = cert_lemmas_text(TB["certs"], "ConvPatchEq2 3 3 T0", R1Z2,
-                                 lambda mr, ms, r, s: f"tw_{mr}_{ms}_{r}_{s}")
-live_twin_b = sum(1 for c in TB["certs"].values() if c[0] == "live" and "twin" in c[2])
-n_dead_b = sum(1 for c in TB["certs"].values() if c[0] == "dead")
+# net B's integer certificates
+b1NB = bias_over(QB["b1q"], DB1)
+b2NB = bias_over(QB["b2q"], DB2)
+assert all(Fraction(n, DB1) == v for n, v in zip(b1NB, QB["b1"]))
+assert all(Fraction(n, DB2) == v for n, v in zip(b2NB, QB["b2"]))
+NX0 = int(TB["x0"].max())
+assert Fraction(NX0, DEN_X) <= A1
+NW2 = int(abs(QB["W2q"]).max())
+assert Fraction(NW2, DEN_W) <= W2Bb
+NM1B = ceil_frac(R1A * DB1)
+assert R1A <= Fraction(NM1B, DB1) and NM1B < minb1N
+NM2B = ceil_frac(R1Z2 * DB2)
+assert R1Z2 <= Fraction(NM2B, DB2) and NM2B < minb2N
+NPOOLB = ceil_frac(2 * R1Z2 * DB2)
+assert 2 * R1Z2 <= Fraction(NPOOLB, DB2)
+assert all(win_cert(TB["c2"][ci], TB["tw"], NPOOLB, ho, wo)
+           for ci in range(C) for ho in range(H) for wo in range(H))
+D3B_DEFS, D3B_DOTS, D3B_EQS, W3B_BOUND = dense3_text(TB, QB, DB2)
 
-
-def kernel_bound(name, ker, bound):
-    """`|W o c kh kw| ≤ bound` for every entry of a `Kernel4` literal, peeled as `weight_bound`."""
-    return f"""theorem {name} : ∀ o cc kh kw, |{ker} o cc kh kw| ≤ {lit(bound)} := by
-  simp only [{ker}, Fin.forall_fin_succ, Matrix.cons_val_zero, Matrix.cons_val_succ,
-    IsEmpty.forall_iff, and_true, abs_le]
-  norm_num
-"""
-
-
-DIMS = "(h := 6) (w := 6)"
+DIMS = "(h := 14) (w := 14)"
 L1 = f"cnnConv1KernelLoss {DIMS} b1 T0 W2 b2 W3 b3 W4 b4 W5 b5 lbl"
 L1B = f"cnnConv1BiasLoss {DIMS} W1 T0 W2 b2 W3 b3 W4 b4 W5 b5 lbl"
 
@@ -987,15 +941,17 @@ body_b = f'''{DESCENT_HEADER}
 
 /-! # Descent at TRAINED weights — the CNN conv1 rungs, through two-layer twins
 
-**REDUCED CERTIFICATE MODEL** — the same 12×12-input, 2-channel MNIST CNN shape as
-`Trained.CnnDescent`, NOT the canonical 28×28, 32-channel `cnnVerified`, chosen so every table is
-exact rational arithmetic in the kernel.
+The net is the CNN chapter's `mnistCnnNoBn` architecture at 2 channels and an 8-wide head, on the
+28×28 image, the same shape as `Trained.CnnDescent`: `conv 1→2 3×3 SAME + bias → relu → conv
+2→2 3×3 SAME → relu → maxpool 2×2 → dense 392→8 → relu → dense 8→8 → relu → dense 8→10`. Nothing
+is cropped or pooled away; only the widths differ from the chapter's 32 channels and 512-wide
+head.
 
 `cnn_conv1_exact_sgd_descends` and `cnn_conv1_bias_exact_sgd_descends` — one exact-gradient SGD
 step on the FIRST conv's kernel, or its bias, decreases the cross-entropy loss — instantiated at
 TRAINED, /128-rationalized weights (biases /16384) and REAL MNIST test image #{IDXB} (label
-{LBLB}, classified correctly), every hypothesis discharged by exact arithmetic:
-`trained_cnn_conv1_sgd_descends_concrete` at learning rate `2⁻{KEXP1}` and
+{LBLB}, classified correctly), all 784 pixels `k/255`, every hypothesis discharged by exact
+arithmetic: `trained_cnn_conv1_sgd_descends_concrete` at learning rate `2⁻{KEXP1}` and
 `trained_cnn_conv1_bias_sgd_descends_concrete` at `2⁻{KEXP1B}` (its radius sits inside the kernel
 rung's, so every relu and pool margin carries over by monotonicity).
 
@@ -1004,14 +960,16 @@ rungs: their relu₁ margin needs every conv1 pre-activation nonzero, and a bias
 exactly zero on a blank patch.
 
 The pool hypothesis takes two-layer twins `ConvPatchEq2 3 3 T0`: conv2-output cells whose 5×5
-receptive fields through both convs lie in a blank image region, every outer read in bounds
-(`tw_*`), so their conv2 outputs are equal for every conv1 kernel and bias. {live_twin_b} live
-windows tie that way and {n_dead_b} are dead; every other cell clears the margin (`cert_*`, through
-`windowMarginUpTo_of_cert`). No pool-tie regularizer was used in training.
+receptive fields through both convs lie in a blank image region and meet the zero padding the
+same way (`convPatchEq2_of_blankTwinZ`), so their conv2 outputs are equal for every conv1 kernel
+and bias. {TB["live_twin"]} live windows tie that way and {TB["n_dead"]} are dead, of 392; every
+other cell clears the margin (`cert_chk`, through `maxPool2MarginQUpTo_of_poolCertZ`). No pool-tie
+regularizer was used in training.
 
-Net: 24×24-center-cropped MNIST, 2×2 block sums to 12×12 (exact pixel sums /1020), conv 1→2
-3×3 SAME + bias → relu → conv 2→2 3×3 SAME → relu → maxpool 2×2 → dense 72→8 → relu →
-dense 8→8 → relu → dense 8→10. The generator prints the net's test accuracy.
+Every table is nested `List ℤ` numerators over one denominator, and each whole-table fact
+(`conv1_chk`, `conv2_chk`, `pool_chk`, `cert_chk`, the margins and bounds) is one kernel
+evaluation, transported to `ℝ` by `Architectures/ListConv`; the 392-term dense3 sums are
+`Foundation/ListDot` dots. The generator prints the net's test accuracy.
 
 As in `Trained.CnnDescent`, the step is the exact gradient and the decrease `lr·‖∇L‖₂²/2` is not
 shown positive. Generated by `scripts/certs/trained_cnn_descent.py`; weights and input are DATA. -/
@@ -1023,26 +981,32 @@ namespace TrainedCnnDescentConv1
 -- § Trained weights and the input (data)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Test image #{IDXB}, center-cropped and 2×2-summed to 12×12, exact pixel sums /1020. -/
-noncomputable def T0 : Tensor3 1 12 12 :=
-  {t3_lit(TB["x0"])}
+/-- MNIST test image #{IDXB} (digit {LBLB}), the 28×28 pixels as integers `0..255`. -/
+def x0Z : List (List (List ℤ)) :=
+  {z3_lit(TB["x0"])}
+
+/-- Test image #{IDXB}, pixels `k/255`. -/
+noncomputable def T0 : Tensor3 1 (2*14) (2*14) := tabR (g3 x0Z) 255
+
+/-- conv1 kernel numerators (1→2, 3×3) over 128. -/
+def W1Z : List (List (List (List ℤ))) :=
+  {k4_lit(QB["W1q"], C, 1)}
 
 /-- conv1 kernel (1→2, 3×3), entries k/128. -/
-noncomputable def W1 : Kernel4 2 1 3 3 :=
-  {k4_lit(QB["W1"], C, 1)}
+noncomputable def W1 : Kernel4 2 1 3 3 := kerR (g4 W1Z) 128
 
 noncomputable def b1 : Vec 2 := {vec_lit(QB["b1"])}
 
+/-- conv2 kernel numerators (2→2, 3×3) over 128. -/
+def W2Z : List (List (List (List ℤ))) :=
+  {k4_lit(QB["W2q"], C, C)}
+
 /-- conv2 kernel (2→2, 3×3), entries k/128. -/
-noncomputable def W2 : Kernel4 2 2 3 3 :=
-  {k4_lit(QB["W2"], C, C)}
+noncomputable def W2 : Kernel4 2 2 3 3 := kerR (g4 W2Z) 128
 
 noncomputable def b2 : Vec 2 := {vec_lit(QB["b2"])}
 
-/-- dense3 (72→8, input×output). -/
-noncomputable def W3 : Mat (2*6*6) 8 :=
-  {mat_lit(QB["W3"])}
-
+{D3B_DEFS}
 noncomputable def b3 : Vec 8 := {vec_lit(QB["b3"])}
 
 noncomputable def W4 : Mat 8 8 :=
@@ -1058,33 +1022,42 @@ noncomputable def b5 : Vec 10 := {vec_lit(QB["b5"])}
 /-- The label of test image #{IDXB}. -/
 def lbl : Fin 10 := {LBLB}
 
-{table_rows("x0_bound", lambda o, hi, wi: f"|T0 {o} {hi} {wi}| ≤ {lit(A1)}", "(rw [abs_le]; constructor <;> norm_num [T0])", 1)}
+theorem x0_chk : absLeZ 1 28 28 (g3 x0Z) {NX0} = true := by decide +kernel
+
+theorem x0_bound : ∀ cc i j, |T0 cc i j| ≤ {lit(A1)} := fun cc i j =>
+  tabR_abs_le x0_chk (by norm_num) (by norm_num) cc i j
+
 -- ════════════════════════════════════════════════════════════════
 -- § conv1: exact table, the relu₁ margin, the conv2 input
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv1 pre-activation numerators at the image, over {DB1} (= 255·128²). -/
+def c1Z : List (List (List ℤ)) :=
+  {z3_lit(TB["c1"])}
+
 /-- conv1 pre-activations at the image, exact. -/
-noncomputable def c1V : Tensor3 2 12 12 :=
-  {t3_lit(TB["c1"])}
+noncomputable def c1V : Tensor3 2 (2*14) (2*14) := tabR (g3 c1Z) {DB1}
 
-{conv_rows("conv1_eq", "W1", "b1", "T0", "c1V", C, TB["x0"])}
-theorem conv1_fun : conv2d W1 b1 T0 = c1V := by
-  funext o hi wi
-  exact conv1_eq o hi wi
+{bias_nums("b1N", b1NB, f"conv1's bias numerators over {DB1}.")}
+theorem conv1_chk : convTabZ 2 1 3 3 28 28 b1N {TB["mc1"]} (g4 W1Z) (g3 x0Z) (g3 c1Z) = true := by
+  decide +kernel
 
-{table_rows("c1_margin", lambda o, hi, wi: f"{lit(R1A)} < |c1V {o} {hi} {wi}|", "(rw [lt_abs]; norm_num [c1V])", C)}
+theorem conv1_fun : conv2d W1 b1 T0 = c1V :=
+  conv2d_tab (fun o => by fin_cases o <;> norm_num [b1, b1N]) (by norm_num) conv1_chk
+
+theorem c1_chk : ltAbsZ 2 28 28 (g3 c1Z) {NM1B} = true := by decide +kernel
+
+theorem c1_margin : ∀ o hi wi, {lit(R1A)} < |c1V o hi wi| := fun o hi wi =>
+  tabR_lt_abs c1_chk (by norm_num) (by norm_num) o hi wi
+
 /-- relu(conv1) at the image (conv2's input), exact. -/
-noncomputable def x1V : Tensor3 2 12 12 :=
-  {t3_lit(TB["x1"])}
+noncomputable def x1V : Tensor3 2 (2*14) (2*14) := tabR (reluZ (g3 c1Z)) {DB1}
 
-{table_rows("x1_cell", lambda o, hi, wi: f"x1V {o} {hi} {wi} = if c1V {o} {hi} {wi} > 0 then c1V {o} {hi} {wi} else 0", "(simp [c1V, x1V])", C)}
-theorem relu_c1 : relu (2 * (2*6) * (2*6)) (Tensor3.flatten c1V) = Tensor3.flatten x1V := by
-  funext k
-  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
-  rw [relu, flatten_t3Idx, flatten_t3Idx, x1_cell]
+theorem relu_c1 : relu (2 * (2*14) * (2*14)) (Tensor3.flatten c1V) = Tensor3.flatten x1V :=
+  relu_flatten_tabR (g3 c1Z) (by norm_num)
 
 /-- **conv2's input is the real image's conv1 activation.** -/
-theorem x1_fun : Tensor3.unflatten (relu (2 * (2*6) * (2*6)) (Tensor3.flatten (conv2d W1 b1 T0))) =
+theorem x1_fun : Tensor3.unflatten (relu (2 * (2*14) * (2*14)) (Tensor3.flatten (conv2d W1 b1 T0))) =
     x1V := by
   rw [conv1_fun, relu_c1, Tensor3.unflatten_flatten]
 
@@ -1092,92 +1065,73 @@ theorem x1_fun : Tensor3.unflatten (relu (2 * (2*6) * (2*6)) (Tensor3.flatten (c
 -- § conv2: exact table, the relu₂ margin, the pooled vector
 -- ════════════════════════════════════════════════════════════════
 
+/-- conv2 pre-activation numerators at the image, over {DB2} (= 255·128³). -/
+def c2Z : List (List (List ℤ)) :=
+  {z3_lit(TB["c2"])}
+
 /-- conv2 pre-activations at the image, exact. -/
-noncomputable def c2V : Tensor3 2 12 12 :=
-  {t3_lit(TB["c2"])}
+noncomputable def c2V : Tensor3 2 (2*14) (2*14) := tabR (g3 c2Z) {DB2}
 
-{conv_rows("conv2_eq", "W2", "b2", "x1V", "c2V", C, TB["x1"])}
-theorem conv2_fun : conv2d W2 b2 x1V = c2V := by
-  funext o hi wi
-  exact conv2_eq o hi wi
+{bias_nums("b2N", b2NB, f"conv2's bias numerators over {DB2}.")}
+theorem conv2_chk : convTabZ 2 2 3 3 28 28 b2N 1 (g4 W2Z) (reluZ (g3 c1Z)) (g3 c2Z) = true := by
+  decide +kernel
 
-{table_rows("c2_margin", lambda o, hi, wi: f"{lit(R1Z2)} < |c2V {o} {hi} {wi}|", "(rw [lt_abs]; norm_num [c2V])", C)}
-/-- relu(conv2) at the image (the max-pool input), exact. -/
-noncomputable def r2V : Tensor3 2 12 12 :=
-  {t3_lit(TB["r2"])}
+theorem conv2_fun : conv2d W2 b2 x1V = c2V :=
+  conv2d_tab (fun o => by fin_cases o <;> norm_num [b2, b2N]) (by norm_num) conv2_chk
 
-{table_rows("r2_cell", lambda o, hi, wi: f"r2V {o} {hi} {wi} = if c2V {o} {hi} {wi} > 0 then c2V {o} {hi} {wi} else 0", "(simp [c2V, r2V])", C)}
-theorem relu_c2 : relu (2 * (2*6) * (2*6)) (Tensor3.flatten c2V) = Tensor3.flatten r2V := by
-  funext k
-  obtain ⟨o, hi, wi, rfl⟩ := t3Idx_surj k
-  rw [relu, flatten_t3Idx, flatten_t3Idx, r2_cell]
+theorem c2_chk : ltAbsZ 2 28 28 (g3 c2Z) {NM2B} = true := by decide +kernel
+
+theorem c2_margin : ∀ o hi wi, {lit(R1Z2)} < |c2V o hi wi| := fun o hi wi =>
+  tabR_lt_abs c2_chk (by norm_num) (by norm_num) o hi wi
+
+/-- The pooled features' numerators over {DB2}: the 2×2 max-pool of relu(conv2), row-major. -/
+def pZ : List ℤ := {zlist(int(v) for v in TB["p"])}
+
+theorem pZ_len : pZ.length = 392 := by decide +kernel
 
 /-- The pooled feature vector (flattened maxpool output), exact. -/
-noncomputable def p2f : Vec (2 * 6 * 6) := {vec_lit(TB["f"])}
+noncomputable def p2f : Vec (2 * 14 * 14) := fun i => (pZ.getD i 0 : ℝ) / {DB2}
 
--- Decoding a flat index near the end of `Fin 72` back to `(ci, ho, wo)` recurses deeper than
--- the default; `max_def` is needed only where a window's maximum is not its first cell.
-set_option maxRecDepth 8192 in
-set_option linter.unusedSimpArgs false in
-theorem pooled_eq : maxPoolFlat 2 6 6 (Tensor3.flatten r2V) = p2f := by
-  show Tensor3.flatten (maxPool2 (Tensor3.unflatten (Tensor3.flatten r2V))) = p2f
-  rw [Tensor3.unflatten_flatten]
-  funext i
-  fin_cases i
-{pool_bullets_text(TB["f"], TB["r2"])}
+theorem pool_chk : poolTabZ 2 14 14 (g3 c2Z) pZ = true := by decide +kernel
+
+theorem head_feat : maxPoolFlat 2 14 14 (relu (2 * (2*14) * (2*14))
+    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
+  rw [conv2_fun]
+  exact maxPoolFlat_relu_tab (by norm_num) pool_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The pool margin up to two-layer twins
 -- ════════════════════════════════════════════════════════════════
 
-{tw_lemmas}
-{"".join(cert_lemmas_b)}
+theorem cert_chk : poolCertZ 2 14 14 (blankTwinZ 1 3 3 28 28 (g3 x0Z)) (g3 c2Z)
+    {NPOOLB} = true := by
+  decide +kernel
+
 /-- **The pool margin up to two-layer twins holds at the trained weights**, ties and all. -/
 theorem pool_margin :
-    MaxPool2MarginQUpTo (c := 2) (h := 6) (w := 6) {lit(R1Z2)} (ConvPatchEq2 3 3 T0) c2V := by
-  refine windowMarginUpTo_of_cert winRowInv winColInv (by norm_num) _
-    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂) ?_
-  intro ci ho wo
-  fin_cases ci <;> fin_cases ho
-{cert_bullets}
+    MaxPool2MarginQUpTo (c := 2) (h := 14) (w := 14) {lit(R1Z2)} (ConvPatchEq2 3 3 T0) c2V :=
+  maxPool2MarginQUpTo_of_poolCertZ (by norm_num) (by norm_num) _
+    (fun _ _ h => h.symm) (fun _ _ _ h₁ h₂ => h₁.trans h₂)
+    (blankTwinZ 1 3 3 28 28 (g3 x0Z)) convPatchEq2_of_blankTwinZ (by norm_num) cert_chk
 
 -- ════════════════════════════════════════════════════════════════
 -- § The dense head: the relu₃ and relu₄ margins
 -- ════════════════════════════════════════════════════════════════
 
-/-- dense3 pre-activations at the image, exact. -/
-noncomputable def d3V : Fin 8 → ℝ := {vec_lit(TB["d3"])}
+{D3B_DOTS}
 
-theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
-  intro k
-  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
-
-/-- relu(dense3) at the image, exact. -/
-noncomputable def r3V : Vec 8 := {vec_lit(TB["r3"])}
-
-theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
-  funext k
-  show (if dense W3 b3 p2f k > 0 then dense W3 b3 p2f k else 0) = r3V k
-  rw [d3_eq]
-  fin_cases k <;> (simp [d3V, r3V])
-
-/-- dense4 pre-activations at the image, exact. -/
-noncomputable def d4V : Fin 8 → ℝ := {vec_lit(TB["d4"])}
-
-theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
-  intro k
-  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
-
-theorem head_feat : maxPoolFlat 2 6 6 (relu (2 * (2*6) * (2*6))
-    (Tensor3.flatten (conv2d W2 b2 x1V))) = p2f := by
-  rw [conv2_fun, relu_c2, pooled_eq]
-
+{D3B_EQS}
+{head_text(TB, QB)}
 -- ════════════════════════════════════════════════════════════════
 -- § Weight bounds
 -- ════════════════════════════════════════════════════════════════
 
-{kernel_bound("hW2", "W2", W2Bb)}
-{weight_bound("hW3", "W3", W3Bb)}
+theorem W2_chk : kerAbsLeZ 2 2 3 3 (g4 W2Z) {NW2} = true := by decide +kernel
+
+theorem hW2 : ∀ o cc kh kw, |W2 o cc kh kw| ≤ {lit(W2Bb)} := fun o cc kh kw =>
+  kerR_abs_le W2_chk (by norm_num) (by norm_num) o cc kh kw
+
+{W3B_BOUND}
 {weight_bound("hW4", "W4", W4Bb)}
 {weight_bound("hW5", "W5", W5Bb)}
 -- ════════════════════════════════════════════════════════════════
@@ -1186,12 +1140,12 @@ theorem head_feat : maxPoolFlat 2 6 6 (relu (2 * (2*6) * (2*6))
 
 /-- The relu₁ margin radius `a·(lr·G)` of the kernel instance, exact. -/
 theorem radius_eq : ({lit(A1)} : ℝ) * ((1 / 2 ^ {KEXP1} : ℝ) *
-    cnnConv1GradBound 1 2 6 6 8 8 10 3 3 {lit(A1)} {lit(W2Bb)} {lit(W3Bb)} {lit(W4Bb)} {lit(W5Bb)}) =
+    cnnConv1GradBound 1 2 14 14 8 8 10 3 3 {lit(A1)} {lit(W2Bb)} {lit(W3Bb)} {lit(W4Bb)} {lit(W5Bb)}) =
       {lit(R1A)} := by
   norm_num [cnnConv1GradBound]
 
-/-- **One exact-gradient SGD step on the conv1 kernel of a trained MNIST CNN, at a real test image
-    with two-layer-twin pool ties, decreases the cross-entropy loss** by at least
+/-- **One exact-gradient SGD step on the conv1 kernel of a trained MNIST CNN, at a real 28×28
+    test image with two-layer-twin pool ties, decreases the cross-entropy loss** by at least
     `lr·‖∇L‖₂²/2`, at `lr = 2⁻{KEXP1}`. Every hypothesis of `cnn_conv1_exact_sgd_descends` is
     discharged above. -/
 theorem trained_cnn_conv1_sgd_descends_concrete :
@@ -1223,7 +1177,7 @@ theorem trained_cnn_conv1_sgd_descends_concrete :
 
 /-- The bias instance's radius `lr·G_b`, exact; it sits inside the kernel instance's `a·lr·G`. -/
 theorem radius_bias_eq : (1 / 2 ^ {KEXP1B} : ℝ) *
-    cnnConv1BiasGradBound 2 6 6 8 8 10 3 3 {lit(W2Bb)} {lit(W3Bb)} {lit(W4Bb)} {lit(W5Bb)} =
+    cnnConv1BiasGradBound 2 14 14 8 8 10 3 3 {lit(W2Bb)} {lit(W3Bb)} {lit(W4Bb)} {lit(W5Bb)} =
       {lit(RB1)} := by
   norm_num [cnnConv1BiasGradBound]
 

@@ -161,7 +161,7 @@ status:
   axioms: &core ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # A REPRESENTATIVE set, one row per kind of claim. The full audit is tests/AuditAxioms.lean
-    # (`#print axioms` on every declaration that says something, run in CI); 110 are
+    # (`#print axioms` on every declaration that says something, run in CI); 111 are
     # independently kernel-rechecked by the comparator, and that set covers every row below
     # (`comparator_config` names the file each one is checked in). Every row: 0 sorries, the
     # three core axioms. The float tier is fidelity 7.
@@ -272,7 +272,9 @@ status:
     - {declaration: "Proofs.FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/MlpFloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a binary32 SGD step provably decreases CE at TRAINED weights
     - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/Trained/LinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # an exact-gradient SGD step on each CNN conv kernel / bias decreases CE at TRAINED weights and a real MNIST image, through twin-tied pool windows
+    # an exact-gradient SGD step on the MLP's input layer strictly decreases CE at TRAINED weights (784->8->8->10) and a real misclassified 28x28 MNIST image
+    - {declaration: "Proofs.TrainedMlpDescent.trained_mlp_input_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/Trained/MlpDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # an exact-gradient SGD step on each CNN conv kernel / bias decreases CE at TRAINED weights (2 channels, 8-wide head) and a real 28x28 MNIST image, through twin-tied pool windows
     - {declaration: "Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescentConv1.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -336,7 +338,7 @@ fidelity:
 
     1. LAYER VJP CORRECTNESS (strongest). Every per-layer backward (dense, conv, batch norm,
        layer norm, softmax-CE, attention/MHSA, GELU, ...) is derived from Mathlib's `fderiv`
-       and machine-checked; these are the floor of the 110 comparator-rechecked theorems.
+       and machine-checked; these are the floor of the 111 comparator-rechecked theorems.
 
     2. CODEGEN TRUST BOUNDARY. The canonical backward is the `fderiv`/`pdiv` expression; at a
        non-smooth point (a ReLU input exactly 0, a max-pool window whose max is attained at
@@ -363,7 +365,9 @@ fidelity:
        all seventeen bottlenecks), MobileNetV4-Conv-M at timm's `mobilenetv4_conv_medium`
        (`MobileNetV4FullBSeal`, all 21 UIB blocks). The small nets add trained-weight witnesses
        and strict CE-descent steps (`Training/Trained/*`, `TrainedLinearDescent`,
-       `TrainedCnnDescent*`).
+       `TrainedMlpDescent`, `TrainedCnnDescent*`), each on the chapter's architecture at a real
+       28×28 MNIST image; the CNN's VJP witness and seal (`CnnWitness`, `CnnSeal`) remain on a
+       pooled 6×6 input.
 
     5. BATCHNORM. Per-example (`bnPerChannelTensor3`) and batch (`bnBatchTensor4`,
        `StableHLO.bnBatchLA`) BatchNorm are different functions of one architecture, the one op

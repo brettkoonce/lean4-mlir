@@ -40,8 +40,8 @@ computable check runs in the kernel, and one soundness lemma turns the check int
 The engines — the ℝ theorems and checkers — are hand-written; the data files are generated. Some
 engines are here (`IntervalBound`, `CrownBound`, `DenseEuclid`, `GaussianQuantile`, `LipschitzCert/Basic`,
 and the conv interval engine `IntervalBoundConv/Basic` with its certificate `CertifiedAtLinf3` /
-`ibp3_certified_of_boxSound`, and `IntervalBoundConv/Q`); the kits `GramQ` and `ListDot` live in
-`Foundation/`.
+`ibp3_certified_of_boxSound`, and `IntervalBoundConv/Q`); the kits `GramQ`, `ListDot` and `ListGetD` live in
+`Foundation/`, and the convolution kit `ListConv` in `Architectures/`.
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|

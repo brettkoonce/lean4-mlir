@@ -1,9 +1,10 @@
 """Descent at TRAINED weights.
 
 Emits LeanMlir/Proofs/Training/Trained/LinearDescent.lean: one SGD step with the
-binary32 FloatModel gradient on a TRAINED, /128-rationalized bias-free 49->10
-pooled-MNIST linear classifier decreases the real cross-entropy loss of one
-example (MNIST test image #8). The update is taken in R and exp is exact
+binary32 FloatModel gradient on a TRAINED, /128-rationalized bias-free 784->10
+MNIST linear classifier -- Chapter 1's net at full size, on the 28x28 image --
+decreases the real cross-entropy loss of one example (the first test image the
+rationalized net misclassifies). The update is taken in R and exp is exact
 (fexp := Real.exp); only the gradient is computed in float.
 
 The trick that makes the descent window rational-checkable with ZERO
@@ -16,7 +17,8 @@ softmax_lbl <= 1/2, and the two gradient sums the window needs are bracketed by
 
 both sides exact rationals. The float-forward drift hδ comes from the proven
 dense_close_fresh budget (denseErr at b=0, e=0), evaluated exactly per class
-column by norm_num (incl. the exact (1+2^-24)^51 power); the exp(2δ)-1 term
+column, the 784-term sums by one kernel evaluation each (Foundation/ListDot)
+and the fan-in factor through the gamma-form bound; the exp(2δ)-1 term
 inside cotErr is bounded by the repo's γ-form exp_sub_one_le. Window margins
 are asserted here with exact Fractions in EXACTLY the bound-forms the Lean
 proof discharges.
@@ -30,15 +32,14 @@ from _gencheck import modularize, module_header  # noqa: E402  (module-system he
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "lib"))
-from _mnist_io import mnist, pool_sums  # noqa: E402
+from _mnist_io import mnist  # noqa: E402
 OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/LinearDescent.lean")
-K, DIM = 10, 49
-LR = Fraction(1, 8192)
+K, DIM = 10, 784
 
-Xtr_raw, ytr = mnist("train"); Xte_raw, yte = mnist("test")
+Xtr_raw, ytr = mnist("train", flat=True); Xte_raw, yte = mnist("test", flat=True)
 
-Str = pool_sums(Xtr_raw); Ste = pool_sums(Xte_raw)
-Xtr = Str / 4080.0; Xte = Ste / 4080.0
+Ste = Xte_raw.astype(np.int64)
+Xtr = Xtr_raw / 255.0; Xte = Xte_raw / 255.0
 
 rng = np.random.default_rng(0)
 W = rng.normal(0, np.sqrt(1.0 / DIM), (K, DIM))
@@ -54,24 +55,29 @@ for ep in range(12):
 Wq = np.round(W * 128).astype(np.int64)
 acc = (np.argmax(Xte @ W.T, 1) == yte).mean()
 accq = (np.argmax(Xte @ (Wq / 128).T, 1) == yte).mean()
-print(f"linear 49->10: acc {acc:.4f} q-acc {accq:.4f} |Wq|max {abs(Wq).max()}")
+print(f"linear 784->10: acc {acc:.4f} q-acc {accq:.4f} |Wq|max {abs(Wq).max()}")
 
 # ── the witness sample: first misclassified test image ──
-IDX = 8
+ZI = Ste @ Wq.T                                           # exact integer logits x (255*128)
+IDX = int(np.nonzero(ZI.argmax(1) != yte)[0][0])
 s = [int(v) for v in Ste[IDX]]
-z = [Fraction(sum(int(Wq[j, d]) * s[d] for d in range(DIM)), 128 * 4080) for j in range(K)]
-LBL = int(yte[IDX]); C = int(np.argmax([float(v) for v in z]))
-assert LBL == 5 and C == 6 and z[LBL] < z[C], (LBL, C)
-Sx = Fraction(sum(s), 4080)
+dz = [int(v) for v in ZI[IDX]]                           # dotZ xdZ (wZ j)
+az = [int(sum(abs(int(Wq[j, d])) * s[d] for d in range(DIM))) for j in range(K)]
+z = [Fraction(dz[j], 128 * 255) for j in range(K)]
+LBL = int(yte[IDX]); C = int(np.argmax(dz))
+assert z[LBL] < z[C], (LBL, C)
+SUMX = sum(s); SUMSQ = sum(v * v for v in s)
+Sx = Fraction(SUMX, 255)
 A = 2 * Sx
-B = Fraction(sum(v * v for v in s), 4080 * 4080)
+B = Fraction(SUMSQ, 255 * 255)
 
 # ── exact window constants ──
 u = Fraction(1, 2 ** 24)
-pow51 = (1 + u) ** 51 - 1
-sig = [sum(abs(int(Wq[j, d])) * Fraction(s[d], 4080) for d in range(DIM)) / 128
-       for j in range(K)]
-d_raw = pow51 * max(sig)
+g_raw = (DIM + 2) * u / (1 - (DIM + 2) * u)              # the γ-form bound on (1+u)^(DIM+2) - 1
+GAM = Fraction(int(g_raw * 10 ** 9) + 1, 10 ** 9)
+powD = GAM
+sig = [Fraction(az[j], 128 * 255) for j in range(K)]
+d_raw = powD * max(sig)
 DEL = Fraction(int(d_raw * 100000) + 1, 100000)          # δ0, nice upper grid
 assert 2 * DEL < 1
 E_raw = 2 * DEL / (1 - 2 * DEL)                          # ≥ exp(2δ)-1
@@ -83,41 +89,46 @@ cot = u * (1 + smE) + smE
 eta_raw = u * (1 + cot) + cot                            # mulErr u 1 1 0 cot
 ETA = Fraction(int(eta_raw * 10 ** 6) + 1, 10 ** 6)
 
-# window, in exactly the Lean bound-forms
-Dub = LR * (A + 490 * ETA)
-Tlb = 1 - 2 * Dub
+# window, in exactly the Lean bound-forms; the step size is the largest power of two that
+# clears it with the margin the assert below asks for
+def window(LR):
+    Dub = LR * (A + DIM * K * ETA)
+    Tlb = 1 - 2 * Dub
+    ok = 2 * Dub < 1 and Tlb > 0 and 2 * Dub ** 2 <= (LR * (B / 4) / 4) * Tlb
+    return Dub, Tlb, ok, (float((LR * (B / 4) / 4) * Tlb / (2 * Dub ** 2)) if Tlb > 0 else 0.0)
+LR = next(Fraction(1, 2 ** k) for k in range(1, 80)
+          if window(Fraction(1, 2 ** k))[2] and window(Fraction(1, 2 ** k))[3] >= 2.0)
+Dub, Tlb, _, h2_margin = window(LR)
 hsmall_ok = 2 * Dub < 1
 h1_ok = ETA * A <= (B / 4) / 4
 h2_ok = Tlb > 0 and 2 * Dub ** 2 <= (LR * (B / 4) / 4) * Tlb
-h2_margin = float((LR * (B / 4) / 4) * Tlb / (2 * Dub ** 2))
 print(f"sample #{IDX}: lbl={LBL} pred={C} gap={float(z[C]-z[LBL]):.4f}")
 print(f"A={A}={float(A):.4f} B={B}={float(B):.4f}")
 print(f"δ0={DEL} E_ub={EUB} η_ub={ETA} lr={LR}")
 print(f"hsmall={hsmall_ok} h1={h1_ok} h2={h2_ok} (h2 margin {h2_margin:.2f}x)")
 assert hsmall_ok and h1_ok and h2_ok and h2_margin >= 2.0
 
-from _leanlit import frac, rrow as row  # noqa: E402
+from _leanlit import frac, zlist, zlit  # noqa: E402
 
 FR_LR, FR_DEL, FR_ETA, FR_A, FR_B = frac(LR), frac(DEL), frac(ETA), frac(A), frac(B)
 GRAD = "gradAt (fun w => crossEntropy 10 (dense (Mat.unflatten w) bd xd) lblD)\n        (Mat.flatten Wd)"
 
 L = []
 A_ = L.append
-A_(module_header(["LeanMlir.Proofs.Float.Binary32Instance"],
+A_(module_header(["LeanMlir.Proofs.Float.Binary32Instance", "LeanMlir.Proofs.Foundation.ListGetD"],
                   ["Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp",
                    "Mathlib.MeasureTheory.Integral.Bochner.Basic"]))
 A_("")
 A_("/-! # Descent at TRAINED weights")
 A_("")
-A_("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
-A_("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
-A_("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
-A_("arithmetic in-kernel. Canonical surface: [`Proofs/Nets/Small/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
+A_("The net is Chapter 1's own: the bias-free 784→10 linear classifier on the 28×28 image,")
+A_("pixels `k/255`, weights `k/128`. The 784-term sums are one kernel evaluation each over")
+A_("`List ℤ` numerators (`Foundation/ListDot`, `Foundation/ListGetD`), so the full input costs what the pooled one did.")
 A_("")
 A_("`binary32_linear_sgd_descends_concrete` (Float/Binary32Instance.lean) holds only at")
 A_("the degenerate `W = 0` net — a satisfiability witness. This file gives a trained")
 A_("instance: **one SGD step with the FloatModel binary32 gradient on a TRAINED,")
-A_(f"/128-rationalized bias-free 49→10 pooled-MNIST linear classifier (the generator")
+A_(f"/128-rationalized bias-free 784→10 MNIST linear classifier (the generator")
 A_(f"prints its test accuracy) decreases the real cross-entropy loss of one example**, MNIST test")
 A_(f"image #{IDX}, with learning rate {LR}. The update is taken in ℝ and the")
 A_("`exp` is exact (`fexp := Real.exp`, `eexp := 0`); the rounding model is the")
@@ -130,8 +141,8 @@ A_(f"exp-monotonicity alone gives `softmax_{LBL} ≤ 1/2` (`sm_lbl_le_half`) —
 A_("whence the two gradient sums the window needs are bracketed by rationals:")
 A_("`Σ|∇| ≤ 2·Σxᵢ` (`gradL1_le`, softmax sums to 1) and `Σ∇² ≥ (Σxᵢ²)/4`")
 A_("(`gradSq_lower`). The float-forward drift `hδ` is the proven")
-A_("`dense_close_fresh` budget evaluated exactly per class column (norm_num")
-A_("computes the exact `(1+2⁻²⁴)⁵¹`); the `exp(2δ)−1` term inside `cotErr` is")
+A_("`dense_close_fresh` budget evaluated per class column (the fan-in factor")
+A_("through the γ-form `gamma_num`, no big power); the `exp(2δ)−1` term inside `cotErr` is")
 A_("bounded by the γ-form `exp_sub_one_le`. Every hypothesis of")
 A_("`linear_float_sgd_descends` is discharged — nothing assumed.")
 A_("")
@@ -144,40 +155,79 @@ A_("")
 A_("namespace Proofs")
 A_("namespace TrainedLinearDescent")
 A_("")
+A_("open scoped BigOperators")
+A_("")
+A_("-- ── the data ──")
+A_("")
+A_(f"/-- MNIST test image #{IDX} (digit {LBL}), the 784 pixels as integers `0..255`. -/")
+A_("def xdZ : List ℤ := " + zlist(s))
+A_("")
+A_("theorem xdZ_len : xdZ.length = 784 := by decide +kernel")
+A_("")
+for j in range(K):
+    A_(f"/-- Class {j}'s trained weights, numerators over 128. -/")
+    A_(f"def w{j}Z : List ℤ := " + zlist([Wq[j, i] for i in range(DIM)]))
+    A_("")
+    A_(f"theorem w{j}Z_len : w{j}Z.length = 784 := by decide +kernel")
+    A_("")
+A_("/-- The ten weight columns by class. -/")
+A_("def wZ : Fin 10 → List ℤ")
+for j in range(K):
+    A_(f"  | {j} => w{j}Z")
+A_("")
 A_("/-- Trained linear weights (input×class, entries `k/128`); the generator prints their test accuracy. -/")
-A_("noncomputable def Wd : Mat 49 10 :=")
-A_("  ![" + ",\n    ".join(row([Wq[j, i] for j in range(K)], 128) for i in range(DIM)) + "]")
+A_("noncomputable def Wd : Mat 784 10 := fun i j => ((wZ j).getD i 0 : ℝ) / 128")
 A_("")
 A_("noncomputable def bd : Vec 10 := fun _ => 0")
 A_("")
-A_(f"/-- MNIST test image #{IDX} (digit {LBL}), 4×4-pooled exact pixel sums. -/")
-A_("noncomputable def xd : Vec 49 :=")
-A_("  " + row(s, 4080))
+A_(f"/-- MNIST test image #{IDX} (digit {LBL}), pixels `k/255`. -/")
+A_("noncomputable def xd : Vec 784 := fun i => (xdZ.getD i 0 : ℝ) / 255")
 A_("")
 A_(f"def lblD : Fin 10 := {LBL}")
 A_(f"def cD : Fin 10 := {C}")
 A_("")
+A_("theorem xdZ_range : ∀ z ∈ xdZ, 0 ≤ z ∧ z ≤ 255 := by decide +kernel")
+A_("")
 A_("theorem xd_nonneg : ∀ i, 0 ≤ xd i := by")
 A_("  intro i")
-A_("  fin_cases i <;> norm_num [xd]")
+A_("  have h := getD_of_forall xdZ (fun z => 0 ≤ z ∧ z ≤ 255) (by norm_num) xdZ_range i")
+A_("  have h0 : (0 : ℝ) ≤ (xdZ.getD i 0 : ℝ) := by exact_mod_cast h.1")
+A_("  exact div_nonneg h0 (by norm_num)")
 A_("")
 A_("theorem xd_le_one : ∀ i, |xd i| ≤ 1 := by")
 A_("  intro i")
-A_("  fin_cases i <;> norm_num [xd]")
+A_("  have h := getD_of_forall xdZ (fun z => 0 ≤ z ∧ z ≤ 255) (by norm_num) xdZ_range i")
+A_("  have h1 : (xdZ.getD i 0 : ℝ) ≤ 255 := by exact_mod_cast h.2")
+A_("  rw [abs_of_nonneg (xd_nonneg i)]")
+A_("  show (xdZ.getD i 0 : ℝ) / 255 ≤ 1")
+A_("  rw [div_le_one (by norm_num)]")
+A_("  exact h1")
+A_("")
+A_(f"theorem xdZ_sum : xdZ.sum = {SUMX} := by decide +kernel")
+A_(f"theorem xdZ_sq : dotZ xdZ xdZ = {SUMSQ} := by decide +kernel")
 A_("")
 A_(f"/-- `Σᵢ xᵢ` exactly (all coordinates nonneg). -/")
 A_(f"theorem xd_sum : (∑ i, xd i) = {frac(Sx)} := by")
-A_("  simp [xd, Fin.sum_univ_succ]")
+A_("  show (∑ i : Fin 784, (xdZ.getD i 0 : ℝ) / 255) = _")
+A_("  rw [← Finset.sum_div, sum_getD 784 xdZ xdZ_len, xdZ_sum]")
 A_("  norm_num")
 A_("")
 A_(f"theorem xd_sq_sum : (∑ i, xd i ^ 2) = {FR_B} := by")
-A_("  simp [xd, Fin.sum_univ_succ]")
+A_("  have h := sum_getD_div xdZ_len xdZ_len xdZ_sq 255 255")
+A_("  show (∑ i : Fin 784, ((xdZ.getD i 0 : ℝ) / 255) ^ 2) = _")
+A_("  simp only [pow_two]")
+A_("  rw [h]")
 A_("  norm_num")
+A_("")
+for j in range(K):
+    A_(f"theorem dz{j} : dotZ xdZ w{j}Z = {zlit(dz[j])} := by decide +kernel")
+    A_(f"theorem az{j} : dotZ (w{j}Z.map fun z => |z|) (xdZ.map fun z => |z|) = {az[j]} := by decide +kernel")
 A_("")
 A_(f"/-- The witness is misclassified: logit {LBL} ≤ logit {C}, exactly. -/")
 A_("theorem hz_lbl_le : dense Wd bd xd lblD ≤ dense Wd bd xd cD := by")
-A_("  show (∑ i, xd i * Wd i lblD) + bd lblD ≤ (∑ i, xd i * Wd i cD) + bd cD")
-A_("  simp [Wd, xd, bd, lblD, cD, Fin.sum_univ_succ]")
+A_(f"  show (∑ i : Fin 784, (xdZ.getD i 0 : ℝ) / 255 * ((w{LBL}Z.getD i 0 : ℝ) / 128)) + 0")
+A_(f"    ≤ (∑ i : Fin 784, (xdZ.getD i 0 : ℝ) / 255 * ((w{C}Z.getD i 0 : ℝ) / 128)) + 0")
+A_(f"  rw [sum_getD_div xdZ_len w{LBL}Z_len dz{LBL} 255 128, sum_getD_div xdZ_len w{C}Z_len dz{C} 255 128]")
 A_("  norm_num")
 A_("")
 A_("-- ── softmax facts at the trained logits (no `exp` is ever evaluated) ──")
@@ -245,7 +295,7 @@ A_("    (fun j _ => sq_nonneg _) (Finset.mem_univ lblD))")
 A_("")
 A_("-- ── the gradient sums, bracketed by exact rationals ──")
 A_("")
-A_("theorem grad_key (i : Fin 49) (j : Fin 10) :")
+A_("theorem grad_key (i : Fin 784) (j : Fin 10) :")
 A_(f"    {GRAD} (finProdFinEquiv (i, j)) =")
 A_("      xd i * (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) := by")
 A_("  rw [linear_loss_gradAt, Mat.unflatten_flatten]")
@@ -256,15 +306,15 @@ A_(f"    (∑ idx, |{GRAD} idx|) ≤ {FR_A} := by")
 A_(f"  rw [← finProdFinEquiv.sum_comp (fun idx => |{GRAD} idx|)]")
 A_("  rw [Fintype.sum_prod_type]")
 A_("  simp_rw [grad_key]")
-A_("  calc (∑ i : Fin 49, ∑ j : Fin 10,")
+A_("  calc (∑ i : Fin 784, ∑ j : Fin 10,")
 A_("        |xd i * (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j)|)")
-A_("      = ∑ i : Fin 49, xd i * ∑ j : Fin 10,")
+A_("      = ∑ i : Fin 784, xd i * ∑ j : Fin 10,")
 A_("          |softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j| := by")
 A_("        refine Finset.sum_congr rfl fun i _ => ?_")
 A_("        rw [Finset.mul_sum]")
 A_("        refine Finset.sum_congr rfl fun j _ => ?_")
 A_("        rw [abs_mul, abs_of_nonneg (xd_nonneg i)]")
-A_("    _ ≤ ∑ i : Fin 49, xd i * 2 :=")
+A_("    _ ≤ ∑ i : Fin 784, xd i * 2 :=")
 A_("        Finset.sum_le_sum fun i _ =>")
 A_("          mul_le_mul_of_nonneg_left sm_cot_l1 (xd_nonneg i)")
 A_("    _ = 2 * ∑ i, xd i := by")
@@ -277,7 +327,7 @@ A_(f"    {FR_B} / 4 ≤ ∑ idx, {GRAD} idx ^ 2 := by")
 A_(f"  rw [← finProdFinEquiv.sum_comp (fun idx => {GRAD} idx ^ 2)]")
 A_("  rw [Fintype.sum_prod_type]")
 A_("  simp_rw [grad_key]")
-A_("  have hfac : (∑ i : Fin 49, ∑ j : Fin 10,")
+A_("  have hfac : (∑ i : Fin 784, ∑ j : Fin 10,")
 A_("      (xd i * (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j)) ^ 2) =")
 A_("      (∑ i, xd i ^ 2) * ∑ j : Fin 10,")
 A_("        (softmax 10 (dense Wd bd xd) j - oneHot 10 lblD j) ^ 2 := by")
@@ -296,16 +346,27 @@ A_("        mul_le_mul_of_nonneg_left sm_cot_sq hB0")
 A_("")
 A_("-- ── the float-side budgets, evaluated ──")
 A_("")
+A_(f"/-- The fan-in γ at 786, by the γ-form (no big-power evaluation). -/")
+A_(f"theorem hgamma : (1 + binary32.u) ^ (784 + 2) - 1 ≤ {frac(GAM)} :=")
+A_("  binary32.gamma_num (k := 784 + 2) (le_of_eq binary32_u) (by norm_num [u32]) (by norm_num [u32])")
+A_("")
+for k in range(K):
+    A_(f"theorem hdelta_{k} : FloatModel.denseErr binary32 Wd bd xd 0 {k} ≤ {FR_DEL} := by")
+    A_(f"  show ((1 + binary32.u) ^ (784 + 2) - 1) *")
+    A_(f"      ((∑ i : Fin 784, |(w{k}Z.getD i 0 : ℝ) / 128| * (|(xdZ.getD i 0 : ℝ) / 255| + 0)) + |(0 : ℝ)|)")
+    A_(f"      + (∑ i : Fin 784, |(w{k}Z.getD i 0 : ℝ) / 128|) * 0 ≤ {FR_DEL}")
+    A_(f"  rw [sum_abs_div_mul w{k}Z_len xdZ_len az{k} (by norm_num) (by norm_num), mul_zero, add_zero,")
+    A_("    abs_zero, add_zero]")
+    A_("  exact (mul_le_mul_of_nonneg_right hgamma (by norm_num)).trans (by norm_num)")
+    A_("")
 A_(f"/-- Float-forward drift: `denseErr` at `b = 0`, `e = 0`, evaluated exactly per")
-A_(f"    class column — `((1+2⁻²⁴)⁵¹ − 1)·Σᵢ|Wᵢₖ|·|xᵢ| ≤ {FR_DEL}`. -/")
+A_(f"    class column — `γ₇₈₆·Σᵢ|Wᵢₖ|·|xᵢ| ≤ {FR_DEL}`. -/")
 A_("theorem hdelta : ∀ k, |binary32.dense Wd bd xd k - dense Wd bd xd k| ≤")
 A_(f"    {FR_DEL} := by")
 A_("  intro k")
 A_("  refine (binary32.dense_close_fresh Wd bd xd k).trans ?_")
-A_("  simp only [FloatModel.denseErr, binary32_u]")
-A_("  fin_cases k <;>")
-A_("    · simp [Wd, xd, bd, Fin.sum_univ_succ]")
-A_("      norm_num [u32]")
+A_("  fin_cases k")
+A_("  exacts [" + ", ".join(f"hdelta_{k}" for k in range(K)) + "]")
 A_("")
 A_("theorem hrho : FloatModel.smRho binary32.u 0 10 < 1 := by")
 A_("  simp only [FloatModel.smRho, binary32_u]")
@@ -372,13 +433,13 @@ A_(f"    set S1 := ∑ idx, |{GRAD} idx| with hS1def")
 A_(f"    set S2 := ∑ idx, {GRAD} idx ^ 2 with hS2def")
 A_("    set η := FloatModel.mulErr binary32.u 1 1 0")
 A_(f"      (FloatModel.cotErr binary32.u 0 {FR_DEL} 10) with hηdef")
-A_(f"    have hD : {FR_LR} * (S1 + ((49 * 10 : ℕ) : ℝ) * η) ≤ {frac(Dub)} := by")
+A_(f"    have hD : {FR_LR} * (S1 + ((784 * 10 : ℕ) : ℝ) * η) ≤ {frac(Dub)} := by")
 A_("      push_cast")
 A_("      nlinarith [hS1, hη, hη0]")
-A_(f"    have hD0 : (0:ℝ) ≤ {FR_LR} * (S1 + ((49 * 10 : ℕ) : ℝ) * η) := by")
+A_(f"    have hD0 : (0:ℝ) ≤ {FR_LR} * (S1 + ((784 * 10 : ℕ) : ℝ) * η) := by")
 A_("      push_cast")
 A_("      nlinarith [hS10, hη0]")
-A_("    have hTpos : (0:ℝ) < 1 - 2 * ((1:ℝ) * ({FR_LR} * (S1 + ((49 * 10 : ℕ) : ℝ) * η))) := by".replace("{FR_LR}", FR_LR))
+A_("    have hTpos : (0:ℝ) < 1 - 2 * ((1:ℝ) * ({FR_LR} * (S1 + ((784 * 10 : ℕ) : ℝ) * η))) := by".replace("{FR_LR}", FR_LR))
 A_("      nlinarith [hD, hD0]")
 A_("    rw [div_mul_eq_mul_div, div_le_iff₀ hTpos]")
 A_("    have hRHS0 : (0:ℝ) ≤ " + f"{FR_LR} * S2 / 4 := by")

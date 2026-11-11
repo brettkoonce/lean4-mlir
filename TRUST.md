@@ -8,7 +8,7 @@ is the full argument, and `formalization.yaml` (`fidelity`) is the itemised reco
 
 | Row | What it covers here | Checked by | Cite as |
 |---|---|---|---|
-| Proven | Layer VJPs, whole-net VJPs, the train-step ties (each emitted update node's `den` is the certified step), data-parallel and sync-BN identities, the certificates. All over ℝ. | Lean's kernel against the three core axioms (`tests/AuditAxioms.lean`); 110 re-checked independently by `tests/comparator/` | the theorem name and its hypotheses |
+| Proven | Layer VJPs, whole-net VJPs, the train-step ties (each emitted update node's `den` is the certified step), data-parallel and sync-BN identities, the certificates. All over ℝ. | Lean's kernel against the three core axioms (`tests/AuditAxioms.lean`); 111 re-checked independently by `tests/comparator/` | the theorem name and its hypotheses |
 | By construction | The committed `verified_mlir/` renders are the renderers' output, byte for byte. | the render drift guard in `proofs.yml`; `scripts/gates/check_render_coverage.py` holds the unguarded remainder at its baseline | the artifact and its guard |
 | Hypothesis | A condition the theorem assumes and the caller supplies: smooth-input clauses, positivity, the rounding model. | nothing, unless a theorem discharges it (table below) | the hypothesis, beside the theorem |
 | Cross-checked | Agreement with an independent computation: `tests/vjp_oracle/` (JAX through IREE), `check_jacobians.py` finite differences, the `*-dp-check` and `*-syncbn-check` gates, `scripts/parity/` against [timm](https://github.com/huggingface/pytorch-image-models). | a script that passes within a stated tolerance | the gate and its tolerance |

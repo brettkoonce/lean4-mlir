@@ -52,6 +52,7 @@
         "chk_convnextImagenetInputGradB_eq_vjp",
         "chk_linear_e4m3_argmax_preserved",
         "chk_trained_linear_sgd_strictly_descends",
+        "chk_trained_mlp_input_sgd_strictly_descends",
         "chk_trained_cnn_conv2_sgd_descends_concrete",
         "chk_trained_cnn_conv2_bias_sgd_descends_concrete",
         "chk_trained_cnn_conv1_sgd_descends_concrete",

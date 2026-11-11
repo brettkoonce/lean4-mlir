@@ -289,6 +289,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Certificates.CrownBound,
              `LeanMlir.Proofs.Float.Binary32Instance,
              `LeanMlir.Proofs.Training.Trained.LinearDescent,
+             `LeanMlir.Proofs.Training.Trained.MlpDescent,
              `LeanMlir.Proofs.Training.Trained.CnnWitness,
              `LeanMlir.Proofs.Training.Trained.CnnSeal,
              `LeanMlir.Proofs.Training.Trained.CnnDescent,
