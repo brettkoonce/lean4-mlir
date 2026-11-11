@@ -305,14 +305,19 @@ def resnet50ImagenetConfigA2True2048 : TrainConfig :=
     Deltas vs `default`: 512 micro × 4 = effective 2048, LR restored to the paper's
     **5e-3 @ bs2048** (not the 512-scaled 1.25e-3), and the timm no_weight_decay
     skip-list on. BN is per-micro-batch (Ghost-BN, benign at micro=512). Unlike
-    `a2-true-2048` this needs no 160 GB card — peak is the same as bs512. -/
+    `a2-true-2048` this needs no 160 GB card — peak is the same as bs512.
+
+    Mixup/CutMix is drawn per 256-row chunk, eight draws a step (`mixChunks := 8`), as timm draws
+    once per GPU batch; one draw a step cost A3 half a point (`rsb-faithful-mix8`). The verified
+    A2 and A1 confs draw the same way through the shim's `SHIM_MIX_CHUNK=256`. -/
 def resnet50ImagenetConfigA2Accum : TrainConfig :=
   { resnet50ImagenetConfig with
       learningRate      := 0.005   -- RSB-A2 lr @ bs2048 (native, not 512-scaled)
       gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 (LAMB's design batch)
       wdExcludeNormBias := true    -- timm no_weight_decay: BN γ/β + biases skip wd
       useEMA            := false   -- RSB Table 2: no EMA for A1/A2/A3
-      bceTargetThresh   := some 0.2 }  -- every mixed class a target of 1 (RSB §2.2; timm --bce-target-thresh 0.2)
+      bceTargetThresh   := some 0.2    -- every mixed class a target of 1 (RSB §2.2; timm --bce-target-thresh 0.2)
+      mixChunks         := 8 }     -- Mixup/CutMix per 256-row chunk, timm's per-GPU draw (as `rsb-faithful-mix8`)
 
 /-- **RSB-A1** (timm "ResNet Strikes Back" A1) → **80.4%** top-1, the strongest of
     the three RSB tiers and the most expensive: 600 epochs, twice A2's schedule.

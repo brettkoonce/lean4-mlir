@@ -1544,6 +1544,22 @@ def _cutmix(x, y, key):
     ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)
     return x4m.reshape(B, -1), ym
 
+MIX_CHUNKS = 8
+
+@jit
+def _mix_chunked(x, y, key, cut):
+    # timm Mixup per GPU batch: MIX_CHUNKS contiguous chunks, each its own coin (cut[c]), lambda
+    # and box, the partner flipped within the chunk
+    B = x.shape[0]; n = B // MIX_CHUNKS
+    xs = x.reshape(MIX_CHUNKS, n, x.shape[1]); ys = y.reshape(MIX_CHUNKS, n)
+    ks = jax.vmap(lambda c: jax.random.fold_in(key, c))(jnp.arange(MIX_CHUNKS))
+    def one(xc, yc, kc, cc):
+        xa, ya = _mixup(xc, yc, kc)
+        xb, yb = _cutmix(xc, yc, kc)
+        return jnp.where(cc, xb, xa), jnp.where(cc, yb, ya)
+    xm, ym = jax.vmap(one)(xs, ys, ks, cut)
+    return xm.reshape(B, -1), ym.reshape(B, -1)
+
 @jit
 def eval_batch(params, bn, x, y, take):
     logits, _ = forward(params, x, bn, False)
@@ -1745,11 +1761,9 @@ if __name__ == "__main__":
         n_batches = 0
         for _ in range(steps_per_epoch):
             x, y = next(train_iter)
-            # timm Mixup(switch_prob): CutMix with probability p per batch, seeded from (seed, step)
-            if np.random.default_rng([314159 + _SEED_OFF, _global_step]).random() < 0.500000:
-                x, y = _cutmix(x, y, jax.random.fold_in(jax.random.PRNGKey(314159 + _SEED_OFF), _global_step))
-            else:
-                x, y = _mixup(x, y, jax.random.fold_in(jax.random.PRNGKey(314159 + _SEED_OFF), _global_step))
+            # timm Mixup(switch_prob) per GPU batch: one coin per chunk, seeded from (seed, step)
+            _cut = jnp.asarray(np.random.default_rng([314159 + _SEED_OFF, _global_step]).random(MIX_CHUNKS) < 0.500000)
+            x, y = _mix_chunked(x, y, jax.random.fold_in(jax.random.PRNGKey(314159 + _SEED_OFF), _global_step), _cut)
             params, opt_state, bn_state, loss = train_step(params, opt_state, bn_state, x, y, lr, jax.random.fold_in(_drop_base, _global_step))
             epoch_loss += loss  # jax scalar: defer the device sync to epoch end
             n_batches += 1
