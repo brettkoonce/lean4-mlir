@@ -1,0 +1,43 @@
+box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+⚠ other mnv4in256 checkpoints present — they must NOT be resumed into this run:
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100.bin
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100dp26.bin
+  per-image bitmaps -> runs/2026-10-26-mnv4-full500-verified/bitmaps/mnv4in256_accdp8x128wxdropdowd01bf16_e{N}.bin (LEAN_MLIR_DUMP_CORRECT)
+[sup] 2026-10-26 07:34:27 START job=mnv4-full-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-26-mnv4-full500-verified
+[sup] 2026-10-26 07:34:27 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-10-26 07:34:27 eta: ~75 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-full-4gpu/: med 214 / min 210 / p90 219 ms per 512-row micro-step at w4, starvation 4 ms — compute-bound; 2,496 micro-steps + the streamed f32 eval every 5th epoch; the 224 tier read 274 ms with 35 ms starved on 2026-10-07)
+[sup] 2026-10-26 07:34:27 attempt 1: resuming at epoch 0/500 (next rest: 999)
+[sup] 2026-10-26 07:34:27   launched PID=191863 PGID=191863
+Terminated
+[sup] 2026-10-27 17:30:20 supervisor exiting — taking the run down (PID=191863 PGID=191863)
+box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+⚠ other mnv4in256 checkpoints present — they must NOT be resumed into this run:
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100.bin
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100dp26.bin
+⚠ .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla.bin.epoch exists (epoch 190) — this run will RESUME from it, not start fresh.
+⛔ ffi/libpjrt_ffi.so is not what ffi/pjrt_ffi.c builds to — the run would execute stale shim code:
+   gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+  per-image bitmaps -> runs/2026-10-26-mnv4-full500-verified/bitmaps/mnv4in256_accdp8x128wxdropdowd01bf16_e{N}.bin (LEAN_MLIR_DUMP_CORRECT)
+[sup] 2026-10-28 12:08:35 ⛔ PRECHECK failed — refusing to start
+box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+⚠ other mnv4in256 checkpoints present — they must NOT be resumed into this run:
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100.bin
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100dp26.bin
+⚠ .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla.bin.epoch exists (epoch 190) — this run will RESUME from it, not start fresh.
+  per-image bitmaps -> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/runs/2026-10-26-mnv4-full500-verified/bitmaps/mnv4in256_accdp8x128wxdropdowd01bf16_e{N}.bin (LEAN_MLIR_DUMP_CORRECT)
+[sup] 2026-10-28 12:12:07 START job=mnv4-full-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=78 stall=1800s logs=/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/runs/2026-10-26-mnv4-full500-verified
+[sup] 2026-10-28 12:12:07 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-10-28 12:12:07 eta: ~75 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-full-4gpu/: med 214 / min 210 / p90 219 ms per 512-row micro-step at w4, starvation 4 ms — compute-bound; 2,496 micro-steps + the streamed f32 eval every 5th epoch; the 224 tier read 274 ms with 35 ms starved on 2026-10-07)
+[sup] 2026-10-28 12:12:07 DRY_RUN — nothing launched
+box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+⚠ other mnv4in256 checkpoints present — they must NOT be resumed into this run:
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100.bin
+   .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla_e100dp26.bin
+⚠ .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla.bin.epoch exists (epoch 190) — this run will RESUME from it, not start fresh.
+  per-image bitmaps -> runs/2026-10-26-mnv4-full500-verified/bitmaps/mnv4in256_accdp8x128wxdropdowd01bf16_e{N}.bin (LEAN_MLIR_DUMP_CORRECT)
+[sup] 2026-10-28 12:12:09 START job=mnv4-full-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-26-mnv4-full500-verified
+[sup] 2026-10-28 12:12:09 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-10-28 12:12:09 eta: ~75 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-full-4gpu/: med 214 / min 210 / p90 219 ms per 512-row micro-step at w4, starvation 4 ms — compute-bound; 2,496 micro-steps + the streamed f32 eval every 5th epoch; the 224 tier read 274 ms with 35 ms starved on 2026-10-07)
+[sup] 2026-10-28 12:12:09 attempt 1: resuming at epoch 190/500 (next rest: 999)
+[sup] 2026-10-28 12:12:09   launched PID=1310545 PGID=1310545
+[sup] 2026-10-30 20:59:49 ✅ COMPLETE — 500/500 epochs

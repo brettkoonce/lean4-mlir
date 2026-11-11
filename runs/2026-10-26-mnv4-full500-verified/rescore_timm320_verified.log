@@ -1,0 +1,46 @@
+▸ timm protocol for mnv4-in256: mobilenetv4_conv_medium.e500_r256_in1k → 320px, crop_pct 1.0
+MobileNetV4-Conv-M on full 1000-class ImageNet at the paper's 256², the paper's 500-epoch recipe as its own training config has it (RandAugment m15, dropout 0.2, drop-path 0.075 over the 26-entry block list, BN 0.997 / 1e-3), via the VERIFIED renderer.
+  SCORING A CHECKPOINT — no training. MobileNetV4-Conv-M (ImageNet-1k, paper tier, 256²) accdp8x128wxdropdowd01bf16, .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla.bin
+  ▸ EVAL PROTOCOL: 320px, crop_pct 1.0 (timm's test protocol) through verified_mlir/mnv4in256_fwd_eval_s320.mlir
+  ▸ EVAL RES SPLIT: net d0 196608, eval d0 307200 (batch 64) — read off verified_mlir/mnv4in256_fwd_eval_s320.mlir
+  region 0 of 4 (the live weights), 9715512 params
+  BN: 77 layers from .lake/build/mnv4in256_accdp8x128wxdropdowd01bf16_ckpt_xla.bin.bn — the running stats
+I1111 14:22:52.819236 3002139 service.cc:154] XLA service 0x7901b802ed50 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1111 14:22:52.819266 3002139 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1111 14:22:52.820906 3002139 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1111 14:22:52.820932 3002139 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1111 14:22:52.827777 3002139 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1111 14:22:53.657596 3002156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 12 bytes spill stores, 12 bytes spill loads
+
+I1111 14:22:54.009625 3002166 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 112 bytes spill stores, 112 bytes spill loads
+
+I1111 14:22:54.156653 3002176 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 872 bytes spill stores, 616 bytes spill loads
+
+E1111 14:22:54.188131 3002163 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:22:54.339808 3002170 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:22:56.732405 3002175 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:22:58.150246 3002181 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mnv4in256_fwd_eval_s320.mlir (@mnv4in256_fwd_eval_s320, 1 outputs, 1 replica) in 5649 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1794406978.816941 3002993 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1794406980.958203 3003139 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1794406981.554703 3003144 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1794406983.837164 3003357 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @mnv4in256_fwd_eval_s320 holds 387 parameter tensors (37.3 MB) on 1 device; they stop crossing PCIe from here
+  xla/pjrt verified_mlir/mnv4in256_fwd_eval_s320.mlir
+  imagenet: val streams per pass (50,000 images at eval width 307200) — nothing is held
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — validation split, batch 256, 307200 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — validation split, batch 256, 307200 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held
+  ▸ val = all 50000 streamed (timm's denominator)
+  checkpoint: acc = 40525/50000 = 81.050000%  top5 = 47819/50000 = 95.638000%  [95% CI 80.70–81.39]
+    per-example top-1 bitmap -> runs/2026-10-26-mnv4-full500-verified/bitmaps/timm320_verified.bin (50000 bytes) — pair two of these with scripts/demos/mcnemar.py

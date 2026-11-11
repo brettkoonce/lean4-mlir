@@ -1,0 +1,23 @@
+=== mnv4 full500 jax e500 f32 timm ===
+eval dtype: f32 forward (EVAL_DTYPE=f32); the module's DT=bfloat16 CONV_DT=bfloat16
+backend=gpu devices=1
+gen=generated/generated_mobilenet_v4_imagenet_full.py
+state=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full_e500.state.npz
+eval protocol: 256px, crop_pct=0.875000 (timm resize-then-crop, antialiased)
+state tuple (from the module): (params, opt_state, bn_state)
+  params=233 bn=154 opt=467 leaves -> 854 total (file has 854) ✓
+loaded step=156000
+scoring the live weights + running BN buffers
+
+── scoring at 320px, crop_pct 1.0 — timm mobilenetv4_conv_medium.e500_r256_in1k (timm 1.0.28)
+   crop: timm's resize-then-crop (_imagenet_decode_center_crop_timm); the module's own is its recipe's crop-then-resize (evalCropTf: tf-models', TF TPU EfficientNet's or TF-slim's)
+E1111 14:24:57.453268 3004049 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:24:57.670166 3004049 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:24:58.108645 3004067 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:24:59.076756 3004074 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1111 14:24:59.279011 3004063 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+   per-image top-1 bitmap -> ../runs/2026-10-26-mnv4-full500-verified/bitmaps/timm320_jax_f32.bin (50000 bytes, 40447 set) — pair with scripts/demos/mcnemar.py
+   top-1: 40447/50000 = 80.89%   top-5: 47812/50000 = 95.62%
+
+=== FULL VAL (f32 forward (EVAL_DTYPE=f32)) ===
+320px crop 1.0    top-1  80.89%  top-5  95.62%  (50000 images)  timm mobilenetv4_conv_medium.e500_r256_in1k (timm 1.0.28)
