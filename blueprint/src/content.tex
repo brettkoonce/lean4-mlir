@@ -16226,45 +16226,37 @@ def detrR50 : NetSpec where
 \section{Industrial inspection --- demo: the same detector on NEU-DET steel defects}
 \label{sec:bestiary_inspection}
 
-The detector of \S\ref{sec:bestiary_detection}, unchanged --- backbone,
-neck, heads, loss, ImageNet bootstrap, scorer --- on the dataset the
-industrial-inspection literature reports on.
+The detector of \S\ref{sec:bestiary_detection}, unchanged, on the dataset the
+industrial-inspection literature reports on. The question is when a
+multi-scale head earns its three levels, and answering it takes a dataset
+where it should not.
 
 \textbf{The data.} NEU-DET (Song \& Yan 2013; boxes He et al.\ 2020;
-Appendix~\ref{app:data}) is
-$1{,}800$ grayscale $200\times200$ crops of hot-rolled steel strip, $300$ per
-class over six defect types --- crazing, inclusion, patches, pitted surface,
-rolled-in scale, scratches --- with Pascal-VOC boxes. It is VisDrone's opposite
-regime. A crop holds $2.3$ defects, half of which span more than half the frame;
-at the detector's $448$\,px input, $98\%$ of the training boxes route to the
-coarsest pyramid level and none to the finest. This is the dataset on which a
-single $14\times14$ grid should not collapse, and running both heads on
-both datasets is what shows when multi-scale detection helps.
+Appendix~\ref{app:data}) is $1{,}800$ grayscale $200\times200$ crops of
+hot-rolled steel strip, $300$ for each of six defect types: crazing,
+inclusion, patches, pitted surface, rolled-in scale and scratches. It is
+VisDrone's opposite. A crop holds $2.3$ defects, half of which span more than
+half the frame, and at the detector's $448$\,px input $98\%$ of the training
+boxes route to the coarsest pyramid level and none to the finest. A single
+$14\times14$ grid should be enough here.
 
-Three constants change and nothing in the code generation does: the anchor
-priors are re-fitted to NEU's boxes (VisDrone's largest is $0.18\times0.15$ of
-the frame; a steel defect is often half of it), the class weights are off
-(the data is balanced), and the six classes take ids $0$--$5$ of the ten-slot
-one-hot, since the $5+10$ per-anchor width is fixed in the \texttt{fpnDetect}
-emitter and the scorer averages over the classes present. NEU-DET ships no
-split; the one here is $1{,}080/360/360$, stratified $180/60/60$ per class from
-a fixed seed. Epochs are chosen on the validation $360$ and the numbers in
-Table~\ref{tab:neudet_results} are the test $360$ at that epoch, scored by the VisDrone protocol against
-uncapped ground truth, three seeds an arm --- the seed sets the He
-initialization of whatever is not bootstrapped, the shuffle and the
-augmentation draws --- printed as mean $\pm$ sd
-(\texttt{demos/MainYolov1NeuDetFpn.lean},
-\texttt{demos/MainYolov1NeuDet448.lean};
-\texttt{runs/2026-09-17-neudet-fpn-run1/},
-\texttt{runs/2026-10-27-neudet-seeds/}). The single-grid arm is the same ResNet-34 and the same
-bootstrap under a one-grid YOLOv1 head at $448/14$, run for the same 30
-epochs here (its VisDrone run was 12 epochs without the scale
-augmentation). Table~\ref{tab:neudet_visdrone_heads} is the same two heads on
-VisDrone, and Figure~\ref{fig:neudet_fpn} is both on one crop of each defect.
+\textbf{The arms.} Two heads share one ResNet-34 and one ImageNet bootstrap:
+the FPN of \S\ref{sec:bestiary_detection}, and a one-grid YOLOv1 head at
+$448/14$. Three constants change from VisDrone and nothing in the code
+generation does. The anchor priors are re-fitted to NEU's boxes (VisDrone's
+largest is $0.18\times0.15$ of the frame; a steel defect is often half of
+it), the class weights are off because the data is balanced, and the six
+classes take ids $0$--$5$ of the ten-slot one-hot, whose width is fixed in
+the \texttt{fpnDetect} emitter. NEU-DET ships no split; the one here is
+$1{,}080/360/360$, stratified by class.
+Table~\ref{tab:neudet_results} is both heads on steel with two ablations of
+the FPN's recipe, Table~\ref{tab:neudet_visdrone_heads} is the same two heads
+on VisDrone, and Figure~\ref{fig:neudet_fpn} is both on one crop of each
+defect.
 
 \begin{table}[H]
 \centering
-\caption{Detection on the NEU-DET test split: the R34+FPN arms and the single-grid head, mean $\pm$ sd over three seeds of the test score at each run's validation-peak epoch (\texttt{runs/2026-10-27-neudet-seeds/}), and published detectors.}
+\caption{Detection on the NEU-DET test split: the R34+FPN arms and the single-grid head, 30 epochs each, and published detectors (on a $1{,}440/180/180$ split). The split here is stratified $180/60/60$ per class from a fixed seed; each row is the mean $\pm$ sd over three seeds of the test score at the run's validation-peak epoch, scored by the VisDrone protocol against uncapped ground truth. The seed sets the He initialization of whatever is not bootstrapped, the shuffle and the augmentation draws (\texttt{demos/MainYolov1NeuDetFpn.lean}, \texttt{demos/MainYolov1NeuDet448.lean}; \texttt{runs/2026-10-27-neudet-seeds/}).}
 \label{tab:neudet_results}
 \small
 \begin{tabular}{l c c c}
@@ -16303,110 +16295,91 @@ VisDrone val, the same two heads & mAP@0.5 & recall & class-agnostic AP \\
 on one crazing, inclusion, rolled-in-scale and scratches crop from NEU-DET
 validation, each with two ground-truth boxes; each model draws its two
 highest-scoring boxes. Both heads find the same defects. Crazing, whose box
-is a region of texture rather than an object, is where the boxes disagree
+is a region of texture and no single object, is where the boxes disagree
 with the truth and with each other.}
 \label{fig:neudet_fpn}
 \end{figure}
 
-\noindent \textbf{Table~\ref{tab:neudet_results} beside
-Table~\ref{tab:neudet_visdrone_heads} is the result.} On steel the single
-grid is within $0.02$ of the multi-scale head, $0.609$ against $0.632$ ---
-behind on every seed, by $0.008$ to $0.044$; on drones it is six times
-behind, $0.039$ against $0.232$, with recall $0.18$ against $0.77$ --- same
-backbone, same bootstrap, same scorer, same lowerer in all four cells
-(against the FPN's own 12-epoch unaugmented row, $0.157$, the grid is four
-times behind). The FPN helps only where objects are small; on NEU-DET it
-runs three heads to do one level's work, and the head that collapses on
-VisDrone is not a bad head; it is the wrong head for drones. Recall is not the
-limit on steel: the FPN finds $99\%$ of defects on every seed and the mean is
-held down by two classes, crazing at $0.34$ and rolled-in scale at $0.43$
-against $0.67$--$0.84$ for the other four --- the diffuse textures whose
-``box'' is most of the crop, the worst two in every published NEU-DET table
-and the worst two for every arm and seed here. The ImageNet prefix adds
-$0.071 \pm 0.011$ at $1{,}080$ training images, the same sign on all three
-seeds and five times either arm's spread; without it the validation curve
-sits $0.04$--$0.09$ lower at every epoch from 26. Switching the HSV jitter and
-the flip off is $+0.014$, the same sign on all three seeds on test and on
-validation, about one seed sd of the recipe arm: the crops are gray, hue
-jitter on gray content is input noise, and the box-aware affine, kept in both
-arms, is the augmentation doing the work. It is small, consistent, and not
-the table's point; the bold row is the VisDrone recipe unchanged, and a
-NEU-tuned recipe would start by switching the jitter off.
+\noindent \textbf{The two tables side by side are the result.} On steel the
+single grid is within $0.02$ of the multi-scale head, $0.609$ against
+$0.632$, behind on every seed. On drones it is six times behind, $0.039$
+against $0.232$, with recall $0.18$ against $0.77$. The backbone, the
+bootstrap, the scorer and the lowerer are the same in all four cells. The FPN
+helps where objects are small. On NEU-DET it runs three heads to do one
+level's work, and the head that collapses on VisDrone is a sound head on the
+wrong dataset.
+
+\textbf{Two classes hold the number down.} Recall is not the limit on steel:
+the FPN finds $99\%$ of defects on every seed. The mean is held down by
+crazing at $0.34$ and rolled-in scale at $0.43$, against $0.67$--$0.84$ for
+the other four. Both are diffuse textures whose ``box'' is most of the crop,
+and they are the worst two in every published NEU-DET table and for every arm
+and seed here.
+
+\textbf{The ablations.} The ImageNet prefix is worth $0.071 \pm 0.011$ at
+$1{,}080$ training images, with the same sign on all three seeds. Switching
+the HSV jitter and the flip off is worth $+0.014$, about one seed sd: the
+crops are gray, and hue jitter on gray content is input noise. The bold row
+stays the VisDrone recipe unchanged, and a NEU-tuned recipe would start by
+switching the jitter off.
 
 \medskip\noindent The distance to the published rows is recipe. Those
-detectors run at $640$\,px for 300 epochs on a $1{,}440/180/180$ split; this
-one runs at $448$\,px for 30 epochs, which on $1{,}080$ images is $4{,}050$
-steps against VisDrone's $24{,}000$, under a cosine that has leveled by
-epoch 26--30 on every arm and seed: the validation peak is epoch 28 or 30 on
-eleven of the twelve runs, and the test score at epoch 30 is within $0.011$
-of the score at the peak on all of them. The anchor priors are a second,
-smaller part of it: three per level fit
-a level that carries $98\%$ of the boxes at every aspect from $64$\,px to the
-full frame at a mean IoU of $0.52$, and the head has to regress the rest.
-Both are levers the detector already has; neither was pulled, because the
-comparison the section makes needs the detector left exactly as it was.
+detectors run at $640$\,px for 300 epochs. This one runs at $448$\,px for 30,
+which on $1{,}080$ images is $4{,}050$ steps against VisDrone's $24{,}000$.
+The anchor priors are a second, smaller part: three priors on a level that
+carries $98\%$ of the boxes fit them at a mean IoU of $0.52$, and the head
+has to regress the rest. Neither lever was pulled, because the comparison
+needs the detector left exactly as it was.
 
 \medskip\noindent What this detector is not: an inspection line. It draws a
-box on a $200$-px crop already cut from the strip --- no line speed, no
-severity, no miss rate against a plant's tolerance --- and on the two diffuse
-classes, crazing at $0.33$--$0.35$ and rolled-in scale at $0.40$--$0.48$
-across the four arms, the box is a region of texture that the labels, the
-published detectors and both heads here place differently. The honest number
-on steel is the per-class one.
+box on a $200$-px crop already cut from the strip, with no line speed, no
+severity and no miss rate against a plant's tolerance. On the two diffuse
+classes the box is a region of texture that the labels, the published
+detectors and both heads here place differently, so the number to read on
+steel is the per-class one.
 
 \section{People watching --- demo: Arabic sign-language letters on ArASL}
 \label{sec:bestiary_people}
 
 Networks whose input is a person: a face, a gait, a hand. The demo is
 Chapter~\ref{chap:bn}'s CIFAR net on the dataset the Arabic sign-language
-literature reports on, run twice on the same images --- once under the
-split every published number uses, once under a split that keeps each
-hand's frames together --- and the pair of numbers is the result. ArASL
-(Latif et al.\ 2019, Data in Brief~23; Mendeley \texttt{y7pckrw6z2}, CC~BY~4.0)
-is $54{,}049$ grayscale $64\times64$ crops of static hand signs for the 32
-letters of the Arabic alphabet, $1{,}293$ to $2{,}114$ per class, performed
-by ``more than 40 people''. Published classifiers score $96.6$--$97.6\%$ for
-CNNs trained from scratch (Latif et al.\ 2020; Alani \& Cosma 2021;
-Abdelghfar et al.\ 2023) and $99.3$--$99.6\%$ for transfer-learned
-EfficientNets and ViTs (Al Nabih et al.\ 2024; arXiv:2410.00681;
-arXiv:2501.08169), all on random splits. The images are video bursts:
-sorted by file number within a class, consecutive frames differ by a median
-$3.3$ gray levels per pixel where a random pair of the same class differs by
-$33$, and cutting where the gap exceeds $6$ leaves $14{,}336$ chains of $3.8$
-frames. No signer, session or date is recorded. The two protocols are
-$80/10/10$ per class from one seed: \texttt{random}, a stratified
-permutation, and \texttt{blocked}, each class's capture order cut at the
-$80\%$ and $90\%$ marks with each cut moved to the nearest chain boundary.
-An audit then measures what the split did: for every test image, the
-nearest training image of any class at $16\times16$. Under \texttt{random},
-$92.3\%$ of test images have a training image within $6$ gray levels, and
-the nearest training image's label is right $95.7\%$ of the time; under
-\texttt{blocked}, $6.4\%$ and $28.6\%$. The residual $6\%$ is the same hand
-returning a median $306$ files later, which a release without signer ids
-cannot separate.
+literature reports on, trained twice on the same images: once under the
+random split every published number uses, and once under a split that keeps
+each hand's frames together. The pair of numbers is the result.
 
-Two numbers change in the network and nothing in the code generation does.
-\texttt{CIFAR-CNN8-wide-BN} as Chapter~\ref{chap:bn} spells it --- eight
-convolutions in four conv-conv-pool stages at 16, 16, 32, 32 channels into
-the $2\times512$ head --- takes a one-channel stem and a 32-way output; on
-the native $64\times64$ input the four pools end at $4\times4$, so the
-flatten is $512$ wide and the net is $0.58$\,M parameters. The recipe is the
-one the gravitational-wave demo (\S\ref{sec:bestiary_signal}) also uses: the
-ordinary train step with integer
-labels, Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64,
-30 epochs, no flip (a mirrored hand is a different sign for some letters),
-five minutes on one card (\texttt{demos/MainAraslSigns.lean}, \texttt{arasl-signs};
-\texttt{runs/2026-09-17-arasl/}, one directory per arm beside it). The chapter's linear and MLP rungs run through
-the same loop as the bracket, and the chapter net at its own $32\times32$
-input checks that the resolution is not the story. Epochs are chosen on
-the validation tenth and the numbers in Table~\ref{tab:arasl_results} are the
-test tenth at that epoch, three seeds for the chapter net.
-Figure~\ref{fig:arasl_signs} is the alphabet, the nearest neighbors under each
-split, and the confusions.
+\textbf{The data.} ArASL (Latif et al.\ 2019; Appendix~\ref{app:data}) is
+$54{,}049$ grayscale $64\times64$ crops of static hand signs for the 32
+letters of the Arabic alphabet, performed by ``more than 40 people''.
+Published CNNs trained from scratch score $96.6$--$97.6\%$ and
+transfer-learned EfficientNets and ViTs $99.3$--$99.6\%$, all on random
+splits. The images are video bursts. Sorted by file number within a class,
+consecutive frames differ by a median $3.3$ gray levels per pixel, where a
+random pair from the same class differs by $33$. No signer, session or date
+is recorded.
+
+\textbf{The two splits.} Both are $80/10/10$ per class. \texttt{random} is a
+stratified permutation. \texttt{blocked} cuts each class's capture order at
+the $80\%$ and $90\%$ marks, with each cut moved to the nearest break between
+bursts. An audit then measures what each split did: for every test image, the
+nearest training image of any class, at $16\times16$. Under \texttt{random},
+$92.3\%$ of test images have a training image within $6$ gray levels. Under
+\texttt{blocked}, $6.4\%$ do, and those are the same hand returning later in
+the numbering, which a release without signer ids cannot separate.
+
+\textbf{The arms.} \texttt{CIFAR-CNN8-wide-BN} takes a one-channel stem and a
+32-way output, $0.58$\,M parameters at the native $64\times64$, and nothing
+in the code generation changes. Thirty epochs with no flip (a mirrored hand
+is a different sign for some letters) are five minutes on one card
+(\texttt{demos/MainAraslSigns.lean}, \texttt{arasl-signs}). The chapter's
+linear and MLP rungs run through the same loop as the bracket, and the net at
+its own $32\times32$ input checks that resolution is not the story.
+Table~\ref{tab:arasl_results} is every arm under both splits, and
+Figure~\ref{fig:arasl_signs} is the alphabet, the nearest neighbors under
+each split, and the confusions.
 
 \begin{table}[H]
 \centering
-\caption{ArASL test accuracy under a random and a blocked split. The chapter net's row is the mean $\pm$ sd over three seeds; a $95\%$ Wilson interval on the pooled $\approx 16{,}200$ trials is $\pm 0.2$ (random) and $\pm 0.6$ (blocked).}
+\caption{ArASL test accuracy under a random and a blocked split, $80/10/10$ per class from one seed, at the epoch chosen on the validation tenth: Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64, 30 epochs (\texttt{runs/2026-09-17-arasl/}, one directory per arm beside it). The chapter net's row is the mean $\pm$ sd over three seeds; a $95\%$ Wilson interval on the pooled $\approx 16{,}200$ trials is $\pm 0.2$ (random) and $\pm 0.6$ (blocked). A burst is a run of frames with no gap over $6$ gray levels: $14{,}336$ chains of $3.8$ frames. Published rows: Latif et al.\ 2020, Alani \& Cosma 2021 and Abdelghfar et al.\ 2023 from scratch; Al Nabih et al.\ 2024, arXiv:2410.00681 and arXiv:2501.08169 by transfer.}
 \label{tab:arasl_results}
 \small
 \begin{tabular}{l c c p{4.8cm}}
@@ -16441,42 +16414,39 @@ confusion per run.}
 \end{figure}
 
 \noindent \textbf{The two columns are the result.} Under the literature's
-protocol the chapter net scores $98.6\%$, above every published
-from-scratch CNN and a point under the transfer-learned transformers; under
-the blocked split the same net, recipe and seeds score $77.9\%$. The audit
-says where the twenty points went. Nine in ten random-split test images
-have a training image within six gray levels, and on those the net is at
-$99.7\%$; on the $416$ that do not it is $85.3\%$; and a nearest-neighbor
-lookup on $16\times16$ thumbnails --- no parameters, the training image's
-label --- scores $95.7\%$ on the random split and $28.6\%$ on the blocked
-one. The published $96$--$99\%$ is mostly the frame, not the hand. The
-bracket says the same thing from below: the linear classifier loses $38$
-points between the columns and the MLP $53$, because a pixel-space model
-can only memorize the hand it saw, and the convolutions lose $21$, which is
-the part of the letter they read. The chapter net at its own $32\times32$
-input loses half a point on the random split and seven more on the blocked
-one --- the difference between hands sits at a resolution the difference
-between frames does not need. Per class, the blocked column runs from
-$16.5\%$ (\emph{fa}) to $100\%$ (\emph{sheen}): the last tenth of some
-classes' capture order is a hand no training frame covers, and the classes
-farthest from their nearest training image are among the worst, but not
-all the far ones fail --- \emph{al} and \emph{seen} sit as far from
-training as \emph{fa} does and score $94\%$ and $100\%$. The rest is which
-letter the new hand's shape lands near: \emph{fa} is called \emph{gaaf}
-$181$ times in three runs and \emph{gaaf} is called \emph{fa} once, and
-\emph{taa} and \emph{thaa}, which differ by one raised finger, confuse in
-both directions.
+protocol the chapter net scores $98.6\%$, above every published from-scratch
+CNN and a point under the transfer-learned transformers. Under the blocked
+split the same net, recipe and seeds score $77.9\%$. The audit says where the
+twenty points went. On the nine in ten random-split test images with a
+near-duplicate in training the net is at $99.7\%$, and on the $416$ without
+one it is at $85.3\%$. A nearest-neighbor lookup on $16\times16$ thumbnails,
+which has no parameters at all, scores $95.7\%$ on the random split and
+$28.6\%$ on the blocked one. The published $96$--$99\%$ mostly measures the
+frame.
 
-\medskip\noindent Two caveats belong beside the number. The blocked split
-is a proxy for a signer split, not one: the release records no signer, the
-validation tenth sits next to the training tenths in capture order and is
-$37.5\%$ leaked against the test tenth's $6.4\%$ (every blocked run shows
-validation near $92\%$ and test near $78\%$, and the epoch is chosen on the
-leakier of the two), and the $6\%$ of test hands that return from earlier
-in the numbering is a floor the protocol cannot remove. And what this
-classifier is not: it reads one static handshape per frame ---
-fingerspelling, no motion, no grammar, no continuous signing --- and the
-honest number for even that task on new hands is the right-hand column.
+\textbf{The bracket says the same thing from below.} The linear classifier
+loses $38$ points between the columns and the MLP $53$, because a pixel-space
+model can only memorize the hand it saw. The convolutions lose $21$, and what
+they keep is the part of the letter they read. At $32\times32$ the net loses
+half a point on the random split and seven more on the blocked one: telling
+hands apart takes resolution that telling frames apart does not.
+
+\textbf{Per class,} the blocked column runs from $16.5\%$ (\emph{fa}) to
+$100\%$ (\emph{sheen}), and the errors are which letter the new hand's shape
+lands near. \emph{Fa} is called \emph{gaaf} $181$ times in three runs and
+\emph{gaaf} is called \emph{fa} once. \emph{Taa} and \emph{thaa}, which
+differ by one raised finger, confuse in both directions.
+
+\medskip\noindent The blocked split is a proxy for a signer split. The
+release records no signer, and the validation tenth, which sits next to the
+training tenths in capture order, is $37.5\%$ leaked against the test tenth's
+$6.4\%$. Every blocked run shows validation near $92\%$ and test near $78\%$,
+and the epoch is chosen on the leakier of the two.
+
+\medskip\noindent What this classifier is not: a sign-language reader. It
+reads one static handshape per frame, which is fingerspelling with no motion,
+no grammar and no continuous signing. Even for that task, the number on new
+hands is the right-hand column.
 
 \section{Agriculture --- demo: lab leaves to field leaves on PlantVillage and PlantDoc}
 \label{sec:bestiary_agriculture}
@@ -17622,6 +17592,12 @@ The probability-flow row lags for the same reason, more mildly. So the choice
 that matters here is not stochastic versus deterministic; it is how the linear
 part gets integrated, and DDIM does it exactly at either $\eta$.
 
+\medskip\noindent What this is not: an image generator. It draws
+unconditioned $28\times28$ digits, and the instrument that grades them is a
+ten-way CNN, which can say that a sample reads as some digit and cannot say
+that it is a good picture. The sampler ranking is this schedule's, on this
+network.
+
 The shape carries all the way up: the DDPM catalog entry below
 is the same UNet at CIFAR scale, and Stable Diffusion is the same UNet on VAE latents with text
 cross-attention inserted. Encoder-decoder-with-skips plus a sampling loop is
@@ -18027,49 +18003,44 @@ def cycleganGenerator : NetSpec where
 \section{Physics --- demo: Boltzmann generator on M\"uller--Brown}
 \label{sec:bestiary_boltzmann}
 
-Networks whose target is a physical law rather than a labeled set: a
-Boltzmann density in the demo, a PDE residual, a solution operator and the
-atmosphere six hours ahead in the catalog entries. The architectural side is
-small --- an MLP, or a ViT with a Fourier mixer where its attention would be
---- and the novelty lives in what the model is asked to produce and in what
-is done with it afterwards.
+Networks whose target is a physical law and no labeled set: a Boltzmann
+density in the demo, and in the catalog entries a PDE residual, a solution
+operator and the atmosphere six hours ahead. The architectures are small, an
+MLP or a ViT with a Fourier mixer where its attention would be. The novelty
+is in what the model is asked to produce and in what is done with it
+afterwards.
 
-\proseparagraph{A Boltzmann generator.} The target is not a dataset. It is a
-density, $\exp(-U/kT)$ on the three-well surface M\"uller and Brown proposed
-in 1979 as the test case for reaction paths, and the training set is whatever
-overdamped Langevin manages to produce at $kT = 20$ in a fixed budget: eight
-chains of $10^5$ steps, the Euler--Maruyama integrator the diffusion demo's
-table (\S\ref{sec:bestiary_diffusion}) retired as a sampler, doing its actual
-job. The network is an MLP, the one the 2-D diffusion trainer
-(\texttt{demos/MainDiffusion2d.lean}, the MNIST demo's loss on point clouds
-in the plane) fits: $18{,}178$ parameters, two hidden layers of 128, the image
-path's sincos time encoding at $H = W = 1$. The loss is that trainer's rank-2
-squared-error block,
-and the \texttt{flow} flag changes one thing in the trainer, the interpolant:
-$x_t = (1-t)\,x_0 + t\,\varepsilon$ with target $\varepsilon - x_0$ (Lipman et
-al.\ 2022, \href{https://arxiv.org/abs/2210.02747}{arXiv:2210.02747}) in place
-of the cosine-schedule $x_t$ with target $\varepsilon$. The sampler is Euler on
+\proseparagraph{A Boltzmann generator.} The target is a density,
+$\exp(-U/kT)$ on the three-well surface M\"uller and Brown proposed in 1979
+as the test case for reaction paths. The question is whether a network
+trained on a biased sample of that density can report the exact one. The
+training set is what overdamped Langevin produces at $kT = 20$ in a fixed
+budget, eight chains of $10^5$ steps, and it over-weights well A. The network
+is the MLP of the 2-D diffusion trainer
+(\texttt{demos/MainDiffusion2d.lean}), $18{,}178$ parameters in two hidden
+layers of 128. The \texttt{flow} flag changes one thing in that trainer, the
+interpolant: $x_t = (1-t)\,x_0 + t\,\varepsilon$ with target
+$\varepsilon - x_0$ (Lipman et al.\ 2022,
+\href{https://arxiv.org/abs/2210.02747}{arXiv:2210.02747}) in place of the
+cosine-schedule $x_t$ with target $\varepsilon$. The sampler is Euler on
 $\mathrm{d}x/\mathrm{d}t = v_\theta(x, t)$ from $t = 1$ to $0$. Three things
-change relative to the MNIST demo:
+make it a physics demo:
 
 \begin{itemize}
   \item \textbf{The ground truth is a formula.} $U$ has a closed form, so the
     well populations, the mean energy, the free-energy difference between
     wells and the exact likelihood are all numbers by quadrature on a
-    $360 \times 360$ grid. Every column of Tables~\ref{tab:boltzmann_kt20}
-    and \ref{tab:boltzmann_reweight} is exact for the quadrature row.
+    $360 \times 360$ grid.
   \item \textbf{A sample set is a free-energy estimate.} $\Delta F_{AB} =
-    -kT \ln (p_A / p_B)$ is read off the populations, and populations are
-    assigned by gradient descent to a minimum rather than by nearest minimum,
-    because the wells are elongated and Voronoi cells put part of A's basin
-    in C.
-  \item \textbf{Temperature is a knob the trained model can be moved along
-    without retraining.} Every sample carries its own log-density: the
-    Jacobian of each Euler step is two central differences in 2-D, and
-    $\log|\det(I + h\,\partial v/\partial x)|$ integrated beside the state is
-    the continuity equation for the map actually run. With it, the
-    importance weight $\exp(-U/kT') / p_\theta(x)$ is a number, and that is
-    the Boltzmann generator of No\'e et al.\ 2019
+    -kT \ln (p_A / p_B)$ is read off the populations, with each sample
+    assigned to the minimum that gradient descent takes it to. The wells are
+    elongated, and assigning by nearest minimum puts part of A's basin in C.
+  \item \textbf{Every sample carries its own log-density.} The Jacobian of
+    each Euler step is two central differences in 2-D, and
+    $\log|\det(I + h\,\partial v/\partial x)|$ summed along the path is the
+    density of the map actually run. With it the importance weight
+    $\exp(-U/kT') / p_\theta(x)$ is a number, at the training temperature or
+    a lower one. That is the Boltzmann generator of No\'e et al.\ 2019
     (\href{https://doi.org/10.1126/science.aaw1147}{Science 365}), on an
     18k-parameter MLP.
 \end{itemize}
@@ -18091,10 +18062,11 @@ populations to within $0.001$.}
 \label{fig:boltzmann_mb}
 \end{figure}
 
-\proseparagraph{Scored by quadrature, not by eye.} $kT = 20$, $2{,}048$ samples per
-row, the energy distance against an independent exact draw as a multiple of
-the exact-against-exact floor. The DDPM row is the same network, loss and
-budget with the cosine-schedule interpolant and DDIM in place of Euler:
+\proseparagraph{Scored by quadrature.} Table~\ref{tab:boltzmann_kt20} is
+$kT = 20$ at $2{,}048$ samples a row. Its last column is the energy distance
+to an independent exact draw, as a multiple of the exact-against-exact floor.
+The DDPM row is the same network, loss and budget with the cosine-schedule
+interpolant and DDIM in place of Euler.
 
 \begin{table}[H]
 \centering
@@ -18117,24 +18089,20 @@ $N(0, I)$ prior, no flow                  & $0.419 \,/\, 0.195 \,/\, 0.385$ &   
 \end{tabular}
 \end{table}
 
-\noindent The model is faithful to its training set, not to the physics: it
+\noindent The model is faithful to its training set and inherits its bias: it
 over-weights A because the Langevin chains do. Reweighting its own samples by
-$p_{20} / p_\theta$ recovers the quadrature populations to within $0.001$ and
-$\Delta F$ to $0.1$ on this checkpoint, to within $0.008$ and $1.5$ over four
-training seeds (Table~\ref{tab:boltzmann_seeds}), and $\langle U \rangle$ to
-about a unit. At NFE 2 well B empties while the populations still look
-plausible, which is why $\langle U \rangle$ and $\Delta F$ are columns.
+$p_{20} / p_\theta$ recovers the quadrature populations to within $0.001$,
+$\Delta F$ to $0.1$ and $\langle U \rangle$ to about a unit. At NFE 2 well B
+empties while the populations still look plausible, which is why
+$\langle U \rangle$ and $\Delta F$ are columns.
 
 \proseparagraph{Four seeds of the flow.} Table~\ref{tab:boltzmann_kt20} is one
-checkpoint. Three more trainings of the flow arm under seeds 1--3 --- the seed
-moves the He initialization and the sampling noise; 33 seconds each on one
-card --- sampled at NFE 50 and scored the same way are
-Table~\ref{tab:boltzmann_seeds} (\texttt{runs/2026-10-27-boltzmann-seeds/};
-seed 0 is \texttt{runs/2026-09-11-boltzmann-generator/}).
+checkpoint. Table~\ref{tab:boltzmann_seeds} is that checkpoint and three more
+trainings of the flow arm, 33 seconds each on one card.
 
 \begin{table}[H]
 \centering
-\caption{The flow arm at $kT = 20$ over four training seeds, $2{,}048$ samples at NFE 50: the raw samples, and the same samples reweighted by $p_{20} / p_\theta$, against the quadrature row of Table~\ref{tab:boltzmann_kt20} ($0.806 \,/\, 0.129 \,/\, 0.065$, $-113.6$, $-36.6$).}
+\caption{The flow arm at $kT = 20$ over four training seeds, $2{,}048$ samples at NFE 50: the raw samples, and the same samples reweighted by $p_{20} / p_\theta$, against the quadrature row of Table~\ref{tab:boltzmann_kt20} ($0.806 \,/\, 0.129 \,/\, 0.065$, $-113.6$, $-36.6$). The seed moves the He initialization and the sampling noise (\texttt{runs/2026-10-27-boltzmann-seeds/}; seed 0 is \texttt{runs/2026-09-11-boltzmann-generator/}).}
 \label{tab:boltzmann_seeds}
 \small
 \begin{tabular}{@{}c c r r r c r r@{}}
@@ -18149,21 +18117,18 @@ seed & raw $p_A \,/\, p_B \,/\, p_C$ & $\langle U \rangle$ & $\Delta F_{AB}$ & e
 \end{tabular}
 \end{table}
 
-\noindent The energy distance is $3.2$--$6.3\times$ the floor on four seeds.
-The raw cloud puts $0.832$--$0.843$ on well A on every seed, between the
-training set's $0.844$ and the quadrature's $0.806$: a raw basin error of
-$0.03$--$0.04$ is the training set's bias reproduced, not a property of the
-seed, and the $0.029$ of seed 0 is the low end of it. The number that is a
-property of the recipe is the reweighted row: every basin within $0.008$ of
-quadrature on all four seeds, $\Delta F_{AB}$ within $1.5$, an effective
-sample size of $1{,}740$--$1{,}895$ of $2{,}048$. The sampler-quality claim
-rests on that row. Tables~\ref{tab:boltzmann_reweight} and
-\ref{tab:boltzmann_reflow} read the seed-0 checkpoint only.
+\noindent The raw cloud puts $0.832$--$0.843$ on well A on every seed, between
+the training set's $0.844$ and the quadrature's $0.806$: the training set's
+bias, reproduced. The reweighted columns are the result. Every basin is
+within $0.008$ of quadrature on all four seeds and $\Delta F_{AB}$ within
+$1.5$, at an effective sample size of $1{,}740$--$1{,}895$ of $2{,}048$.
+Tables~\ref{tab:boltzmann_reweight} and \ref{tab:boltzmann_reflow} read the
+seed-0 checkpoint only.
 
-\proseparagraph{MCMC stalls below the barrier; the generator does not.} The
-$kT = 20$ samples reweighted to $kT' = 12$ and $8$, naively and with the
-model's density in the weight, against a Langevin chain of $2 \times 10^5$
-steps started in well B:
+\proseparagraph{The chain stalls below the barrier and the generator does
+not.} Table~\ref{tab:boltzmann_reweight} is the $kT = 20$ samples reweighted
+to $kT' = 12$ and $8$, naively and with the model's density in the weight,
+against a Langevin chain of $2 \times 10^5$ steps started in well B.
 
 \begin{table}[H]
 \centering
@@ -18186,10 +18151,11 @@ $kT'$ & source & $p_A \,/\, p_B \,/\, p_C$ & $\Delta F_{AB}$ & ESS \\
 \end{tabular}
 \end{table}
 
-\noindent The barrier out of B is 36 units; at $kT = 8$ the chain never
-crossed. The naive weights carry the model's bias in full; with $1/p_\theta$
-in them, samples drawn once at $kT = 20$ come within 0.3 of quadrature at both
-temperatures. That is the paper's claim, and it is the density that makes it.
+\noindent The barrier out of B is 36 units, and at $kT = 8$ the chain never
+crossed it. The naive weights carry the model's bias in full. With
+$1/p_\theta$ in them, samples drawn once at $kT = 20$ come within 0.3 of
+quadrature's $\Delta F_{AB}$ at both temperatures. That is the paper's claim,
+and the density is what makes it.
 
 \proseparagraph{Straightening the paths.} Rectified flow (Liu, Gong \& Liu 2022,
 \href{https://arxiv.org/abs/2209.03003}{arXiv:2209.03003}) retrains on the
@@ -18221,6 +18187,14 @@ $4.9\times$ the floor, where the independent coupling is at $8.6\times$ after
 ten steps and under $4.9\times$ only at fifty. The cost is a ceiling: both
 straightened arms plateau above it at NFE 50, because their training set is
 the first model's output, biases included.
+
+\medskip\noindent What this is not: molecular simulation. The surface is
+two-dimensional with a closed form, so quadrature grades every number and
+the Jacobian is two finite differences. On a protein neither holds. The
+reference is a long simulation, the log-density takes a network built to be
+invertible or a trace estimate, and the effective sample size, which stays
+near $1{,}900$ of $2{,}048$ here, is the first thing to fall as the dimension
+grows.
 
 \subsection*{Boltzmann generator (\texttt{Bestiary/BoltzmannGenerator.lean})}
 \emph{Zero} new primitives for the flow-matching version, \emph{one} if the
@@ -18358,12 +18332,12 @@ def fourCastNet : NetSpec where
 \label{sec:bestiary_signal}
 
 Networks whose input is a waveform: strain from an interferometer, raw
-audio, the spectrogram of a voice. The demo scores a Chapter~\ref{chap:bn} CNN against
-the detector its field already has, whose performance in Gaussian noise is a
-closed form; the two entries after it are the audio architectures that read
-the same kind of input, one sample at a time and one spectrogram frame at a
-time. Figure~\ref{fig:gw_detect} is the demo on one page: a window, the two
-spectrograms, and the detection curves in both noises.
+audio, the spectrogram of a voice. The demo scores a Chapter~\ref{chap:bn}
+CNN against the detector its field already has, the matched filter, whose
+performance in Gaussian noise is a closed form. The question is how far a
+two-minute CNN sits from that ceiling, and what happens to both when the
+noise is real. Figure~\ref{fig:gw_detect} is the demo on one page: a window,
+the two spectrograms, and the detection curves in both noises.
 
 \begin{figure}[H]
 \centering
@@ -18381,67 +18355,57 @@ each panel is the arm trained on the noise that panel tests it in.}
 \label{fig:gw_detect}
 \end{figure}
 
-\proseparagraph{A CNN against the matched filter on LIGO strain.} This demo
-has a theorem for a ceiling the way Leduc poker has its best response
-(\S\ref{sec:game_leduc}) and the Boltzmann generator has quadrature. Advanced LIGO's strain
-is a time series at audio rates, and a binary-black-hole merger is a chirp
-that sweeps from 25 to a few hundred Hz in under a second. The Gravitational
-Wave Open Science Center publishes every observing run under CC BY 4.0
-(Abbott et al.\ 2023, \href{https://doi.org/10.3847/1538-4365/acdc9f}{ApJS 267,
-29}); real events are too few to train on, so the training set is real
-detector noise with simulated chirps injected at chosen signal-to-noise
-ratios. The detector to beat is the matched filter: in stationary Gaussian
-noise, for a signal whose waveform and arrival time are known, it is the
-Neyman--Pearson optimum, and its detection probability at threshold
-$\rho^\ast$ for a signal of optimal SNR $\rho$ is a Marcum $Q$-function.
-Three things change relative to the CIFAR demo:
+\proseparagraph{The detector to beat.} Advanced LIGO's strain is a time
+series at audio rates, and a binary-black-hole merger is a chirp that sweeps
+from 25 to a few hundred Hz in under a second. The matched filter slides the
+expected waveform along the strain and reports the best overlap in units of
+the noise, a signal-to-noise ratio (SNR). In stationary Gaussian noise, for a
+signal whose waveform and arrival time are known, it is the Neyman--Pearson
+optimum, and its detection probability at threshold $\rho^\ast$ for a signal
+of optimal SNR $\rho$ is a Marcum $Q$-function. This demo has a theorem for a
+ceiling, the way Leduc poker has its best response (\S\ref{sec:game_leduc})
+and the Boltzmann generator has quadrature.
 
-\begin{itemize}
-  \item \textbf{The data is real detector noise with the signal we chose.}
-    Twenty-six file pairs of O3a strain from H1 and L1, science-mode and free
-    of hardware injections, cut into $2$\,s windows and whitened by each
-    file's own median-Welch PSD over 20--500\,Hz. Half the training windows and a third of the validation windows carry an
-    IMRPhenomD chirp from PyCBC, masses uniform in $[10, 50]\,M_\odot$, random
-    sky position, projected onto both detectors and scaled to a network SNR
-    uniform in $[4, 20]$. Two noise sets share every window and every
-    injection: Gaussian noise colored by the same PSD, the theorem's regime,
-    and the strain itself. $40{,}760$ training and $12{,}228$ validation
-    windows.
-  \item \textbf{The instrument is a closed form, and the filter is checked
-    against it first.} PyCBC's matched filter with the injected template, at
-    the known arrival time, reproduces $Q_1(\rho, \rho^\ast)$ on the Gaussian
-    set to within binomial error in every SNR bin --- the SNR at half
-    detection is $4.68$ against the theorem's $4.75$ for H1 at a false-alarm
-    rate of $10^{-2}$ per window --- so the injection's SNR and the whitening
-    agree on one PSD. The search statistic then adds the two detectors'
-    filter outputs in quadrature and maximizes over the window and the
-    $\pm 10$\,ms inter-detector delay, as a search must, and the CNN, which
-    sees no time, is compared to that.
-  \item \textbf{The network is Chapter~\ref{chap:bn}'s CIFAR net.}
-    \texttt{CIFAR-CNN8-wide-BN}: eight convolutions in four conv-conv-pool
-    stages at 16, 16, 32, 32 channels into the $2 \times 512$ head. The two
-    edits are the two-channel stem and the two-way output, $0.83$\,M
-    parameters at this input. The input is a
-    $2 \times 64 \times 128$ image, each channel a constant-Q spectrogram
-    of one detector's whitened window (64 log-spaced bands over
-    20--500\,Hz, 128 frames); the ordinary train step with integer labels,
-    Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64,
-    six epochs, under two minutes on one card. Nothing in the codegen
-    moved. The BatchNorm is the batch-statistics form of that chapter's
-    main rows, scored here on each test batch's own statistics rather
-    than running ones; the sign-language, leaf and band demos inherit the
-    same net.
-\end{itemize}
+\proseparagraph{The data.} The Gravitational Wave Open Science Center
+publishes every observing run under CC BY 4.0 (Abbott et al.\ 2023,
+\href{https://doi.org/10.3847/1538-4365/acdc9f}{ApJS 267, 29}). Real events
+are too few to train on, so the training set is real detector noise with
+simulated chirps injected at chosen SNRs: twenty-six file pairs of O3a
+strain from the H1 and L1 detectors, cut into $2$\,s windows and whitened,
+$40{,}760$ training and $12{,}228$ validation windows. Half the training
+windows and a third of the validation windows carry an IMRPhenomD chirp from
+PyCBC, masses uniform in $[10, 50]\,M_\odot$, scaled to a network SNR uniform
+in $[4, 20]$. Two noise sets share every window and every injection:
+Gaussian noise colored by the same spectrum, which is the theorem's regime,
+and the strain itself.
 
-\proseparagraph{Scored against the theorem.} Detection probability by injected
-network SNR on the Gaussian set, $12{,}228$ validation windows, every
-threshold set on the $8{,}177$ noise-only windows so that one in a hundred
-exceeds it. The last column of Table~\ref{tab:gw_gaussian} is the SNR at which
-each row crosses one half.
+\proseparagraph{The filter is checked first.} PyCBC's matched filter with
+the injected template, at the known arrival time, reproduces
+$Q_1(\rho, \rho^\ast)$ on the Gaussian set to within binomial error in every
+SNR bin: the SNR at half detection is $4.68$ against the theorem's $4.75$ for
+H1 at a false-alarm rate of $10^{-2}$ per window. So the injection's SNR and
+the whitening agree. The search statistic then adds the two detectors' filter
+outputs in quadrature and maximizes over the window and the $\pm 10$\,ms
+inter-detector delay, as a search must, and the CNN, which is told no arrival
+time, is compared to that.
+
+\proseparagraph{The network} is Chapter~\ref{chap:bn}'s
+\texttt{CIFAR-CNN8-wide-BN} with a two-channel stem and a two-way output,
+$0.83$\,M parameters. Its input is a $2 \times 64 \times 128$ image, one
+constant-Q spectrogram of each detector's whitened window (64 log-spaced
+bands over 20--500\,Hz, 128 frames). Six epochs are under two minutes on one
+card, and nothing in the codegen moved. BatchNorm is scored on each test
+batch's own statistics, the form of that chapter's main rows, and the
+sign-language, leaf and band demos inherit the same net.
+
+\proseparagraph{Scored against the theorem.} Table~\ref{tab:gw_gaussian} is
+detection probability by injected network SNR on the Gaussian set, with every
+threshold set so that one noise-only window in a hundred exceeds it. The last
+column is the SNR at which each row crosses one half.
 
 \begin{table}[H]
 \centering
-\caption{Detection probability by injected SNR in Gaussian noise, at a false-alarm rate of $10^{-2}$ (\texttt{runs/2026-09-11-gw-cifar8w-gauss/}).}
+\caption{Detection probability by injected SNR in Gaussian noise, at a false-alarm rate of $10^{-2}$, on the $12{,}228$ validation windows with thresholds set on the $8{,}177$ noise-only ones (\texttt{runs/2026-09-11-gw-cifar8w-gauss/}). The strain is science-mode and free of hardware injections, whitened by each file's own median-Welch PSD over 20--500\,Hz; injections take a random sky position and are projected onto both detectors. The CNN is trained with Adam at $10^{-3}$, one warm-up epoch and cosine decay, batch 64.}
 \label{tab:gw_gaussian}
 \small
 \begin{tabular}{@{}l r r r r r r r r r@{}}
@@ -18456,21 +18420,22 @@ random                                        & $0.01$ & $0.01$ & $0.01$ & $0.01
 \end{tabular}
 \end{table}
 
-\noindent The known-time filter sits on its closed form; the search, which
+\noindent The known-time filter sits on its closed form. The search, which
 maximizes over time, reaches half detection at $5.27$ against $Q_2$'s $5.63$
-at the same threshold, because the maximum over the samples around an
-arrival hands a signal a little SNR that the noise-only threshold never
-sees. The CNN is behind the search by $1.5$ units of SNR. Gabbard et al.\ 2018
+at the same threshold, because the maximum over the samples around an arrival
+hands a signal a little SNR that the noise-only threshold never sees. The CNN
+is behind the search by $1.5$ units of SNR. Gabbard et al.\ 2018
 (\href{https://doi.org/10.1103/PhysRevLett.120.141103}{PRL 120}) closed that
 gap with a one-dimensional network on the whitened strain and ten times the
-training set. One reading is that a log-power spectrogram discards the phase
-the filter integrates; the demo did not test it, and this is the demo's
-number, not the architecture's ceiling.
+training set, and that is the lever: a log-power spectrogram may discard the
+phase the filter integrates. The demo did not test it, so $1.5$ is this
+demo's number and no ceiling on the architecture.
 
-\proseparagraph{Real noise hurts the filter, not the network.} LIGO noise is
-neither stationary nor Gaussian, and the production search adds a $\chi^2$
-veto for exactly that reason. Table~\ref{tab:gw_real} is the same rows on the
-strain itself, with each model trained on one noise set and scored on both.
+\proseparagraph{Real noise hurts the filter and spares the network.} LIGO
+noise is neither stationary nor Gaussian, and the production search adds a
+$\chi^2$ veto for that reason. Table~\ref{tab:gw_real} is the same rows on
+the strain itself, with each model trained on one noise set and scored on
+both.
 
 \begin{table}[H]
 \centering
@@ -18491,14 +18456,17 @@ matched filter, quadrature sum & $\mathbf{5.27}$ & $10.32$ & --- \\
 \end{table}
 
 \noindent The network trained on real strain is the better one on both noise
-sets, by $0.15$ in Gaussian noise and $0.26$ in real; training in the
-theorem's regime gains nothing even there. The filter loses five units of
-SNR to glitches at $10^{-2}$, and at
-$10^{-3}$ its threshold is $417$: eight validation windows hold a glitch
-that loud, and without a veto the filter has no row. The network trained on
-Gaussian noise needs an SNR of $19$ there; the one trained on real strain
-still reaches half detection at $7.5$. Training on the real detector is what
-teaches the glitch tail.
+sets, by $0.15$ in Gaussian noise and $0.26$ in real. The filter loses five
+units of SNR to glitches at $10^{-2}$. At $10^{-3}$ its threshold is $417$,
+because eight validation windows hold a glitch that loud, and without a veto
+the filter has no row. The network trained on Gaussian noise needs an SNR of
+$19$ there, and the one trained on real strain still reaches half detection
+at $7.5$. Training on the real detector is what teaches the glitch tail.
+
+\medskip\noindent What this is not: a search pipeline. The filter here has no
+veto and is handed the injected template, where a search runs a bank of
+them. The CNN answers one question about a $2$\,s window at one false alarm
+in a hundred or a thousand, and a pipeline is held to false alarms per year.
 
 \subsection*{WaveNet (\texttt{Bestiary/WaveNet.lean})}
 \emph{One} new primitive (Definition~\ref{layer:waveNetBlock}). Dilated causal
@@ -19155,51 +19123,54 @@ ordering was the 64-wide MLP's capacity, not the representation. The train step 
 
 \texttt{demos/MainDeepCfrLeduc.lean} is Brown, Lerer, Gross and Sandholm's loop (Deep CFR,
 ICML 2019, \href{https://arxiv.org/abs/1811.00164}{arXiv:1811.00164}) on Leduc hold'em
-written in Lean (\texttt{LeanMlir/Leduc.lean}): a two-player, fixed-limit, one-card poker
---- $r$ ranks in two suits, three for the classic jack--queen--king deck, an ante of one,
-two betting rounds with bets of two then four and at most two raises each, one public
-card between the rounds, a pair beats a higher rank --- and the chapter's one game
-with hidden information. The answer is therefore not a move but a mixed
-strategy: an equilibrium raises a jack it knows is losing about a fifth of the time,
-because a player who never bluffs can be read: every bet then means a strong hand.
-Each iteration and player, one batched
-forward of the player's advantage network over \emph{every} information set gives the
-current strategy as a table (regret matching on the positive advantages), a thousand
-external-sampling traversals in C write instantaneous regrets to the player's advantage
-reservoir and the opponent's strategy to a strategy reservoir (reservoir sampling, a
-million rows each), and the advantage network is re-initialized and retrained from
-scratch on its reservoir, a thousand Adam steps at batch 512. After a hundred iterations
-the strategy network is trained on the strategy reservoir; Single Deep CFR (Steinberger
-2019, \href{https://arxiv.org/abs/1901.07621}{arXiv:1901.07621}) costs nothing extra, the
-exact average of the hundred stored profiles weighted by iteration and by each profile's
-own reach, no strategy network. The network is the Leduc papers' three dense layers of
-64 (\texttt{Bestiary/DeepCFR.lean}, 10.5k parameters, no BatchNorm), and the loss --- a
-weighted squared error on the legal slots --- goes through the squared-error block as a
-host-built target, the same technique the tic-tac-toe sections use. Two things change
-relative to Pong and the two
-tic-tac-toe sections that follow:
+written in Lean (\texttt{LeanMlir/Leduc.lean}), the chapter's one game with hidden
+information. Leduc is a two-player, fixed-limit poker with one private card each: $r$
+ranks in two suits (three for the classic jack--queen--king deck), an ante of one, two
+betting rounds with bets of two then four and at most two raises each, one public card
+between the rounds, and a pair beats a higher rank. Because the cards are hidden, the
+answer is a mixed strategy and no single move. An equilibrium raises a jack it knows is
+losing about a fifth of the time, because a player who never bluffs can be read: every
+bet then means a strong hand.
 
-\begin{itemize}
-  \item \textbf{The instrument is the best response, and it is exact.} Suits never matter
-    in Leduc (no hand is made from matching suits: there are no flushes), so the game
-    is solved at rank level --- $6r + 30r^2$
-    information sets, 288 at $r = 3$ against OpenSpiel's 936 suit-aware ones, which fold
-    onto them one-to-one --- by vector-form CFR over the public tree with an $r \times r$
-    matrix of private ranks at each node: the best response, exploitability (the best
-    responder's winnings per hand averaged over the two seats, OpenSpiel's convention),
-    head-to-head and CFR+ to a thousand iterations are 25 milliseconds at $r = 3$ and
-    under a second at $r = 13$. Zero is Nash; CFR+ reaches $2.4 \times 10^{-4}$. Before
-    anything trains, the Lean game is checked against the C tree on every terminal
-    history and both against OpenSpiel's \texttt{leduc\_poker}: every payoff on
-    OpenSpiel's own histories, and our tables scored by OpenSpiel's exploitability to
-    $10^{-6}$ (\texttt{scripts/demos/leduc\_gate0\_openspiel.py}).
-  \item \textbf{The sampled table is the bracket, at the same budget.} A table is enough
-    at every $r$ here, so the comparison is the Deep CFR paper's own axis: exploitability
-    against nodes touched, external-sampling MCCFR on a table against the network, at
-    $r = 3$, 6 and 13. The trainer's own traversal with a lookup table in the network's
-    place must reproduce that curve before the network is trusted
-    (\texttt{mode=tabular}), and does.
-\end{itemize}
+\proseparagraph{The vocabulary.} An \emph{information set} is everything one player can
+see at a decision: their own card, the public card and the betting so far. A strategy
+is a probability for each action at each information set. The \emph{regret} of an action
+is how much more it would have won there than the strategy that was played.
+Counterfactual regret minimization (CFR) plays the game against itself, adds up those
+regrets, and at each information set plays every action in proportion to its positive
+total (\emph{regret matching}); the average of the strategies it passes through
+converges to an equilibrium. \emph{Exploitability} is what the best response, a perfect
+opponent who knows the strategy, wins from it per hand. Zero is Nash.
+
+\proseparagraph{The loop.} Deep CFR puts a network where the regret table was. Each
+iteration, for each player, one batched forward of that player's advantage network over
+\emph{every} information set gives the current strategy by regret matching. A thousand
+sampled traversals of the game (external sampling, in C) write regrets to the player's
+advantage reservoir and the opponent's strategy to a strategy reservoir, a million rows
+each. The advantage network is then re-initialized and retrained on its reservoir, a
+thousand Adam steps at batch 512. After a hundred iterations the strategy network is
+trained on the strategy reservoir. Single Deep CFR (Steinberger 2019,
+\href{https://arxiv.org/abs/1901.07621}{arXiv:1901.07621}) costs nothing extra: it is the
+exact average of the hundred stored profiles, with no strategy network. The network is
+the Leduc papers' three dense layers of 64 (\texttt{Bestiary/DeepCFR.lean}, 10.5k
+parameters, no BatchNorm), and its loss, a weighted squared error on the legal slots,
+goes through the squared-error block as a host-built target.
+
+\proseparagraph{The instrument is the best response, and it is exact.} Suits never
+matter in Leduc (there are no flushes), so the game is solved at rank level, $6r + 30r^2$
+information sets and 288 of them at $r = 3$. The best response, exploitability,
+head-to-head play and CFR+ to a thousand iterations take 25 milliseconds at $r = 3$ and
+under a second at $r = 13$, and CFR+ reaches $2.4 \times 10^{-4}$. Before anything
+trains, the Lean game is checked against the C tree on every terminal history, and both
+against OpenSpiel's \texttt{leduc\_poker}
+(\texttt{scripts/demos/leduc\_gate0\_openspiel.py}).
+
+\proseparagraph{The bracket is a sampled table at the same budget.} A table is enough at
+every $r$ here, so the comparison is the Deep CFR paper's own axis: exploitability
+against nodes touched, for sampled CFR on a table (external-sampling MCCFR) and for the
+network, at $r = 3$, 6 and 13. The trainer's own traversal with a lookup table in the
+network's place (\texttt{mode=tabular}) reproduces the table's curve, which is the check
+that the traversal is right before the network is trusted.
 
 Figure~\ref{fig:deep_cfr_leduc} is one hand's betting tree under the trained
 profile, the exploitability curves, and the bluff.
@@ -19219,18 +19190,16 @@ cells ringed.}
 \label{fig:deep_cfr_leduc}
 \end{figure}
 
-\proseparagraph{Every arm against the best response.} Exploitability in chips per hand (ante
-one; a thousandth of a chip is a milli-ante per game, the Leduc papers' unit) and
-head-to-head against CFR+ averaged over the two seats. The scripted honest arm raises a
-pair or a king and folds a jack to a bet; the price-of-honesty arm is CFR+ with its
-worst-hand raises moved to call; the two Deep CFR rows and the sampled table are at the
-same 4.1M nodes, three seeds each, 5.7 minutes a seed on one card
-(\texttt{runs/2026-10-08-deep-cfr-leduc/}). The last column of Table~\ref{tab:leduc_arms} is
-the bluff, the raise frequency opening round 2 with a jack under a queen.
+\proseparagraph{Every arm against the best response.} Table~\ref{tab:leduc_arms} is
+exploitability in chips per hand, head-to-head play against CFR+, and the bluff: how
+often the arm raises to open round 2 with a jack under a queen. The scripted honest arm
+raises a pair or a king and folds a jack to a bet. The price-of-honesty arm is CFR+ with
+its worst-hand raises moved to call. The two Deep CFR rows and the sampled table are at
+the same 4.1M nodes, 5.7 minutes a seed on one card.
 
 \begin{table}[H]
 \centering
-\caption{The Leduc poker arms at $r = 3$: exploitability, head-to-head against CFR+, and bluff frequency, per seed where three are given.}
+\caption{The Leduc poker arms at $r = 3$: exploitability, head-to-head against CFR+, and bluff frequency, per seed where three are given (\texttt{runs/2026-10-08-deep-cfr-leduc/}). Exploitability is the best responder's winnings per hand averaged over the two seats, OpenSpiel's convention, in chips at an ante of one (a thousandth of a chip is a milli-ante per game, the Leduc papers' unit); the same tables scored by OpenSpiel's own exploitability agree to $10^{-6}$. The 288 rank-level information sets are OpenSpiel's 936 suit-aware ones folded one-to-one.}
 \label{tab:leduc_arms}
 \small
 \begin{tabular}{@{}l l l l@{}}
@@ -19248,34 +19217,33 @@ CFR+, a thousand iterations & 0.00024 & 0 & 19.5\% \\
 \end{tabular}
 \end{table}
 
-\noindent Deep CFR's exploitability falls from 1.4 at
-iteration 5 to 0.11--0.15 at a hundred and ends under the honest arm and under the
-equilibrium with its bluffs removed; at a hundred iterations it is where the Single
-Deep CFR paper's Leduc curves are (150--200 milli-antes per game read from its Figure
-1a, at 1,500 traversals an iteration to our thousand). It does not beat a sampled table
-at the same budget on the classic deck: the table is three times less exploitable at
-4.1M nodes. The scale arm is where that turns. The same recipe at $r = 6$ (1,116 sets)
-and $r = 13$ (5,148): SD-CFR 0.112 / 0.123 / 0.113 against the table's 0.053 / 0.066 /
-0.058 at 3.6M nodes, then 0.099 / 0.120 / 0.106 against 0.113 / 0.107 / 0.102 at 3.4M ---
-the table is ahead by $3.1\times$, $2.0\times$, $1.0\times$, and at $r = 13$ the network is
-the better head-to-head ($-0.028$ against $-0.035$ a hand). The table visits all but a
-set or two at these budgets, so the mechanism is not what it never saw; its estimate of each set
-is noisier as the sets multiply at a fixed budget, and the network's error does not grow
-with them. The bluff column is the finding a reader can check on
-Figure~\ref{fig:deep_cfr_leduc}: the
-trained profile that is 0.13 exploitable raises the losing jack under a queen 0.0\% of
-the time, and the other two seeds 5.5\% and 6.3\%, where the equilibrium raises it
-19.5\% (18.6--19.5\% over two solvers and three initializations --- the frequency is
-pinned at $r = 3$, and is not at $r = 13$, where the same cell ranges over tens of
-points), and it bluffs elsewhere instead, a jack under a king 11--17\% across the three
-seeds. Honesty's price is exact: moving the equilibrium's worst-hand raises
-to call costs 0.186 of exploitability.
+\noindent Deep CFR's exploitability falls from 1.4 at iteration 5 to 0.11--0.15 at a
+hundred. That is under the honest arm, under the equilibrium with its bluffs removed,
+and where the Single Deep CFR paper's Leduc curves are (150--200 milli-antes per game
+read from its Figure 1a, at 1,500 traversals an iteration to our thousand). It does not
+beat a sampled table at the same budget on the classic deck: the table is three times
+less exploitable at 4.1M nodes.
 
-What this is not: poker at the paper's scale. Leduc is a two-player, fixed-limit,
-one-card game, solved at rank level. The scale of the Deep CFR paper is heads-up flop and limit hold'em, where no exact best
-response exists to score against and the paper's numbers are against abstractions and
-head-to-head; no-limit and multi-way poker (Pluribus) are another scale again, and
-exploitability is not computable there.
+\proseparagraph{The lever is the size of the game.} The same recipe at $r = 6$ (1,116
+sets) and $r = 13$ (5,148) puts the table ahead by $3.1\times$ at three ranks,
+$2.0\times$ at six and $1.0\times$ at thirteen (SD-CFR 0.112 / 0.123 / 0.113 against the
+table's 0.053 / 0.066 / 0.058 at 3.6M nodes, then 0.099 / 0.120 / 0.106 against 0.113 /
+0.107 / 0.102 at 3.4M), and at $r = 13$ the network is the better head-to-head ($-0.028$
+against $-0.035$ a hand). The table still visits all but a set or two at these budgets,
+so what it never saw is not the mechanism. Its estimate of each set gets noisier as the
+sets multiply at a fixed budget, and the network's error does not grow with them.
+
+\proseparagraph{The bluff} is the finding a reader can check on
+Figure~\ref{fig:deep_cfr_leduc}. The equilibrium raises the losing jack under a queen
+19.5\% of the time, and at $r = 3$ that frequency is pinned: 18.6--19.5\% over two
+solvers and three initializations. The three trained profiles raise it 0.0\%, 5.5\% and
+6.3\%, and bluff elsewhere, a jack under a king 11--17\% of the time. Honesty's price is
+exact: moving the equilibrium's worst-hand raises to call costs 0.186 of exploitability.
+
+What this is not: poker at the paper's scale. The Deep CFR paper plays heads-up flop and
+limit hold'em, where no exact best response exists to score against and the paper's
+numbers are against abstractions and head-to-head. No-limit and multi-way poker
+(Pluribus) are another scale again.
 
 \subsection*{Deep CFR (\texttt{Bestiary/DeepCFR.lean})}
 \emph{Zero} new primitives. Counterfactual regret minimization with the two tables
@@ -19514,65 +19482,53 @@ logits, with no dense layer. The tiny fixture is 17 planes, 3 blocks, a
 The \texttt{demos/MainMuZeroTtt.lean} trainer is Schrittwieser et al.'s MuZero
 (2020, \href{https://www.nature.com/articles/s41586-020-03051-4}{Nature}) on the
 same instrument. AlphaZero is handed the rules: its search calls \texttt{step}.
-MuZero is not. Three plain convolution stacks --- a representation $h$ from the two
-stone planes to a $32 \times n \times n$ latent, a dynamics $g$ from a latent and a
-one-hot move plane to the next latent, and AlphaZero's two-headed prediction $f$ ---
-plus a one-output reward network $r$ on the latent a move reaches, 137k parameters at
-$3 \times 3$ and 141k at $4 \times 4$, are trained end to end on $K = 5$ moves of
-stored games: the policy, value and reward targets at every unrolled step, the
-latent min--max normalized after every network as in the paper. The search is PUCT in
-the latent: a node is a path, one batched $g$ over every game's pending leaf per
-simulation, then one $f$ and one $r$; legal moves are masked at the root from the real
-rules and nowhere inside the tree. Win rate cannot tell this agent from AlphaZero ---
-both are unbeaten --- so the question the section asks is the one the solved game can
-answer exactly: \emph{did MuZero learn tic-tac-toe, or only its values?} The
-literature predicts the second (Grimm et al.\ 2020's value-equivalence principle,
+MuZero is not. It learns three plain convolution stacks, a representation $h$ from the
+two stone planes to a $32 \times n \times n$ latent, a dynamics $g$ from a latent and a
+one-hot move plane to the next latent, and AlphaZero's two-headed prediction $f$, plus
+a one-output reward network $r$ on the latent a move reaches: 137k parameters at
+$3 \times 3$ and 141k at $4 \times 4$. They are trained end to end on $K = 5$ moves of
+stored games, with policy, value and reward targets at every unrolled step. The search
+is PUCT in the latent, and legal moves are masked at the root from the real rules and
+nowhere inside the tree.
+
+Win rate cannot tell this agent from AlphaZero, because both are unbeaten. The question
+is the one the solved game can answer exactly: \emph{did MuZero learn tic-tac-toe, or
+only its values?} The literature predicts the second (Grimm et al.\ 2020's
+value-equivalence principle,
 \href{https://arxiv.org/abs/2011.03506}{arXiv:2011.03506}; He, Moerland, de Vries and
 Oliehoek 2023, \href{https://arxiv.org/abs/2306.00840}{arXiv:2306.00840}, find MuZero's
 model accurate on the policy it trained with and poor on others, measured against
-estimated returns). Here the
-answer is exact at every position, after every number of imagined moves, on lines
-the agent plays and lines it never would. Three things change relative to AlphaZero:
+estimated returns). Here the answer is exact at every position, after every number of
+imagined moves, on lines the agent plays and lines it never would.
 
-\begin{itemize}
-  \item \textbf{One new codegen piece.} The kit emits a train step --- forward,
-    backward and optimizer in one call --- and an eval forward. MuZero's loss reaches
-    $h$ and $g$ through the unroll $s_0 = h(o)$, $s_{k+1} = g(s_k, a_k)$, so $g$'s
-    backward has to hand a cotangent to the previous step and $h$'s receives the sum of
-    everything downstream. \texttt{MlirCodegen.generateVjp} is the existing backward
-    walk with the first layer's input gradient --- every convolution already emits one
-    through \texttt{conv2dHasVJP3}, returned rather than dropped, with no
-    optimizer tail; \texttt{generateApplyAdam} is the existing Adam update on its own.
-    The trainer composes the gradient by hand, in reverse over the unroll, with the
-    min--max's VJP and the paper's two scalings on the host. Gated before any game code:
-    $\theta - \partial\theta$ from the VJP module equals the SGD train step's $\theta'$
-    bit for bit on all 136,787 parameters of the four $3 \times 3$ networks; the
-    input cotangent agrees with central differences and with \texttt{jax.vjp}; the
-    four composed gradients of the unrolled loss agree with \texttt{jax.grad} of the
-    same loss written as one JAX function to $7 \times 10^{-7}$ on the CPU compiler
-    (on XLA's CUDA path, $2$--$7 \times 10^{-4}$: TF32 convolutions, the level every
-    XLA-against-reference tie in this book sits at).
-  \item \textbf{A tree with no transpositions, gated against the one with them.}
-    AlphaZero's search keys nodes by the true position's index, so two move orders
-    reaching one board share a node. A latent tree cannot: a node is a path. The gate
-    that catches search bugs replaces $g$ with the true dynamics --- the latent of the
-    real next position --- and $f \circ h$ with a trained AlphaZero network cut after
-    its trunk, so both searches read the same two graphs: the position-keyed search's
-    first transposition needs seven simulations, so at $2$ to $6$ simulations every
-    root visit distribution must agree exactly, and all 4,520 do; a planted bug that
-    drops the edge reward passes at 2 and fails at 3--6 on 898--2,168 positions.
-  \item \textbf{The instrument scores the model, not only the player.} From every
-    reachable decision position (a fixed every-454th sample of the 9,062,619 at
-    $4 \times 4$), a legal line of $k = 0 \ldots 2K$ moves from three sources --- the
-    agent's own policy, perfect play, uniform random legal moves --- is played
-    \emph{inside the model}, and $f(g^k(h(s)))$ is scored against the exact value and
-    optimal set of the true position the line reaches; $r$ against the true outcome of
-    every move; and a closed-form ridge probe from the latent to the sixteen cell
-    states, fit on $h$ of real positions and refit on $g$'s own latents at each depth,
-    says whether the board is still linearly decodable --- the nearest thing to
-    ``knows the board''. Every number is exact per position; at $3 \times 3$ every set
-    is exhaustive.
-\end{itemize}
+\proseparagraph{One new codegen piece.} The kit emits a train step (forward, backward
+and optimizer in one call) and an eval forward. MuZero's loss reaches $h$ and $g$
+through the unroll $s_0 = h(o)$, $s_{k+1} = g(s_k, a_k)$, so $g$'s backward has to hand
+a cotangent to the previous step. \texttt{MlirCodegen.generateVjp} is the existing
+backward walk with the first layer's input gradient returned and no optimizer tail, and
+\texttt{generateApplyAdam} is the existing Adam update on its own. The trainer composes
+the gradient by hand, in reverse over the unroll. It is gated before any game code: the
+VJP module reproduces the SGD train step bit for bit on all 136,787 parameters of the
+four $3 \times 3$ networks, and the composed gradients of the unrolled loss agree with
+\texttt{jax.grad} of the same loss to $7 \times 10^{-7}$ on the CPU compiler.
+
+\proseparagraph{A search gated against AlphaZero's.} AlphaZero's search keys nodes by
+position, so two move orders reaching one board share a node. A latent tree cannot: a
+node is a path. With $g$ replaced by the true dynamics and $f \circ h$ by a trained
+AlphaZero network, the two searches must agree exactly until the position-keyed one
+meets its first transposition, at seven simulations. At $2$ to $6$ simulations all
+4,520 root visit distributions agree, and a planted bug that drops the edge reward is
+caught.
+
+\proseparagraph{The instrument scores the model as well as the player.} From every
+reachable decision position (a fixed every-454th sample of the 9,062,619 at
+$4 \times 4$), a legal line of up to $2K$ moves is played \emph{inside the model}, from
+three sources: the agent's own policy, perfect play and uniform random legal moves.
+Then $f(g^k(h(s)))$ is scored against the exact value and optimal moves of the true
+position the line reaches, and $r$ against the true outcome of every move. A linear
+probe from the latent to the sixteen cell states, refit on $g$'s own latents at each
+depth, says whether the board is still linearly decodable, the nearest thing to
+``knows the board''.
 
 Figure~\ref{fig:muzero_ttt} is one line played inside the model against the true
 board, and the instrument's curves against imagined depth.
@@ -19596,23 +19552,21 @@ lines.}
 \end{figure}
 
 \proseparagraph{Every arm against the solved game.} Table~\ref{tab:muzero_ttt_arms} adds
-MuZero's rows to Table~\ref{tab:ttt_arms}'s protocol --- agreement over every decision
-position, three independent 256-game evaluations of the saved network pooled against
-the perfect player --- and two columns only a model can have: the policy's agreement
-after $K = 5$ imagined moves on the agent's own lines and on random lines, and the
-share of winning moves $r$ calls, over every legal move from every scored start. The
-networks are the recipe that passed at $3 \times 3$ --- 50-simulation self-play, 300
-Adam steps an iteration, the raw mean $Q$ --- on fresh initializations, 60 iterations
-at $3 \times 3$ and 120 at $4 \times 4$, ten minutes on one card and 26--27 minutes
-(\texttt{runs/2026-10-20-muzero-ttt-4x4/}); at $4 \times 4$ all three initializations
-end the run unbeaten both sides, alone and with 25 and 100 simulations, and the table's
-is the one with the highest root agreement.
+MuZero's rows to Table~\ref{tab:ttt_arms}, with two columns only a model can have: the
+policy's agreement after $K = 5$ imagined moves, on the agent's own lines and on random
+lines, and the share of winning moves $r$ calls. Training is ten minutes on one card at
+$3 \times 3$ and 26--27 at $4 \times 4$. At $4 \times 4$ all three initializations end
+the run unbeaten from both sides, alone and with search, and the table's is the one
+with the highest root agreement.
 
 \begin{table}[H]
 \centering
 \caption{The tic-tac-toe arms against the solved game, with MuZero's: 60 iterations at
-$3 \times 3$ and 120 at $4 \times 4$, the same binary with \texttt{n=4}; the 600-step rows
-double the Adam steps an iteration. ``Imagined'' is policy agreement after five moves inside
+$3 \times 3$ and 120 at $4 \times 4$, the same binary with \texttt{n=4}, at 50-simulation
+self-play, 300 Adam steps an iteration and the raw mean $Q$; the 600-step rows
+double the Adam steps (\texttt{runs/2026-10-20-muzero-ttt-4x4/}). ``Agrees'' is over every
+decision position, and ``vs perfect'' pools three independent 256-game evaluations of the
+saved network. ``Imagined'' is policy agreement after five moves inside
 the model on the agent's own lines $\cdot$ random lines; ``$r$'' the winning moves the
 reward network calls at one move.}
 \label{tab:muzero_ttt_arms}
@@ -19644,36 +19598,30 @@ perfect                & 100\%  & --- & --- & 0/1000/0 $\cdot$ 0/1000/0 \\
 \end{tabular}
 \end{table}
 
-\noindent MuZero bootstraps slowly: AlphaZero's $4 \times 4$ network passes 93\% root
-agreement by iteration 4, MuZero's sits at 62--66\% through iteration 40, 73\% at 50,
-92\% at 60 and 98\% by 100 --- self-play games keep ending in wins rather than
-draws for a long time, so $z$ teaches
-the values of weak play. Doubling the steps an iteration
-brings the take-off to iteration 40 and the sweep to 99.1\%, the table's 600-step rows,
-and costs one game in 768 alone as O. Self-play stood at 2.6\% of the decision positions.
+\noindent MuZero bootstraps slowly. AlphaZero's $4 \times 4$ network passes 93\% root
+agreement by iteration 4. MuZero's sits at 62--66\% through iteration 40 and reaches
+98\% by 100, because self-play games keep ending in wins for a long time, so $z$ teaches
+the values of weak play. Doubling the steps an iteration brings the take-off to
+iteration 40 and the sweep to 99.1\%, the table's 600-step rows.
 
-\proseparagraph{What the model learned.} The value-equivalent prediction --- values, not the
-board --- does not hold at one move and holds with depth. On the agent's own lines the
-probe refit on $g$'s latents recovers 99.8\% of whole $4 \times 4$ boards after one
-imagined move and 99.7\% after five; on random lines 94\% after one and 55\% after
-five, and a line of random moves is where Figure~\ref{fig:muzero_ttt}'s model loses the
-board. The
-reward network calls 99.5\% of the winning moves at one move and 1.3\% of the others;
-along random lines its recall falls to 45\% by the fifth. The value's sign holds on
-the agent's own lines (92\% at the root, 99.8\% after five imagined moves, the surviving
-lines being endgames) and falls to 79--80\% on random lines by the fourth --- He et
-al.'s gap, against an exact value. Two move orders reaching one board end up 2.0 apart in
-the latent, against 4.5 from $h$ of that board and 5.2 between different boards: the
-model keeps the board in its own encoding, not $h$'s. The probe fit on $h$ reads every
-held-out real position and 96--97\% of the cells of $g$'s latents --- at $3 \times 3$
-only 84\%, and the weaker the network, the less of the board $g$ keeps. What the
-search does with the model's mistakes is the last line: at $3 \times 3$ a third to a
-half of the positions where the search errs and the network alone does not carry a
-phantom win on the principal line --- $r$ calling a win the true board does not have
---- against 1--2\% of other positions, and at the training budget extra simulations
-cost O games on two of three initializations; at $4 \times 4$ the search errs where
-the network alone does not at 3 starts in 19,961, one of them with a phantom win, and
-holds at 100 simulations on every initialization.
+\proseparagraph{What the model learned.} The value-equivalence prediction, values and
+no board, fails at one move and holds with depth. On the agent's own lines the probe
+recovers 99.8\% of whole $4 \times 4$ boards after one imagined move and 99.7\% after
+five. On random lines it recovers 94\% after one and 55\% after five, and a line of
+random moves is where Figure~\ref{fig:muzero_ttt}'s model loses the board. The reward
+network calls 99.5\% of the winning moves at one move and 1.3\% of the others, and
+along random lines its recall falls to 45\% by the fifth. The value's sign holds on the
+agent's own lines and falls to 79--80\% on random lines by the fourth move: He et al.'s
+gap, against an exact value. The board the model keeps is in its own encoding. Two move
+orders reaching one board end up 2.0 apart in the latent, against 4.5 from $h$ of that
+board and 5.2 between different boards.
+
+\proseparagraph{What the search does with the model's mistakes.} At $3 \times 3$, a
+third to a half of the positions where the search errs and the network alone does not
+carry a phantom win on the principal line, $r$ calling a win the true board does not
+have, against 1--2\% of other positions. At $4 \times 4$ the search errs where the
+network alone does not at 3 starts in 19,961, and it holds at 100 simulations on every
+initialization.
 
 \subsection*{MuZero (\texttt{Bestiary/MuZero.lean})}
 \emph{Zero} new primitives --- three ResNet-style networks (representation,
