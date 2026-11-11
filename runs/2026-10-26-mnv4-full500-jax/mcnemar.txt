@@ -1,0 +1,13 @@
+  n = 50000
+  jax-f32    39909/50000 = 79.82%   95% CI 79.46–80.17
+  verified   40023/50000 = 80.05%   95% CI 79.69–80.39
+  unpaired gap: +0.23 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 37929   both wrong 7997   only jax-f32 1980   only verified 2094
+  discordant: 4074 of 50000 (8.1%) — the only images the test looks at
+  McNemar exact two-sided p = 0.07665   (chi2 w/ continuity = 3.13)
+  ✗ NOT significant at p<0.05 — the 114 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.

@@ -1,0 +1,18 @@
+2026-10-26 03:43:23 waiting on mnv4-e100-queue
+2026-10-26 07:33:25 100-ep pair: JAX 0.7774 verified 77.416000%
+2026-10-26 07:34:25 verified start
+2026-10-28 12:08:31 resume: verified at epoch 190
+2026-10-28 12:08:31 verified start
+2026-10-28 12:08:35 verified exit 1
+2026-10-28 12:08:35 JAX start
+2026-10-28 12:11:50 note: the 12:08 resume's verified precheck refused (ffi/libpjrt_ffi.so built 10-17, source at e6d445c8 since the 10-26 checkout; the diff is oneAPI-only); the script fell through to the JAX half, stopped at 12:09:35 after compile, no checkpoint written. Shim rebuilt, resume.sh guarded, relaunched below.
+2026-10-28 12:12:06 resume: verified at epoch 190
+2026-10-28 12:12:07 verified start
+2026-10-30 20:59:49 verified exit 0
+2026-10-30 20:59:49 JAX start
+2026-10-31 22:42:10 JAX half SUSPENDED at the user's request after epoch 114 (checkpoint e114 22:40:26); resume = supervisor from the newest .state.npz, unit mnv4-e500-jax-resume
+2026-11-01 14:35:21 JAX half RESUMED on the user's word (after a reboot 14:30), unit mnv4-e500-jax-resume
+2026-11-02 17:13:23 suspended again on the user's word (a different demo) after the e230 checkpoint; resume = systemd-run --user --unit=mnv4-e500-jax-resume runs/2026-10-26-mnv4-full500-jax/launch.sh
+2026-11-08 19:27:59 resumed on the user's word (from e230)
+2026-11-08 19:28:39 resume refused by precheck (checkout moved to main 139ed446; jax/.lake/build trainers stale vs 0f224436 etc.) → regen_jax_generated.sh sync (MNv4 diff: default-off seed offset + resume host-array fix); NOT relaunched — user: sit on it for a day
+2026-11-08 21:01:20 resumed on the user's word (from e230, checkout main 139ed446)

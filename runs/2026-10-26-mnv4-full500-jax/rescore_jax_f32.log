@@ -1,0 +1,17 @@
+=== mnv4 full500 jax e500 f32 ===
+eval dtype: f32 forward (EVAL_DTYPE=f32); the module's DT=bfloat16 CONV_DT=bfloat16
+backend=gpu devices=1
+gen=generated/generated_mobilenet_v4_imagenet_full.py
+state=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full_e500.state.npz
+eval protocol: 256px, crop_pct=0.875000 (timm resize-then-crop, antialiased)
+state tuple (from the module): (params, opt_state, bn_state)
+  params=233 bn=154 opt=467 leaves -> 854 total (file has 854) ✓
+loaded step=156000
+scoring the live weights + running BN buffers
+
+── scoring at 256px, crop_pct 0.875 — train (the module's own)
+   per-image top-1 bitmap -> ../runs/2026-10-26-mnv4-full500-jax/bitmaps/mnv4_full500_jax_f32.bin (50000 bytes, 39909 set) — pair with scripts/demos/mcnemar.py
+   top-1: 39909/50000 = 79.82%   top-5: 47418/50000 = 94.84%
+
+=== FULL VAL (f32 forward (EVAL_DTYPE=f32)) ===
+256px crop 0.875  top-1  79.82%  top-5  94.84%  (50000 images)  train (the module's own)

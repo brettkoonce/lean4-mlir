@@ -1,0 +1,136 @@
+[sup] 2026-10-28 12:08:36 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-10-28 12:08:36 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-10-28 12:08:36 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-10-28 12:08:36 attempt 1: resuming at epoch 0/500 (next rest: 999)
+[sup] 2026-10-28 12:08:36   launched PID=1308129 PGID=1308129
+[sup] 2026-10-28 12:09:35 supervisor exiting — taking the run down (PID=1308129 PGID=1308129)
+[sup] 2026-10-30 20:59:50 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-10-30 20:59:50 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-10-30 20:59:50 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-10-30 20:59:50 attempt 1: resuming at epoch 0/500 (next rest: 999)
+[sup] 2026-10-30 20:59:50   launched PID=2215915 PGID=2215915
+[sup] 2026-10-31 22:42:00 supervisor exiting — taking the run down (PID=2215915 PGID=2215915)
+[sup] 2026-11-01 14:35:22 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-11-01 14:35:22 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-11-01 14:35:22 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-11-01 14:35:22 attempt 1: resuming at epoch 114/500 (next rest: 999)
+[sup] 2026-11-01 14:35:22   launched PID=11742 PGID=11742
+[sup] 2026-11-02 17:13:13 supervisor exiting — taking the run down (PID=11742 PGID=11742)
+[sup] 2026-11-08 19:28:00 ⛔ PRECHECK failed — refusing to start
+[sup] 2026-11-08 19:28:34 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-11-08 19:28:34 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-11-08 19:28:34 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-11-08 19:28:34 DRY_RUN — nothing launched
+[sup] 2026-11-08 21:01:15 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-11-08 21:01:15 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-11-08 21:01:15 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-11-08 21:01:15 DRY_RUN — nothing launched
+[sup] 2026-11-08 21:01:21 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-26-mnv4-full500-jax
+[sup] 2026-11-08 21:01:21 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_r256_2612/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" ../.venv/bin/python -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-11-08 21:01:21 eta: ~112 h for 500 ep on 4x 4060 Ti at 256² (2026-10-12 smoke, runs/2026-10-12-mnv4-jax-smoke/: 2.56 s a 4096-row optimizer step at the default arena, compile excluded, = the 224 trainer's 2.57 s of 2026-10-07 — feed-bound; 312 steps + ~12 s the f32 validation every 5th epoch)
+[sup] 2026-11-08 21:01:21 attempt 1: resuming at epoch 230/500 (next rest: 999)
+[sup] 2026-11-08 21:01:21   launched PID=1846012 PGID=1846012
+[sup]   last line: Done. Total time: 223574.6s
+[sup] 2026-11-11 11:07:58 ✅ COMPLETE — 500/500 epochs
