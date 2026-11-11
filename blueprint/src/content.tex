@@ -19033,32 +19033,32 @@ AlphaZero, MuZero.
 
 \texttt{demos/MainPongDqn.lean} is Mnih et al.'s DQN (2015,
 \href{https://www.nature.com/articles/nature14236}{Nature}) on a Pong written in Lean
-(\texttt{LeanMlir/Pong.lean}: an $84 \times 84$ field, two-pixel paddles, frame skip 4,
-a scripted opponent that tracks the ball at 1.5 pixels a frame after a four-frame
-delay, a game to 21, deterministic from a seed, five million raw frames a second with
-no emulator and no ROM). Three things change relative to everything trained so far.
-There is no dataset: transitions come from playing the game $\varepsilon$-greedily
-against the current network, $\varepsilon$ from 1 to 0.1 over the first 100k agent
-steps, into a replay of 100k transitions from which each gradient step samples 32, one
-step per four agent steps, Adam at $10^{-4}$, 500k agent steps --- two million frames.
-The target is the model's own prediction one step later,
+(\texttt{LeanMlir/Pong.lean}): an $84 \times 84$ field, a scripted opponent that tracks
+the ball at 1.5 pixels a frame after a four-frame delay, a game to 21, deterministic
+from a seed, with no emulator and no ROM. The question is what learning from pixels
+costs, and the game supplies its own bracket: the same DQN fed the six numbers the
+renderer draws from.
+
+\proseparagraph{What is new.} There is no dataset. Transitions come from playing the
+game $\varepsilon$-greedily against the current network into a replay of 100k
+transitions, and each gradient step samples 32 of them. The target is the model's own
+prediction one step later,
 $y_a = r + \gamma \max_{a'} Q_{\text{target}}(s', a')$ at $\gamma = 0.99$, with the
-target network a copy of the online parameters refreshed every 1,000 updates. And the
-loss is the squared-error block the DDPM demo trains with
+target network a copy of the online parameters refreshed every 1,000 updates. The loss
+is the squared-error block the DDPM demo trains with
 (\S\ref{sec:bestiary_diffusion}): the host runs the eval graph on the batch, writes
 $y = Q(s,\cdot)$, overwrites the taken action's slot with the Bellman target and hands
 $y$ in, so the gradient is zero on the untaken slots and a per-sample TD error on the
-taken one. Zero new codegen. Two things are the pixels' own: the observation is an
-image, so the Q-function is
-Chapter~\ref{chap:cnn}'s CNN kit at $84 \times 84$ (three convolutions with pooling standing in for
-the paper's strides, a dense 512, three outputs; 1.7M parameters), and one frame does
-not contain the ball's velocity, so the input is a stack of the last four. The bracket
-is built into the game: the same DQN on the six numbers the renderer draws from ---
-ball position and velocity, the two paddles, through a two-hidden-layer MLP of width
-64, 4{,}803 parameters --- is a twin that is handed everything the pixels could carry,
-the scripted opponent is the level to beat, and a one-frame input is the ablation.
-Figure~\ref{fig:pong_dqn} is one input and the learning curves of those arms
-(\texttt{runs/2026-09-25-pong-dqn/}).
+taken one. Zero new codegen.
+
+\proseparagraph{The arms.} The pixel network is Chapter~\ref{chap:cnn}'s CNN kit at
+$84 \times 84$: three convolutions with pooling standing in for the paper's strides, a
+dense 512 and three outputs, 1.7M parameters. One frame does not contain the ball's
+velocity, so its input is a stack of the last four, and a one-frame input is the
+ablation. The state twin is a two-hidden-layer MLP of width 64, 4{,}803 parameters, on
+the ball's position and velocity and the two paddles, which is everything the pixels
+could carry. The scripted opponent is the level to beat.
+Figure~\ref{fig:pong_dqn} is one input and the learning curves of those arms.
 
 \begin{figure}[H]
 \centering
@@ -19072,15 +19072,13 @@ the random and scripted-tracker baselines as lines.}
 \label{fig:pong_dqn}
 \end{figure}
 
-\proseparagraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is the
-mean points per game over twenty fresh games after training, with the standard
-error; the baselines over a hundred games (\texttt{lake run demo pong env 100}). Each
-arm is 500k agent steps on one card, five to seven minutes for a state run and
-27 for a pixel run.
+\proseparagraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is
+the mean points per game after training. Each arm is 500k agent steps on one card, five
+to seven minutes for a state run and 27 for a pixel run.
 
 \begin{table}[H]
 \centering
-\caption{The Pong arms against the scripted opponent, in points per game (\texttt{runs/2026-09-25-pong-dqn/}; the stacked and the wide state arms, \texttt{runs/2026-10-27-pong-state-arms/}).}
+\caption{The Pong arms against the scripted opponent, in points per game over twenty fresh games after training, with the standard error; the baselines over a hundred games, \texttt{lake run demo pong env 100} (\texttt{runs/2026-09-25-pong-dqn/}; the stacked and the wide state arms, \texttt{runs/2026-10-27-pong-state-arms/}). Training is 500k agent steps at frame skip 4, two million frames: $\varepsilon$ from 1 to 0.1 over the first 100k steps, one gradient step per four agent steps, Adam at $10^{-4}$. At opponent speeds of 1.0 / 1.5 / 2.0 pixels a frame the state net scores $+14.45$ / $+13.45$ / $+9.80$ and the pixel network $+17.75$ / $+15.60$ / $+14.45$: one seed each at 1.0 and 2.0, and at 1.5 the state net's three-seed mean and the pixel network's seed 1.}
 \label{tab:pong_arms}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -19098,25 +19096,26 @@ pixels, four frames, seeds 1--3  & $+15.60$, $+15.90$, $+14.90$ & 75--100k \\
 \end{table}
 
 \noindent One frame cannot see velocity, and the row says by how much: $+4.6$ against
-$+15.5$, the gap between a paddle that reaches the ball and one that guesses. The
-state twin was meant to be the ceiling and the 64-wide net is not: the pixel network
-sits above it on every seed, $+15.47$ against $+13.45$ on average, and at every
-opponent speed tried --- 1.0 / 1.5 / 2.0 pixels a frame, one seed each at 1.0 and
-2.0: state $+14.45$ / $+13.45$ / $+9.80$, pixels $+17.75$ / $+15.60$ / $+14.45$,
-where the 1.5 entries are the state net's three-seed mean and the pixel network's
-seed 1. The six numbers are all the pixels could carry, so the gap was in the
-networks, and the two other state rows say where. Stacking the last four states, as
-the pixel network stacks frames, costs the state net 2.4 points ($+11.07$, the seed
-spread tripled) and moves its first positive evaluation out to 150--225k steps: the
-vector already carries the velocity the pixel network stacks frames to recover, and
-the history is the same information four times over. Widening the one-state MLP to
-the pixel network's dense width, 512, closes the gap: $+14.75$ against $+15.47$, a
-difference smaller than the wide net's own seed spread, and equal to the pixel
-network at 200k steps where the 64-wide net was three to nine points behind. The
-ordering was the 64-wide MLP's capacity, not the representation. The train step is
-5.1 milliseconds with the parameters and Adam moments resident on the device
-(\texttt{trainStepAdamF32DdpmR}); the loop, play and evaluations included, runs at
-14.6 milliseconds an update, and a pixel run is 27 minutes on one card.
+$+15.5$, the gap between a paddle that reaches the ball and one that guesses.
+
+\proseparagraph{The twin was meant to be the ceiling, and at width 64 it is not.} The
+pixel network sits above it on every seed, $+15.47$ against $+13.45$ on average, and at
+every opponent speed tried. The six numbers are all the pixels could carry, so the gap
+was in the networks, and the two other state rows say where. Stacking the last four
+states, as the pixel network stacks frames, costs the state net 2.4 points and moves
+its first positive evaluation out to 150--225k steps: the vector already carries the
+velocity, and the history is the same information four times over. Widening the
+one-state MLP to the pixel network's dense width, 512, closes the gap: $+14.75$ against
+$+15.47$, a difference smaller than the wide net's own seed spread. The lever was the
+MLP's capacity, and the representation was never the problem.
+
+The train step is 5.1 milliseconds with the parameters and Adam moments resident on the
+device (\texttt{trainStepAdamF32DdpmR}), and the loop, play and evaluations included,
+runs at 14.6 milliseconds an update.
+
+\medskip\noindent What this is not: Atari. It is one game written for the purpose,
+against one scripted opponent, with pooling where the paper strides. The paper's result
+is one network and one set of hyperparameters across 49 games from an emulator.
 
 \section{Poker --- Deep CFR against the exact best response}
 \label{sec:game_leduc}
@@ -19281,52 +19280,49 @@ trainer is Silver et al.'s self-play loop (AlphaGo Zero, 2017,
 \href{https://www.nature.com/articles/nature24270}{Nature}; AlphaZero, 2018,
 \href{https://www.science.org/doi/10.1126/science.aar6404}{Science}) on tic-tac-toe
 written in Lean (\texttt{LeanMlir/TicTacToe.lean}), $n \times n$ with $k$ in a row,
-$n$ the one knob. Each iteration plays 256 games in lockstep: at every move a PUCT
-search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations over the network's
-priors and value, one batched forward over the games' pending leaves per simulation,
-Dirichlet noise at the root, the move drawn from the visit counts; the visit
-distribution $\pi$ and the outcome $z$ are the targets, and the next iteration plays
-with the new network. The network is AlphaGo's plain convolution + ReLU stack
-(\texttt{Bestiary/AlphaGo.lean}) at tic-tac-toe width, with the policy and value
-heads merged into one dense output of $n^2 + 1$ slots: 78k parameters at
-$3 \times 3$, 155k at $4 \times 4$. Three things change relative to Pong's DQN:
+$n$ the one knob. The game is small enough to solve, so the question can be exact: how
+much of perfect play does the network hold on its own, and how much does the search
+add?
 
-\begin{itemize}
-  \item \textbf{The loss has two heads and the codegen has one.} The paper's
-    $(z - v)^2 - \pi^{\top} \log p$ goes through the squared-error block Pong's
-    Bellman target went through: the host runs the eval graph on the batch and writes
-    $y = \mathrm{out} - \tfrac{n_{\mathrm{out}}}{2}\, g$, with
-    $g = \mathrm{softmax}(p) - \pi$ on the $n^2$ policy slots and
-    $(\tanh v - z)(1 - \tanh^2 v)$ on the value slot, so the block's gradient is
-    $g / B$ exactly --- the gradient of the batch-mean AlphaZero loss. Zero new
-    codegen, the technique the neural-quantum-state demo
-    (\S\ref{sec:bestiary_beyond}) uses with its energy gradient.
-  \item \textbf{Not the bestiary's tower.}
-    \texttt{Bestiary/AlphaZero.lean}'s convolution--BatchNorm--residual body is
-    the wrong instrument here. BatchNorm's batch statistics over nine binary cells
-    are a liability, and with BatchNorm the eval forward the loss reads and the
-    train step's forward are different functions. Pong made the same
-    choice for the same reason.
-  \item \textbf{The instrument is the solved game.} A position is a base-3 number
-    over the cells, so a memoized minimax fills one byte per index with the exact
-    value and the optimal-move set of every reachable position --- 5,478 at
-    $3 \times 3$, 9,722,011 at $4 \times 4$. The network alone is scored by the
-    argmax of its masked logits over \emph{every} reachable decision position (4,520
-    and 9,062,619), its value head against the exact value, and its match play
-    against a perfect player that draws uniformly from the optimal set. Nothing in
-    the table is sampled but the games.
-\end{itemize}
+\proseparagraph{The loop.} Each iteration plays 256 games in lockstep. At every move a
+PUCT search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations runs over the
+network's priors and value, with Dirichlet noise at the root, and the move is drawn
+from the visit counts. The visit distribution $\pi$ and the outcome $z$ are the
+targets, and the next iteration plays with the new network. The network is AlphaGo's
+plain convolution + ReLU stack (\texttt{Bestiary/AlphaGo.lean}) at tic-tac-toe width,
+with the policy and value heads merged into one dense output of $n^2 + 1$ slots: 78k
+parameters at $3 \times 3$, 155k at $4 \times 4$. It is not
+\texttt{Bestiary/AlphaZero.lean}'s convolution--BatchNorm--residual tower. BatchNorm's
+batch statistics over nine binary cells are a liability, and with BatchNorm the eval
+forward the loss reads and the train step's forward are different functions. Pong made
+the same choice for the same reason.
 
-\proseparagraph{Five by five, four in a row.} No table exists there ($3^{25}$ bytes), so the
-instrument becomes an exact solver --- alpha-beta with a transposition table over
-symmetry-canonical positions --- checked against the dense table on every reachable
-$3 \times 3$ and $4 \times 4$ position before it is trusted where no table exists. It
-establishes that $(5, 5, 4)$ is a draw, and something a reader can check on
-Figure~\ref{fig:alphazero_ttt}: after X takes the center, O's only drawing replies are the four diagonal
-neighbors. Two things change in what the table can say: the sweep is a fixed sample
-of 20,000 random-play decision positions with at least six stones, exact per position
-but not exhaustive; and the perfect player draws its first move uniformly from the
-optimal set and plays the solver's principal move from there.
+\proseparagraph{The loss has two heads and the codegen has one.} The paper's
+$(z - v)^2 - \pi^{\top} \log p$ goes through the squared-error block Pong's Bellman
+target went through. The host runs the eval graph on the batch and writes
+$y = \mathrm{out} - \tfrac{n_{\mathrm{out}}}{2}\, g$, with
+$g = \mathrm{softmax}(p) - \pi$ on the $n^2$ policy slots and
+$(\tanh v - z)(1 - \tanh^2 v)$ on the value slot, so the block's gradient is $g / B$
+exactly, the gradient of the batch-mean AlphaZero loss. Zero new codegen, and the
+technique the neural-quantum-state demo (\S\ref{sec:bestiary_beyond}) uses with its
+energy gradient.
+
+\proseparagraph{The instrument is the solved game.} A position is a base-3 number over
+the cells, so a memoized minimax fills one byte per index with the exact value and the
+optimal-move set of every reachable position: 5,478 at $3 \times 3$ and 9,722,011 at
+$4 \times 4$. The network alone is scored by the argmax of its masked logits over
+\emph{every} reachable decision position (4,520 and 9,062,619), its value head against
+the exact value, and its match play against a perfect player that draws uniformly from
+the optimal set. Nothing in the table is sampled but the games.
+
+\proseparagraph{Five by five, four in a row.} No table exists there ($3^{25}$ bytes), so
+the instrument becomes an exact solver, alpha-beta with a transposition table over
+symmetry-canonical positions, checked against the dense table on every reachable
+$3 \times 3$ and $4 \times 4$ position first. It establishes that $(5, 5, 4)$ is a
+draw, and something a reader can check on Figure~\ref{fig:alphazero_ttt}: after X takes
+the center, O's only drawing replies are the four diagonal neighbors. The sweep at this
+size is a fixed sample of 20,000 random-play decision positions with at least six
+stones, exact per position and no longer exhaustive.
 
 \begin{figure}[H]
 \centering
@@ -19344,16 +19340,13 @@ decision positions, one dot per position, medians as bars.}
 \label{fig:alphazero_ttt}
 \end{figure}
 
-\proseparagraph{Every arm against the solved game.} Table~\ref{tab:ttt_arms} is the agreement
-of the arm's move with the optimal set --- over every decision position at $3 \times 3$ and $4 \times 4$, over the
-20,000-position sample at $5 \times 5$; the scripted players' is their expected
-agreement --- and W/D/L against the perfect player as X and as O: 1,000 games each way
-for the scripted rows (200 at $5 \times 5$), and for the network's rows three
-independent evaluations of the saved network, 256 games each, pooled.
+\proseparagraph{Every arm against the solved game.} Table~\ref{tab:ttt_arms} is how
+often each arm's move is in the optimal set, and its wins, draws and losses against the
+perfect player as X and as O.
 
 \begin{table}[H]
 \centering
-\caption{The tic-tac-toe arms against the solved game at $3 \times 3$, $4 \times 4$ and $5 \times 5$: twenty iterations at $3 \times 3$, forty at $4 \times 4$ and a hundred at $5 \times 5$, the same binary with \texttt{n=4} and \texttt{n=5 k=4}.}
+\caption{The tic-tac-toe arms against the solved game at $3 \times 3$, $4 \times 4$ and $5 \times 5$: twenty iterations at $3 \times 3$, forty at $4 \times 4$ and a hundred at $5 \times 5$, the same binary with \texttt{n=4} and \texttt{n=5 k=4} (\texttt{runs/2026-09-29-alphazero-ttt/}). ``Agrees'' is over every decision position at $3 \times 3$ and $4 \times 4$ and over the 20,000-position sample at $5 \times 5$; the scripted players' is their expected agreement. ``vs perfect'' is W/D/L over 1,000 games each way for the scripted rows (200 at $5 \times 5$), and for the network's rows three independent 256-game evaluations of the saved network, pooled. At $5 \times 5$ the perfect player draws its first move uniformly from the optimal set and plays the solver's principal move from there.}
 \label{tab:ttt_arms}
 \small
 \begin{tabular}{@{}l r l r l r l@{}}
@@ -19370,24 +19363,32 @@ perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\c
 \end{tabular}
 \end{table}
 
-\noindent The $3 \times 3$ run is 2.5 minutes on one card and the $4 \times 4$ run 10.0
-minutes (\texttt{runs/2026-09-29-alphazero-ttt/}); the estimate for the Python
-implementation this loop follows (Nair,
+\noindent At $3 \times 3$ and $4 \times 4$ the network alone never loses to the perfect
+player, and it picks an optimal move at $97.3\%$ and $99.4\%$ of every decision
+position. Self-play visits 1.2\% of the $4 \times 4$ decision positions and the sweep
+scores all of them. The misses are mostly forced wins not taken, late in games a
+competent opponent never produces, and the search closes them: with 25 or 100
+simulations the network is unbeaten from iteration 5 and 4, before the network alone
+is. The value head estimates self-play and not the theorem (the right panel of
+Figure~\ref{fig:alphazero_ttt}): the root ends X-favored at $3 \times 3$ because
+self-play under root noise is.
+
+\proseparagraph{Where it stops.} At $5 \times 5$ the same binary with \texttt{n=5 k=4}
+runs a hundred iterations at 400 simulations in 64 minutes. As X the network never
+loses, alone or with search. As O it still does, 60 games in 768 alone and 23 with
+search. Its 87.4\% on the random-play sample is 92.1\% over the exhaustive opening,
+every position with at most three stones: it is best in the positions every game
+passes through. On this board the search is what closes the second player's games, and
+at a hundred iterations it has not closed them.
+
+The $3 \times 3$ run is 2.5 minutes on one card and the $4 \times 4$ run 10.0 minutes.
+The estimate for the Python implementation this loop follows (Nair,
 \href{https://github.com/suragnair/alpha-zero-general}{alpha-zero-general}) on the
-$4 \times 4$ board was 20--24 hours. The untrained network's sweep is the random player's. Self-play visits 1.2\%
-of the $4 \times 4$ decision positions and the sweep scores all of them; the misses
-are mostly forced wins not taken, late in games a competent opponent never produces,
-and the search closes them --- with 25 or 100 simulations the network is unbeaten
-from iteration 5 and 4, before the network alone is. The value head estimates
-self-play rather than the theorem (the right panel of Figure~\ref{fig:alphazero_ttt}): the root ends
-X-favored at $3 \times 3$ because self-play under root noise is. At $5 \times 5$
-the same binary with \texttt{n=5 k=4} runs a hundred iterations at 400 simulations
-in 64 minutes. As X the network never loses, alone or with search; as O it still
-does --- 60 games in 768 alone, 23 with search --- and its 87.4\% on the random-play
-sample is 92.1\% over the exhaustive opening, every position with at most three
-stones: it is best in the opening, the positions every game passes through. On this
-board the search is what closes the second player's games, and at a hundred
-iterations it has not closed them.
+$4 \times 4$ board was 20--24 hours.
+
+\medskip\noindent What this is not: Go. Tic-tac-toe has a table to grade against and at
+most ten million positions. AlphaZero's result is on games where no such table exists
+and strength is measured only against other players.
 
 \subsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
 \emph{Zero} new primitives. The original system (Silver et al.\ 2016,
