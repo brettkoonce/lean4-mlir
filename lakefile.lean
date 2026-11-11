@@ -2847,6 +2847,14 @@ script imagenet (args) do
       return 1
   return 0
 
+/-- The rows rendered for two large cards (`scripts/jobs/_2card.sh`): short name, verified job, JAX
+    job. Each is the four-card row at the same micro-batch and effective batch. -/
+private def twoCardPairs : List (String × String × String) :=
+  [ ("a2",   "r50-a2-bf16-2card",         "r50-a2accum-jax-2card"),
+    ("a1",   "r50-a1-bf16-2card",         "r50-a1-jax-2card"),
+    ("vits", "vits-default-emabf16-2card", "vits-accum-jax-2card"),
+    ("vitb", "vitb-default-emabf16-2card", "vitb-accum-jax-2card") ]
+
 /-- `lake run bench [plan] <name … | all> [--jax | --verified]` — the ImageNet tier as a benchmark:
     each named net's two jobs (the JAX reference and the verified path, `imagenetPairs`), on the
     real ImageNet stream, `BENCH_EPOCHS` (2) epochs each, timed by `scripts/bench/bench.sh` into
@@ -2855,23 +2863,37 @@ script imagenet (args) do
     own conf, so a bench row and a `lake run imagenet start` row run the same command; it trains
     into a scratch checkpoint and never touches the job's lineage. `plan` resolves every row and
     runs its PRECHECK, launching nothing; bare, it lists the names. `--jax` / `--verified` bench
-    one path only. -/
+    one path only. `--2card` benches the two-card rows (`twoCardPairs`), `--images N` stops each
+    row after N images instead of two epochs. `lake run bench feed|device <name …>` time one side
+    alone, the loader on the CPU or the rendered step on the cards (`scripts/bench/feed.sh`,
+    `device.sh`); `lake run bench probe` is the rented-box sequence (`probe_2card.sh`). -/
 script bench (args) do
+  if let some sub := ["feed", "device", "probe"].find? (args.head? == some ·) then
+    let tool := if sub == "probe" then "scripts/bench/probe_2card.sh" else s!"scripts/bench/{sub}.sh"
+    let p ← IO.Process.spawn { cmd := tool, args := args.tail.toArray }
+    return (← p.wait)
+  let twoCard := args.contains "--2card"
+  let rec imagesOf : List String → Option String × List String
+    | "--images" :: n :: rest => (some n, (imagesOf rest).2)
+    | a :: rest => let (i, r) := imagesOf rest; (i, a :: r)
+    | [] => (none, [])
+  let (images?, args) := imagesOf (args.filter (· != "--2card"))
+  let table := if twoCard then twoCardPairs else imagenetPairs
   let jaxOnly := args.contains "--jax"
   let verOnly := args.contains "--verified"
   let pos := args.filter fun a => a != "--jax" && a != "--verified"
   let (plan, names) := match pos with
     | "plan" :: rest => (true, rest)
     | rest           => (false, rest)
-  let usage := "usage: lake run bench [plan] <name … | all> [--jax | --verified]"
+  let usage := "usage: lake run bench [plan] <name … | all> [--jax | --verified] [--2card] [--images N]\n       lake run bench feed|device <name …>   ·   lake run bench probe"
   if names.isEmpty then
     IO.println s!"{usage}\n\nthe nets (each benches its JAX reference and its verified job):\n{imagenetListing}"
     return 0
   let mut nets : List (String × String × String) := []
-  if names == ["all"] then nets := imagenetPairs
+  if names == ["all"] then nets := table
   else
     for n in names do
-      match imagenetPairs.find? (·.1 == n) with
+      match table.find? (·.1 == n) with
       | some p => nets := nets ++ [p]
       | none =>
         IO.eprintln s!"no net '{n}'\n{usage}\n\n{imagenetListing}"
@@ -2879,7 +2901,8 @@ script bench (args) do
   let rows := nets.foldl (init := #[]) fun acc (n, v, j) =>
     acc ++ (if verOnly then #[] else #[s!"{n}:jax:{j}"]) ++ (if jaxOnly then #[] else #[s!"{n}:verified:{v}"])
   let p ← IO.Process.spawn { cmd := "scripts/bench/bench.sh",
-                             args := (if plan then #["plan"] else #[]) ++ rows }
+                             args := (if plan then #["plan"] else #[]) ++ rows,
+                             env := images?.elim #[] fun n => #[("BENCH_IMAGES", some n)] }
   pure (← p.wait)
 
 -- `imagenet` the script owns the root name, hence the namespace; the target's name is still `imagenet`.

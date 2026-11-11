@@ -1865,6 +1865,22 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "0.01" false false true == "lambaccdp4x128wxclipdropbcewd001"
 
+-- ── RSB-A2 and A1 on two large cards: 2 replicas × 256 × k=4 ──
+-- The same step as the 4 × 128 renders above: 512 rows a micro-batch (so the sync-BN group is
+-- unchanged) and an effective 2048, laid out for two cards with the memory to hold 256 each.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x256wxclipdropbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepText 256 1000 "1.0e-05" 2
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x256wxclipdropbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepText 256 1000 "1.0e-05" 2
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
+#guard Proofs.StableHLO.r34AdamVariant 256 2 (Proofs.StableHLO.OptRecipe.lambAccum 4)
+         true true true "" true false true == "lambaccdp4x256wxclipdropbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 256 2 (Proofs.StableHLO.OptRecipe.lambAccum 4)
+         true true true "0.01" true false true == "lambaccdp4x256wxclipdropbcewd001bf16"
+
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdText 64 1000 "1.0e-05" "resnet50in160" (q := 5))
 

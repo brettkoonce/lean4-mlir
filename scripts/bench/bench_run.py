@@ -18,6 +18,9 @@ What a row measures (planning/next_session_bench_and_a3.md §0 is why each rule 
     steps after a val pass, which drain a queue the producers filled during it (burst rate).
   * img/s = the epoch's images / train seconds. GPU memory is what nvidia-smi reports, which for
     the JAX path is XLA's preallocated arena, not the need.
+  * --images N: stop after N training images instead of after --epochs. One row, epoch 0, step time
+    over the images after the first quarter (compile and queue fill stay out of it), img/s from the
+    step time and the images a step consumes. Needs no knob in either trainer.
   * the live process's environment is read back from /proc and saved; an --expect-env mismatch
     (the checkpoint redirect, above all) kills the run before it writes a step.
 """
@@ -87,7 +90,7 @@ class Telemetry(threading.Thread):
                                  1 - di / dt if dt else 0.0))
 
     def window(self, a, b):
-        s = [x for x in self.samples if a <= x[0] <= b]
+        s = [x for x in self.samples if a <= x[0] <= b and x[2]]
         if not s:
             return "", "", ""
         util = sum(sum(x[2]) / len(x[2]) for x in s) / len(s)
@@ -105,6 +108,9 @@ def main():
     ap.add_argument("--net", required=True)
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--timeout-min", type=float, default=180)
+    ap.add_argument("--images", type=int, default=0, help="stop after this many images, not --epochs")
+    ap.add_argument("--images-per-step", type=int, default=0,
+                    help="verified: batch x replicas; JAX reads its steps_per_epoch line")
     ap.add_argument("--expect-env", action="append", default=[])
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
@@ -153,6 +159,17 @@ def main():
     spe, done_at = None, None
     deadline = t0 + a.timeout_min * 60
     why = {}
+    budget = {}
+
+    def cum(rows):
+        """(t, epoch, images-so-far in steps): the in-epoch counter restarts, the budget does not."""
+        out, base, last = [], 0, 0
+        for t, _, g in rows:
+            if g < last:
+                base += last
+            last = g
+            out.append((t, 0, base + g))
+        return out
 
     # The line loop only wakes on output, so the environment check, the timeout and the stop after
     # the last epoch live here. After that epoch the JAX trainer is stopped at its state-save line
@@ -202,6 +219,14 @@ def main():
                 train_end[int(m[1])] = t
             elif m := VER_EPOCH.match(line):
                 ep_end[int(m[1])], top1[int(m[1])] = t, f"{float(m[2]):.3f}"
+        if a.images:
+            ips = a.images_per_step or (IMAGENET_TRAIN // spe if spe else 0)
+            warm = [(tt, g) for tt, _, g in cum(steps) if ips and g * ips >= a.images // 4]
+            if ips and steps and cum(steps)[-1][2] * ips >= a.images and len(warm) >= 3:
+                budget.update(ips=ips, window=warm)
+                kill(f"{a.images} images measured")
+                break
+            continue
         if len(ep_end) >= a.epochs and done_at is None:
             done_at = time.monotonic()
         # the JAX trainer: stop once the epoch's state write has finished (a kill mid-write leaves a
@@ -215,12 +240,31 @@ def main():
         kill("cleanup")
     if "status" in why:
         status = why["status"]
-    elif len(ep_end) < a.epochs:
+    elif a.images and not budget:
+        status = f"FAIL:exit {p.returncode} before {a.images} images"
+    elif not a.images and len(ep_end) < a.epochs:
         status = f"FAIL:exit {p.returncode} after {len(ep_end)} epoch(s)"
     elif "env" not in why:
         status = "FAIL:env unread"   # the process was gone before its environment could be read
     tel.stop.set()
     tel.join(10)
+
+    if budget:
+        w = budget["window"]
+        ms = 1000 * (w[-1][0] - w[0][0]) / (w[-1][1] - w[0][1])
+        new = not os.path.exists(a.tsv)
+        util, mem, cpu = tel.window(w[0][0], w[-1][0])
+        vals = dict(epoch=0, wall_s=f"{w[-1][0]:.1f}", train_s=f"{w[-1][0] - w[0][0]:.1f}", val_s="",
+                    step_ms=f"{ms:.1f}", img_s=f"{budget['ips'] * 1000 / ms:.0f}", top1="")
+        row = dict(info, date_utc=time.strftime("%F %T", time.gmtime()), job=a.job, path=a.path,
+                   net=a.net, gpu_util=util, gpu_mem_mib=mem, cpu_busy=cpu, status=status,
+                   row_dir=a.row_dir, **vals)
+        with open(a.tsv, "a") as f:
+            if new:
+                f.write("\t".join(COLS) + "\n")
+            f.write("\t".join(str(row[c]) for c in COLS) + "\n")
+        print(f"[bench] {a.job}: {status}; {budget['ips'] * 1000 / ms:.0f} img/s -> {a.tsv}")
+        return 0 if status == "ok" else 1
 
     new = not os.path.exists(a.tsv)
     with open(a.tsv, "a") as f:

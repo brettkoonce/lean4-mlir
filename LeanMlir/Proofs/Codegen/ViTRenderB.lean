@@ -1660,6 +1660,32 @@ end Proofs.StableHLO
   (Proofs.StableHLO.vitFwdRenderB .tanh "vitsin_emadp256x4wxdropeps0000001smxbf16_fwd" 1000 (vbB := 256)
     (V := Proofs.StableHLO.vitSDims) (eps := "1.0e-6") (smShift := true))
 
+-- ── ViT-S and ViT-B on two large cards ──
+-- The same steps as the 4-replica renders beside them, laid out for two cards: S as 2 × 512 (one
+-- step of 1024), B as 2 accumulated micro-batches of 2 × 256 (exact under LayerNorm either way).
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp512wxdropeps0000001smxerfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitsin_emadp512wxdropeps0000001smxerfbf16_train_step"
+    "512.0" 2 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (vbB := 512) (V := Proofs.StableHLO.vitSDims) (bf16 := true) (eps := "1.0e-6")
+    (smShift := true))
+#guard "vitsin_emadp512wxdropeps0000001smxerfbf16_train_step" ==
+  "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 512 2 true true false true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "smx" ++ "erf" ++ "bf16" ++ "_train_step"
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp512wxdropeps0000001smxerfbf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitsin_emadp512wxdropeps0000001smxerfbf16_fwd" 1000 (vbB := 256)
+    (V := Proofs.StableHLO.vitSDims) (eps := "1.0e-6") (smShift := true))
+#eval IO.FS.writeFile "verified_mlir/vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16_train_step"
+    "256.0" 2 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (vbB := 256) (V := Proofs.StableHLO.vitBDims) (bf16 := true) (eps := "1.0e-6")
+    (acc := 2) (smShift := true))
+#guard "vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 256 2 true true false true (acc := 2) ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "smx" ++ "erf" ++ "bf16" ++ "_train_step"
+#eval IO.FS.writeFile "verified_mlir/vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16_fwd" 1000
+    (V := Proofs.StableHLO.vitBDims) (eps := "1.0e-6") (smShift := true))
+
 -- ── ViT-B at 2 × (4 × 128), accumulated, no clip, `smx` ──
 #eval IO.FS.writeFile "verified_mlir/vitbin_emaaccdp2x128x4wxdropeps0000001smxerfbf16_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_emaaccdp2x128x4wxdropeps0000001smxerfbf16_train_step"

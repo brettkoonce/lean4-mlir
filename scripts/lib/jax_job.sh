@@ -46,9 +46,9 @@ CMD=(bash -c '
   if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
   else echo "[jax] fresh start"; fi
   cd jax || exit 1
-  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+  exec env JAX_COMPILATION_CACHE_DIR=$HOME/.jax_cache \
     LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
-    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-$HOME/tensorflow_datasets}" \
     "${resume[@]}" '"$JAX_PY"' -u '"$PY_REL"'
 ')
 
@@ -66,14 +66,14 @@ epoch_now() {
 # the pinned stack. Call from the conf's PRECHECK after sourcing scripts/lib/precheck.sh.
 pc_jax_trainer() {
   local ok=0
-  [ "${DRY_RUN:-0}" != "0" ] || mkdir -p "$(dirname "$CKPT_BASE")" /home/skoonce/.jax_cache
+  [ "${DRY_RUN:-0}" != "0" ] || mkdir -p "$(dirname "$CKPT_BASE")" $HOME/.jax_cache
   [ -f "jax/$PY_REL" ] || {
     echo "⛔ missing jax/$PY_REL — scripts/regen_jax_generated.sh sync"; ok=1; }
   # the trainer this runs must be the committed one (a stale .lake/build copy trained the MNv2
   # 350-epoch run at a label smoothing its source had dropped)
   pc_jax_box || ok=1
-  [ -d "${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}/imagenet2012" ] || {
-    echo "⛔ no imagenet2012 under ${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}"; ok=1; }
+  [ -d "${TFDS_DATA_DIR:-$HOME/tensorflow_datasets}/imagenet2012" ] || {
+    echo "⛔ no imagenet2012 under ${TFDS_DATA_DIR:-$HOME/tensorflow_datasets}"; ok=1; }
   # the pinned stack only (other jax versions break bf16 convs); on ares the pin is READ from the
   # lock, on the 3060 box it is that box's own cuda13 stack (the lock is ares' cuda12 one)
   local pin; pin="${JAX_PIN_WANT:-$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)}"

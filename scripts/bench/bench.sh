@@ -6,6 +6,8 @@
 #     scripts/bench/bench.sh [plan] <net:path:job> …             # rows spelled out; path = jax | verified
 #
 #   BENCH_EPOCHS=2      epochs per row; epoch 1 carries compile, epoch 2 is the number
+#   BENCH_IMAGES=N      stop each row after N training images instead (bench_run.py --images), for a
+#                       rented box where two whole epochs of every row cost more than the answer
 #   BENCH_DIR=…         output (default runs/<date>-bench-<host>/: bench.tsv, one dir per row)
 #
 # Each row is a real job conf (scripts/jobs/<job>.conf), sourced the way scripts/supervise.sh sources
@@ -79,9 +81,20 @@ row() (
   # after the PRECHECK: the A3 conf refuses MAX_EPOCHS below EPOCHS, rightly, for a real run
   [ "$path" = verified ] && ENV_EXTRA+=(LEAN_MLIR_CKPT_TAG="bench$STAMP" LEAN_MLIR_MAX_EPOCHS="$E")
   [ "$PLAN" = 1 ] && exit 0
+  local cap=()
+  if [ -n "${BENCH_IMAGES:-}" ]; then
+    cap=(--images "$BENCH_IMAGES")
+    if [ "$path" = verified ]; then
+      local b r kv
+      for kv in "${ENV_EXTRA[@]}"; do
+        case "$kv" in LEAN_MLIR_BATCH=*) b=${kv#*=};; LEAN_MLIR_REPLICAS=*) r=${kv#*=};; esac
+      done
+      cap+=(--images-per-step "$((b * r))")
+    fi
+  fi
   env CUDA_VISIBLE_DEVICES="$DEVS" "${ENV_EXTRA[@]}" RUNDIR="$rd" \
     python3 scripts/bench/bench_run.py --row-dir "$rd" --tsv "$TSV" --job "$job" --path "$path" \
-      --net "$net" --epochs "$E" "${expect[@]}" -- "${CMD[@]}"
+      --net "$net" --epochs "$E" "${cap[@]}" "${expect[@]}" -- "${CMD[@]}"
   local rc=$?
   if [ "$path" = jax ]; then rm -rf "$CKDIR/$job"
   else rm -f .lake/build/*_ckpt_xla_bench"$STAMP".bin*; fi
