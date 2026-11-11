@@ -1,8 +1,8 @@
-# Apple Silicon Mac — the verified MNIST tier on Metal
+# Apple Silicon Mac — the verified path on Metal
 
-**Status: works — every rung green on an M1 MacBook Air (2026-10-13). TODO: full runs.** The
-MNIST tier trains end to end and matches CUDA; CIFAR-10 and ResNet-34 on Imagenette train, but
-only partial runs have been done so far (§ Measured).
+**Status: works.** Every rung is green on an M1 MacBook Air (2026-10-13, § Measured), and an
+M5 Pro Mac mini has run the platform suite, MNIST, the twelve CIFAR arms and all seven Imagenette
+nets at 80 epochs (2026-11-08, § Measured on M5 Pro).
 
 The trainers reach a GPU through a PJRT plugin that the shim (`ffi/pjrt_ffi.c`) `dlopen`s, so a
 Mac needs a Metal plugin and nothing else. The plugin is
@@ -130,8 +130,8 @@ time (two at once share the GPU and roughly halve each).
 | MNIST linear, 12 ep | ~0.35–0.5 s | **92.10 %** | 92.10 % |
 | MNIST MLP, 12 ep | ~1.4 s | **97.79 %** | 97.78 % (median of 30) |
 | MNIST CNN, 12 ep | ~13.4 s | **98.71 %** | 98.78 % (median of 30) |
-| CIFAR-10 `lake run cifar` | — | trains; TODO: full run | 76.3 % |
-| ResNet-34, Imagenette 224² | ~5.7 min | 46.0 % val at epoch 3 (stopped); ~7.5–8 h for 80 ep. TODO: full run | 89.99 % |
+| CIFAR-10 `lake run cifar` | — | trains; the full run is the M5 Pro's, below | 76.3 % |
+| ResNet-34, Imagenette 224² | ~5.7 min | 46.0 % val at epoch 3 (stopped); ~7.5–8 h for 80 ep. The full run is the M5 Pro's, below | 89.99 % |
 
 The seven Imagenette nets (ResNet-34/50, MobileNetV2/V4, EfficientNet-B0, ConvNeXt-T, ViT-Tiny)
 all compile on Metal, ConvNeXt's and ViT's ~550–600-output train steps in ~1.4 s. On a 16 GB

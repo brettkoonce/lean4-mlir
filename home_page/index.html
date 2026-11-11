@@ -69,15 +69,20 @@ Current version <code>v0.8.0</code> (<a href="https://github.com/brettkoonce/lea
 
 <h2>The tour</h2>
 
-<p>Four commands, one per scale, in the order the book meets the nets, then the demos. The numbers are the
-book's, from the verified XLA path on one RTX 4060 Ti unless the row says otherwise; the two Imagenette
-side quests the book does not quote (ResNet-50, MobileNetV4) are medians of five seeds. Setup is the
-book's <a href="blueprint/app-getting_started.html">Getting started</a>, one track per tier; the short form is</p>
+<p>Four commands, one per rung of the ladder, in the order the book meets the nets, then the demos. The numbers
+are the book's, from the verified XLA path on one RTX 4060 Ti unless the row says otherwise; the two Imagenette
+side quests the book does not quote (ResNet-50, MobileNetV4) are medians of the same five-seed sweep as the
+chapter nets. Setup is the book's <a href="blueprint/app-getting_started.html">Getting started</a>, one command
+per rung; the short form is</p>
 
 <pre><code>curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
-python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install jax-cuda12-pjrt          # the XLA plugin only (jax-rocm7-pjrt on AMD)
+python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install jax-cuda12-pjrt          # the XLA plugin only (AMD: deploy/rocm10_setup.sh)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so                        # the shim; needs nothing but libc
 lake exe cache get &amp;&amp; ./scripts/datasets/download_mnist.sh &amp;&amp; lake run mnist           # Mathlib oleans, MNIST, the mnist rung</code></pre>
+
+<p>On an Apple Silicon Mac, <code>deploy/mac_setup.sh</code> is those four lines on Metal; the platforms, their
+pins and how far up the ladder each has run are
+<a href="https://github.com/brettkoonce/lean4-mlir/blob/main/PLATFORMS.md">PLATFORMS.md</a>.</p>
 
 <div class="tablewrap">
 <table>
@@ -87,75 +92,78 @@ lake exe cache get &amp;&amp; ./scripts/datasets/download_mnist.sh &amp;&amp; la
       <td class="num">92.10 · 97.81 · 98.77 %</td>
       <td class="num"><a href="blueprint/chap-tensor.html">1</a> · <a href="blueprint/chap-mlp.html">2</a> · <a href="blueprint/chap-cnn.html">3</a></td></tr>
   <tr><td><code>lake run cifar</code></td>
-      <td>the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~5 min)</td>
-      <td class="num">76.3 % — BN + momentum, median of five</td>
+      <td>the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no BN / per-image BN / batch-statistics BN, 40 epochs at a constant lr (~13 min)</td>
+      <td class="num">77.4 % — batch-statistics BN + momentum, median of five</td>
       <td class="num"><a href="blueprint/chap-bn.html">4</a></td></tr>
   <tr><td><code>lake run imagenette</code></td>
-      <td>seven nets on Imagenette at 224², 80 epochs AdamW, book order (~6 h)</td>
-      <td>R34 89.99 (mean of five seeds) · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 90.04 · ConvNeXt-T 82.27 · ViT-Tiny 68.74 %</td>
+      <td>seven nets on Imagenette at 224², 80 epochs AdamW, book order (~6.5 h)</td>
+      <td>R34 89.78 · R50 89.63 · MNv2 88.87 · MNv4-Conv-M 85.96 · B0 89.96 · ConvNeXt-T 83.75 · ViT-Tiny 68.61 % — medians of five seeds, one RTX 3060 per job</td>
       <td class="num"><a href="blueprint/chap-residual.html">5</a> · <a href="blueprint/chap-depthwise.html">6</a> · <a href="blueprint/chap-se.html">7</a> · <a href="blueprint/chap-layernorm.html">8</a> · <a href="blueprint/chap-attention.html">9</a></td></tr>
   <tr><td><code>lake run imagenet</code></td>
       <td>the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, <code>start</code> runs it</td>
-      <td>R34 74.17 · R50 78.08 on RSB-A3 and 77.09 on the 2018 recipe · MNv2 71.12 · MNv4-Conv-M 76.68 (side quest) · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 72.42 % on the verified path, none more than 0.51 from its JAX reference</td>
+      <td>R34 74.14 · R50 77.99 on RSB-A3 and 76.99 on the 2018 recipe · MNv2 71.69 · MNv4-Conv-M 77.42 (side quest) · B0 77.21 · ConvNeXt-T 82.15 · ViT-Tiny 71.61 % on the verified path, none of the seven chapter pairs more than two tenths from its JAX reference, the MobileNetV4 side quest a third of a point behind its own</td>
       <td class="num"><a href="blueprint/app-imagenet_tier.html">Appendix C</a></td></tr>
 </table>
 </div>
 
-<p>The demos ride on the chapter nets, in the order Chapter 10 meets them — recognition, then beyond it, then the games;
+<p>The demos ride on the chapter nets, in the order the bestiary (Chapters 11–13) meets them — recognition, then beyond it, then the games;
 <a href="https://github.com/brettkoonce/lean4-mlir/blob/main/demos/README.md">demos/README.md</a> has the
 command, the figure and the reasoning for each.</p>
 
 <div class="tablewrap">
 <table>
   <tr><th>demo</th><th>command</th><th>the number</th><th>book</th></tr>
-  <tr><td>object detection</td><td><code>lake exe yolov1-visdrone-fpn</code></td>
+  <tr><td>object detection</td><td><code>lake run demo yolo visdrone</code></td>
       <td>VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_detection">10.2.2</a></td></tr>
-  <tr><td>industrial inspection</td><td><code>lake exe yolov1-neudet-fpn</code> (and <code>yolov1-neudet448</code>)</td>
-      <td>NEU-DET mAP@0.5 0.623 with the VisDrone detector unchanged; the single 14×14 grid gets 0.607 here and 0.0391 on the drones</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_inspection">10.2.3</a></td></tr>
-  <tr><td>people watching</td><td><code>lake exe arasl-signs</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_detection">11.2</a></td></tr>
+  <tr><td>industrial inspection</td><td><code>lake run demo yolo neudet</code> (and <code>yolo neudet448</code>)</td>
+      <td>NEU-DET mAP@0.5 0.632 with the VisDrone detector unchanged (mean of three seeds); the single 14×14 grid gets 0.609 here and 0.0391 on the drones</td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_inspection">11.3</a></td></tr>
+  <tr><td>people watching</td><td><code>lake run demo signs</code></td>
       <td>ArASL 98.62 % under the published random split, 77.94 % once each hand's frames stay together</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_people">10.2.4</a></td></tr>
-  <tr><td>agriculture</td><td><code>lake exe plant-leaf</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_people">11.4</a></td></tr>
+  <tr><td>agriculture</td><td><code>lake run demo plant-leaf</code></td>
       <td>PlantVillage 99.57 % on lab leaves, 17.80 % on PlantDoc's field leaves — the CAM and an exact Shapley value say why</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_agriculture">10.2.5</a></td></tr>
-  <tr><td>remote sensing</td><td><code>lake exe rs-bands</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_agriculture">11.5</a></td></tr>
+  <tr><td>remote sensing</td><td><code>lake run demo rs-bands</code></td>
       <td>thirteen Sentinel-2 bands as the knob: 97–98 % on EuroSAT whatever the net sees, but in the Amazon the ten-band net keeps 97.0 % where RGB drops to 87.4 (pasture recall 95 % against 74), and in the Cerrado every arm fails on the seven-class map</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_remote_sensing">10.2.6</a></td></tr>
-  <tr><td>segmentation</td><td><code>lake exe unet-brats-r34</code>, then <code>brats-predict</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_remote_sensing">11.6</a></td></tr>
+  <tr><td>segmentation</td><td><code>lake run demo brats r34</code>, then <code>brats predict</code></td>
       <td>BraTS mIoU 0.741 — a ResNet-34 encoder under a UNet</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_segmentation">10.2.7</a></td></tr>
-  <tr><td>language</td><td><code>lake exe tinygpt-shakespeare</code> (also <code>bigram-shakespeare</code>)</td>
-      <td>2.28 bits/char held-out</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_nlp">10.3.1</a></td></tr>
-  <tr><td>diffusion</td><td><code>lake exe mnist-ddpm-train</code>, then <code>mnist-ddpm-sample</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_nets.html#sec:bestiary_segmentation">11.7</a></td></tr>
+  <tr><td>language</td><td><code>lake run demo shakespeare gpt</code> (also <code>shakespeare bigram</code>)</td>
+      <td>the 212K net lands at 2.23–2.24 bits/char held-out, behind a Kneser-Ney 7-gram's 2.19 on every seed; the 1.2M net with residual dropout 0.2 beats the 7-gram by 0.06 bits/char on three seeds (2.13 against 2.19, streaming)</td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_nlp">12.1</a></td></tr>
+  <tr><td>diffusion</td><td><code>lake run demo ddpm train</code>, then <code>ddpm sample</code></td>
       <td>energy distance to MNIST 0.0067 at 50 network evaluations — ancestral DDIM, ahead of the deterministic sampler at 200</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_diffusion">10.3.3</a></td></tr>
-  <tr><td>physics</td><td><code>lake exe diffusion-2d muller_brown flow</code></td>
-      <td>a flow-matching Boltzmann generator on Müller–Brown; reweighted by its own density it returns the exact well populations to the last digit</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_boltzmann">10.3.4</a></td></tr>
-  <tr><td>signal processing</td><td><code>lake exe gw-detect</code></td>
-      <td>LIGO O3a strain: the chapter-4 CNN reaches half detection at network SNR 6.91 (false-alarm rate 10⁻²), where the matched filter needs 10.32</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_signal">10.3.5</a></td></tr>
-  <tr><td>beyond vision</td><td><code>lake exe nqs-ising gpt</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_diffusion">12.2</a></td></tr>
+  <tr><td>image generation</td><td><code>lake run demo lidc train</code>, then <code>lidc sample</code></td>
+      <td>low-dose chest CT at a tenth of the dose: on LIDC the MSE UNet beats every classical filter by twenty HU and keeps 97.5 % of nodule contrast where the filters keep 49–76 %, but blurs to 56 % of the scan's grain; the generator puts the grain back (110 %) at √2 the error; on Mayo's scanners, never seen, the regression nets land at 82–112 HU with no slice left worse than its input, the noise-predicting generator diverges on one slice in four, and the same net trained to predict the slice itself leaves none worse</td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_ct_synthesis">12.3</a></td></tr>
+  <tr><td>physics</td><td><code>lake run demo diffusion-2d muller_brown flow</code></td>
+      <td>a flow-matching Boltzmann generator on Müller–Brown; reweighted by its own density it returns the exact well populations to within 0.001 on the figure's checkpoint and 0.008 across four training seeds</td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_boltzmann">12.4</a></td></tr>
+  <tr><td>signal processing</td><td><code>lake run demo gw arm=real epochs=6</code></td>
+      <td>LIGO O3a strain: the CIFAR CNN reaches half detection at network SNR 6.91 (false-alarm rate 10⁻²), where the matched filter needs 10.32</td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_signal">12.5</a></td></tr>
+  <tr><td>beyond vision</td><td><code>lake run demo ising gpt</code></td>
       <td>the transverse-field Ising ground state at N = 12: a GPT wavefunction within 3.3 × 10⁻⁶ of the exact energy</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_beyond">10.3.6</a></td></tr>
-  <tr><td>structure</td><td><code>lake exe distogram-casp train …</code>, then <code>predict</code> and <code>scripts/demos/casp16_fold.py</code></td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_beyond">12.6</a></td></tr>
+  <tr><td>structure</td><td><code>lake run demo casp train …</code>, then <code>predict</code> and <code>scripts/demos/casp16_fold.py</code></td>
       <td>CASP16: a 5.4M-parameter distogram ResNet on frozen ESM-2 3B folds 78 evaluation units to TM-score 0.646, against ESMFold's 0.778 on the same language model and the field's median model at 0.892</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_structure">10.3.7</a></td></tr>
-  <tr><td>blackjack</td><td><code>lake exe blackjack-dqn</code> (<code>blackjack-env</code> is the environment and its exact instrument)</td>
-      <td>Double DQN agrees with the exact blackjack policy on 188 of 200 decision states</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_rl">10.4.1</a></td></tr>
-  <tr><td>Pong</td><td><code>lake exe pong-dqn mode=pixels k=4</code> (<code>pong-env</code> for the baselines)</td>
+      <td class="num"><a href="blueprint/chap-bestiary_beyond.html#sec:bestiary_structure">12.7</a></td></tr>
+  <tr><td>Pong</td><td><code>lake run demo pong dqn mode=pixels k=4</code> (<code>pong env</code> for the baselines)</td>
       <td>DQN from four frames on a Pong written in Lean: +15.5 points a game over three seeds, above its own six-number state twin's +13.5 and the scripted tracker's +11.2</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:game_pong">10.4.2</a></td></tr>
-  <tr><td>poker</td><td><code>lake exe deep-cfr-leduc</code> (<code>leduc-env</code> for the exact instrument)</td>
+      <td class="num"><a href="blueprint/chap-bestiary_games.html#sec:game_pong">13.1</a></td></tr>
+  <tr><td>poker</td><td><code>lake run demo leduc cfr</code> (<code>leduc env</code> for the exact instrument)</td>
       <td>Deep CFR on Leduc hold'em, scored by the exact best response: exploitability 0.11–0.23 chips a hand over three seeds and two readouts, against 2.37 for the uniform policy, 1.05 for an honest script and 0.0002 for CFR+</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:game_leduc">10.4.3</a></td></tr>
-  <tr><td>tic-tac-toe</td><td><code>lake exe alphazero-ttt n=3</code> (<code>ttt-env</code> for the solved game)</td>
+      <td class="num"><a href="blueprint/chap-bestiary_games.html#sec:game_leduc">13.2</a></td></tr>
+  <tr><td>tic-tac-toe</td><td><code>lake run demo ttt alphazero n=3</code> (<code>ttt env</code> for the solved game)</td>
       <td>AlphaZero's network alone agrees with the solved game on 97.3 % of 3×3 and 99.4 % of 4×4 positions and never loses to a perfect player at either; at 5×5, four in a row, 87.4 % and unbeaten as X</td>
-      <td class="num"><a href="blueprint/chap-bestiary.html#sec:game_ttt">10.4.4</a></td></tr>
+      <td class="num"><a href="blueprint/chap-bestiary_games.html#sec:game_ttt">13.3</a></td></tr>
+  <tr><td>tic-tac-toe without the rules</td><td><code>lake run demo ttt muzero n=4 iters=120 steps=300 sims=50 qnorm=0 sweepN=20000</code> (<code>mode=score</code> for the model's report card)</td>
+      <td>MuZero's learned model, scored against the solved game at every position and imagined depth: 98.7 % root agreement at 4×4 and unbeaten both sides, the board linearly decodable from the imagined latent on the lines the agent plays (99.7 % of boards after five moves) and lost on random ones (55 %)</td>
+      <td class="num"><a href="blueprint/chap-bestiary_games.html#sec:game_muzero_ttt">13.4</a></td></tr>
 </table>
 </div>
 
@@ -170,7 +178,9 @@ EfficientNet-B0, ConvNeXt-T and ViT-Tiny, with zero project axioms. For every ch
 train-step render in <code>verified_mlir/</code> is tied to those proofs at the denotational level: each
 emitted parameter-update node denotes the certified descent step, and the tiers train on exactly those
 bytes. What stays trusted is the ℝ→Float32 numerics, the per-op text printing, and the lowerer with its
-runtime. The book's <a href="blueprint/app-verification.html">On Verification</a> appendix is the full
+runtime. <a href="https://github.com/brettkoonce/lean4-mlir/blob/main/TRUST.md">TRUST.md</a> puts that on one
+page: which kind of check stands behind each claim, and which hypotheses are discharged. The book's
+<a href="blueprint/app-verification.html">On Verification</a> appendix is the full
 argument, gap by gap; <a href="blueprint/dep_graph_document.html">the dependency graph</a> is the same
 suite as a clickable DAG, and
 <a href="https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/README.md">LeanMlir/Proofs/README.md</a>
@@ -190,8 +200,8 @@ can be read and checked without reading a line of this project.</p>
 
 <p>Training runs through XLA/PJRT, and every number above comes from it. IREE is the second trusted
 lowerer: it is what the differential oracle lowers the Lean side through, so that agreement with the JAX
-reference is evidence from two independent compilers, and each <code>lake run</code> tier has an
-<code>-iree</code> twin.</p>
+reference is evidence from two independent compilers, and the mnist, cifar and imagenette tiers each
+have an <code>-iree</code> twin.</p>
 
 <footer>
 <pre><code>@software{koonce2026,

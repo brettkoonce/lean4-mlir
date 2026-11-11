@@ -420,7 +420,7 @@ convention for the canonical Lean witness. Typical max-error is
 
 `tests/comparator/` runs
 [leanprover/comparator](https://github.com/leanprover/comparator) on
-87 theorems; [its README](../../tests/comparator/README.md) lists
+110 theorems; [its README](../../tests/comparator/README.md) lists
 them by configuration.
 comparator
 re-runs Lean's kernel typechecker independently

@@ -37,11 +37,11 @@ cannot be phrased without ResNet-34 in scope. Making those Mathlib-only would
 mean a second copy of every architecture, which must then never drift from the
 first; that is a weaker guarantee than an import, not a stronger one.
 
-`ChallengeTier.lean` holds the remaining 35 and is **machine-generated**
+`ChallengeTier.lean` holds the remaining 58 and is **machine-generated**
 (`scripts/gates/gen_comparator_tier.py`). It is the layer above the Jacobians: the step
 ties, the codegen faithfulness results, the whole-net back-chains, the
-data-parallel results, the float bridge, the descent result and the three
-certificate theorems — and the three nets the other two files never mention
+loss-gradient theorems, the data-parallel and sync-BatchNorm results, the float
+bridge, the descent results and the four certificate theorems — and the three nets the other two files never mention
 (ResNet-34, ResNet-50, MobileNetV4). Its statements run to hundreds of lines
 apiece (`cnx_net_tiedGB` alone is 186), so they are printed from each
 declaration's own type rather than transcribed: the challenge and the solution
@@ -65,26 +65,28 @@ The 110 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
 `pdiv` to Mathlib's `fderiv`), every chapter's headline Jacobian, the public
 `*HasVJP_correct` wrappers, six whole-network VJPs, and the tie /
 faithfulness / certificate tier. The first two buckets are `Challenge.lean`,
-the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
+the next nine `ChallengeArch.lean`, the bold rows `ChallengeTier.lean`:
 
 | Bucket | Theorems |
 |---|---|
 | Foundation calculus rules | `pdiv_is_fderiv`, `pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_id`, `pdiv_const`, `pdiv_reindex`, `pdiv_finset_sum`, `pdivMat_rowIndep` |
 | Mat-level structural rules | `pdivMat_comp`, `pdivMat_matmul_left_const`, `pdivMat_scalarScale`, `pdivMat_transpose` |
-| Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `denseWeightGrad_correct`, `denseBiasGrad_correct`, `reluHasVJP_correct`, `mlpHasVJP_correct`, `reluHasVJPAt_correct`, `mlpHasVJPAt_correct` |
-| Ch 4 CNN | `maxPool2HasVJP3_correct`, `maxPool2HasVJPAt3_correct`, `conv2dHasVJP3_correct`, `globalAvgPoolFlatHasVJP_correct` |
-| Ch 5 BN | `pdiv_bnAffine`, `pdiv_bnCentered`, `pdiv_bnIstdBroadcast`, `pdiv_bnNormalize` (the famous 3-term cancellation) |
-| Ch 6 Residual | `residualHasVJP_correct`, `residualProjHasVJP_correct` |
-| Ch 7 Depthwise | `depthwiseHasVJP3_correct` |
-| Ch 8 SE | `seBlockHasVJP_correct` |
-| Ch 9 LN+GELU | `pdiv_gelu`, `geluHasVJP_correct`, `layerNormHasVJP_correct` |
-| Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpaBackQ/K/V_correct`, `mhsaHasVJPMat_correct`, `transformerBlockHasVJPMat_correct` |
+| Ch 2 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `denseWeightGrad_correct`, `denseBiasGrad_correct`, `reluHasVJP_correct`, `mlpHasVJP_correct`, `reluHasVJPAt_correct`, `mlpHasVJPAt_correct` |
+| Ch 3 CNN | `maxPool2HasVJP3_correct`, `maxPool2HasVJPAt3_correct`, `conv2dHasVJP3_correct`, `globalAvgPoolFlatHasVJP_correct` |
+| Ch 4 BN | `pdiv_bnAffine`, `pdiv_bnCentered`, `pdiv_bnIstdBroadcast`, `pdiv_bnNormalize` (the famous 3-term cancellation) |
+| Ch 5 Residual | `residualHasVJP_correct`, `residualProjHasVJP_correct` |
+| Ch 6 Depthwise | `depthwiseHasVJP3_correct` |
+| Ch 7 SE | `seBlockHasVJP_correct` |
+| Ch 8 LN+GELU | `pdiv_gelu`, `geluHasVJP_correct`, `layerNormHasVJP_correct` |
+| Ch 9 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpaBackQ/K/V_correct`, `mhsaHasVJPMat_correct`, `transformerBlockHasVJPMat_correct` |
 | Whole-network VJPs | `mnistLinearHasVJP_correct`, `vitFullHasVJP_correct`, `cnnHasVJPAt_correct`, `mobilenetv2HasVJPAt_correct`, `convnextHasVJP{,_at}_correct`, `efficientnetHasVJP{,_at}_correct` |
-| **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied`, `cnx_net_tiedGB` |
+| **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied`, `cnx_net_tiedGB`, `{lin,mlp,cnn}_train_step_tiedB` |
+| **Tier: loss gradients** | `{r34,r50,mnv2,mnv4,enet,cnx,vit}_net_lossGrad`, `{linear,mlp,cnn}_net_lossGrad`, `{cifar,cifar8,cifar8Bn}_net_lossGrad` |
 | **Tier: codegen faithfulness** | `mnv4FwdGraphBFull_faithful`, `convStridedWGradB_den` |
-| **Tier: whole-net back-chains** | `resnet50ForwardBFullHasVJPAt_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradBFull_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTinyHasVJP_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `sealX_nonconstant` |
-| **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `adamW_at_allReduceMeanF` |
-| **Tier: float / descent** | `linear_e4m3_argmax_preserved`, `trained_linear_sgd_strictly_descends` |
+| **Tier: whole-net back-chains** | `resnet50ForwardBFullHasVJPAt_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradBFull_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTinyHasVJP_correct`, `bn_input_grad_correct`, `pdiv_tileWPair`, `smoothedCE_grad`, `sealX_nonconstant`, `sealX_backward_nontrivial` |
+| **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `dpMeanGrad_eq_globalBatchGrad_contiguous`, `dpSyncGrad_eq_globalBatchGrad`, `adamW_at_allReduceMeanF` |
+| **Tier: sync BatchNorm** | `bnSyncTensor4_shard_eq_global`, `den_bnSyncBack_allReduce`, `den_allReduceMeanF_convWeightGradBBf16_sub_global`, `{resnet34,resnet50,mobilenetv2,mnv4,efficientnet}FwdGraphSyncFull_shard`, `{r34,r50,mnv2,mnv4}_net_syncTiedB`, `efficientnet_net_syncTiedG` |
+| **Tier: float / descent** | `linear_e4m3_argmax_preserved`, `trained_linear_sgd_strictly_descends`, `trained_cnn_conv{1,2}{,_bias}_sgd_descends_concrete` |
 | **Tier: certificates** | `lipschitz_margin_certified_radius`, `scorecard_sdp`, `smoothing_certified_radius_classifier`, `shampoo_eq_muon` |
 
 For each, comparator confirms:

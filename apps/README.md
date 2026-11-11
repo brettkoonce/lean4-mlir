@@ -1,7 +1,7 @@
 # `apps/` — the chapter trainers
 
 One `Main` per `lake exe`; [`lakefile.lean`](../lakefile.lean) maps each exe name to its file.
-The tour in the [top-level README](../README.md) runs these by tier. The Chapter 10 demos are
+The tour in the [top-level README](../README.md) runs these by tier. The demos of Chapters 11–13 are
 in [`demos/`](../demos/).
 
 | directory | what runs from it | chapters |

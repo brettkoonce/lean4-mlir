@@ -1,93 +1,49 @@
-# Phase 2 — Lean → JAX
+# `jax/` — the JAX reference path
 
-Lean 4 as a metaprogramming layer that emits idiomatic JAX Python.
-The generated script gets `value_and_grad` autodiff and XLA JIT for
-free, runs on any JAX-supported device.
+Lean 4 as a metaprogramming layer that emits JAX Python. The same `NetSpec` the verified path
+renders to StableHLO is walked here into a readable training script, and JAX's `value_and_grad`
+supplies the gradients. That makes this directory the project's independent second opinion:
 
-This is the working middle ground between [`mnist-lean4/`](../historical/mnist-lean4)
-(pure Lean 4 with hand-written gradients, slow) and the phase 3 IREE
-pipeline at the project root (no Python at all, MLIR straight to GPU).
+- **The ImageNet references.** Every pair in the book's Appendix C is this path against the
+  verified one, same recipe, same validation protocol. `lake run imagenet --jax` (from the repo
+  root) plans or launches the reference half of each row through
+  [`scripts/jobs/`](../scripts/jobs/)'s `*-jax-4gpu` confs.
+- **The VJP oracle's ground truth.** [`tests/vjp_oracle/`](../tests/vjp_oracle/) trains one
+  batch on both paths from the same init and diffs the loss after the first update; the
+  `vjp-oracle-*` and `verified-oracle-*` exes here are the JAX side.
+
+It is its own Lake package (`jax/lakefile.lean`, depending on the parent for `LeanMlir.Types`
+and `LeanMlir.Spec`), so everything below is built from inside `jax/`.
 
 ## What's here
 
-```
-jax/
-├── Jax.lean              -- umbrella: re-exports LeanMlir.Types/Spec + Jax.Codegen/Runner
-├── Jax/
-│   ├── Codegen.lean      -- ~1100 lines, walks NetSpec → JAX Python
-│   └── Runner.lean       -- find Python, write generated_*.py, exec
-├── MainMlp.lean          -- MNIST MLP (S4TF book Ch. 1)
-├── MainCnn.lean          -- MNIST CNN (S4TF book Ch. 2)
-├── MainCifar.lean        -- CIFAR-10 CNN (S4TF book Ch. 3)
-├── MainResnet.lean       -- ResNet-34
-├── MainResnet50.lean     -- ResNet-50
-├── MainMobilenet.lean    -- MobileNet v1 (depthwise separable)
-├── MainMobilenetV2.lean  -- MobileNet v2 (inverted residual)
-├── MainMobilenetV3.lean  -- MobileNet v3 (hard-swish + SE)
-├── MainMobilenetV4.lean  -- MobileNet v4 (UIB)
-├── MainEfficientNet.lean -- EfficientNet-B0 (MBConv + SE + Swish)
-├── MainEfficientNetV2.lean -- EfficientNet V2-S (Fused-MBConv early)
-├── MainSqueezeNet.lean   -- SqueezeNet (fire modules)
-├── MainVgg.lean          -- VGG-16-BN
-└── MainVit.lean          -- ViT-Tiny (patch embed + transformer)
-```
-
-The Lean spec types (`NetSpec`, `Layer`, `TrainConfig`) live in
-`LeanMlir/Types.lean` and `LeanMlir/Spec.lean` — they're shared with
-the phase 3 backend at the project root.
+| | |
+|---|---|
+| `Jax/Codegen.lean`, `Jax/Runner.lean` | the generator: `NetSpec` → JAX Python, then find a Python, write `.lake/build/generated_*.py` and run it |
+| `Main*.lean` | one trainer per net and scale: MNIST (`MainMlp`, `MainCnn`), CIFAR (`MainCifar`), the Imagenette nets, and the `*Imagenet` trainers behind the ImageNet references |
+| `generated/` | committed copies of the generated ImageNet trainers |
+| `scripts/` | full-50k evaluators (`eval_*_full50k.py`), smoke tests, benches and the supervisors |
+| `runs/` | the reference runs' logs and results |
+| `probe/` | the Imagenette step-time probes and their estimator ([README](probe/README.md)) |
+| `tests/vjp_oracle/` | the oracle's JAX-side fixtures |
+| `timm_eval_protocols.json` | the validation protocol each net is scored under |
+| `requirements-{cuda,rocm}-lock.txt` | the pinned environments |
 
 ## Quick start
 
-### 1. Install Lean 4
-
 ```bash
-curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
+curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
+python3 -m venv .venv && .venv/bin/pip install -r jax/requirements-cuda-lock.txt        # or requirements-rocm-lock.txt
+./scripts/datasets/download_mnist.sh                                                    # also download_cifar.sh, download_imagenette.sh
+cd jax && lake build mnist-mlp resnet34
+.lake/build/bin/mnist-mlp
+.lake/build/bin/resnet34 /path/to/imagenette     # the data directory is the one argument
 ```
 
-### 2. Install JAX
-
-CPU-only (no GPU):
-```bash
-python3 -m venv .venv
-.venv/bin/pip install jax jaxlib
-```
-
-GPU: install the **pinned** environment for your backend. Both backends are
-on jax 0.10.0 — see **Pinned environments** below.
-```bash
-# AMD / ROCm — jax 0.10.0 (tested on gfx1100; see ROCm status below):
-.venv/bin/pip install -r requirements-rocm-lock.txt
-
-# NVIDIA / CUDA — jax 0.10.0 (tested on ares 6× 4060 Ti; see CUDA status below):
-.venv/bin/pip install -r requirements-cuda-lock.txt
-```
-
-### 3. Get data
-
-```bash
-./scripts/datasets/download_mnist.sh        # MNIST (MLP, CNN)
-./scripts/datasets/download_cifar.sh        # CIFAR-10
-./scripts/datasets/download_imagenette.sh   # Imagenette (ResNet, MobileNet, ViT, etc.)
-```
-
-### 4. Build and run
-
-From the project root:
-
-```bash
-lake build mnist-mlp mnist-cnn cifar-cnn squeezenet mobilenet-v1 mobilenet-v2 \
-      mobilenet-v3 mobilenet-v4 efficientnet-b0 efficientnet-v2s vgg16bn \
-      resnet34 resnet50 vit-tiny
-
-.lake/build/bin/mnist-mlp        # 7.5s
-.lake/build/bin/mnist-cnn        # 23s on GPU
-.lake/build/bin/resnet34         # 50 min on 6× GPU
-.lake/build/bin/vit-tiny         # 45 min on 6× GPU
-# etc.
-
-# Custom data dir
-.lake/build/bin/resnet34 /path/to/imagenette
-```
+Each exe writes its script to `jax/.lake/build/generated_<net>.py` and runs it, so the Python is
+there to read after a build. Both locks pin jax 0.11.0 (`jax-cuda12-*` or `jax-rocm7-*`), and jax
+0.10 onward needs Python ≥ 3.11. To refresh a lock, `pip freeze > requirements-<backend>-lock.txt`
+from the matching venv.
 
 ## How it works
 
@@ -108,97 +64,20 @@ lake build mnist-mlp mnist-cnn cifar-cnn squeezenet mobilenet-v1 mobilenet-v2 \
 
 The generated Python is readable and auditable — open `.lake/build/generated_resnet34.py` after a build.
 
-## GPU / multi-GPU
+## Multi-GPU
 
-The generated Python is GPU-ready — **zero code changes needed**. JAX
-auto-dispatches to GPU when one is available:
+Data parallelism is in the generated script: a `jax.sharding` `Mesh` over every visible device,
+parameters replicated, batches sharded. `CUDA_VISIBLE_DEVICES` picks the cards; nothing in the
+Lean spec changes.
 
-```bash
-# CUDA (NVIDIA) — jax 0.10.0:
-pip install -r requirements-cuda-lock.txt
+## History: phase 2
 
-# ROCm (AMD) — jax 0.10.0:
-pip install -r requirements-rocm-lock.txt
-```
+Everything below is the record of this path when it was the project's trainer, spring to summer
+2026, before the verified renders existed. The numbers are that period's (six RTX 4060 Ti,
+instance norm, a short Adam recipe) and are not the book's; the bring-up notes for each backend
+are in [`../historical/CUDA.md`](../historical/CUDA.md) and [`../historical/ROCM.md`](../historical/ROCM.md).
 
-**Multi-GPU data parallelism** is automatic via `jax.sharding`. The codegen
-emits a `Mesh` + `NamedSharding` setup that detects all available GPUs,
-replicates params, and shards batches across devices. No changes to the
-Lean spec or training config — just add more GPUs.
-
-### Pinned environments
-
-Each backend's environment is a `pip freeze` lock, so a newcomer gets a
-known-good set rather than whatever is newest on PyPI:
-
-| backend | jax | lock file |
-|---|---|---|
-| CUDA (NVIDIA) | **0.10.0** | `requirements-cuda-lock.txt` |
-| ROCm (AMD) | **0.10.0** | `requirements-rocm-lock.txt` |
-
-Both are committed; they share the same comparator dependency set, with
-only the GPU stack swapped (`jax-cuda12-*` + `nvidia-*-cu12` ↔
-`jax-rocm7-*`). Both backends are aligned at jax 0.10.0 and
-`iree-base-compiler 3.12.0rc20260428` — the CUDA bump from 0.9.2 was
-validated against the comparator (mnist-mlp, cifar-cnn, and the bf16 +
-4-GPU-sharded R34/ImageNet warmup all matched 0.9.2 within run-noise; see
-CUDA status). To refresh a lock after changing the env,
-`pip freeze > requirements-<backend>-lock.txt` from the matching venv.
-
-### CUDA status (June 2026)
-
-Tested on **ares** — 6× RTX 4060 Ti (Ada, `sm_89`) — with CUDA 12.9 /
-cuDNN 9.23.2.1 / NCCL 2.30.7 and jax 0.10.0 (`jax-cuda12-plugin 0.10.0`).
-All models above run JIT'd on GPU out of the box — no `JAX_DISABLE_JIT`
-or platform workarounds.
-
-**0.9.2 → 0.10.0 bump (validated 2026-06-20).** Adopted after a comparator
-pass on ares: mnist-mlp (98.45%→98.59%) and cifar-cnn (62.85%→62.79%) both
-within run-noise, and the bf16 + bf16-conv + 4-GPU-sharded R34/ImageNet
-warmup produced an identical loss curve (7.27/6.99/6.92 → 7.26/7.00/6.90)
-at ~140–150 ms/step. The version delta is small — the CUDA 12.9 toolkit
-base is unchanged; only jax/jaxlib/jax-cuda12-* (0.9.2→0.10.0), cuDNN
-(9.20.0.48→9.23.2.1), NCCL (2.29.7→2.30.7), and nvshmem (3.6.5→3.7.0) move.
-Note: jax 0.10.0 requires **Python ≥3.11** (ares uses `python3.12`; a fresh
-`python3 -m venv` on a 3.10 box will fail to resolve jax).
-
-Unlike the IREE/verified-codegen path (see [`../historical/CUDA.md`](../historical/CUDA.md)),
-the JAX path needs **no `sm_89` target pinning** — XLA targets Ada
-natively, so there's nothing to forward-JIT.
-
-**Multi-GPU on ares:** the box is 4×4060 Ti (the two cards that stormed PCIe AER
-`BadTLP` under load were pulled 2026-09-08, so there is nothing left to mask):
-
-```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 .lake/build/bin/resnet34
-```
-
-`jax.sharding` then builds the mesh over the 4 visible cards
-automatically.
-
-### ROCm status (April 2026)
-
-Tested on 2× RX 7900 XTX (gfx1100) with ROCm 7.2.0 + jax 0.10.0
-(`jax-rocm7-plugin 0.9.1.post4`). All models below now run with JIT
-on GPU; the earlier `JAX_DISABLE_JIT=1` / `ROCR_VISIBLE_DEVICES=0` /
-`JAX_PLATFORMS=cpu` workarounds are no longer needed.
-
-**Previously open, now fixed (jax 0.10.0):**
-
-- Conv-on-ROCm SIGSEGV (ROCm/MIOpen#3955) — closed.
-- Conv-backward JIT segfault (ROCm/jax#745) — closed.
-- Multi-GPU `Mesh` sharding hang (ROCm/jax#746) — closed.
-
-See [`../historical/upstream-issues/`](../historical/upstream-issues/) for the historical
-reproducers and confirmation comments.
-
-Run conv models on ROCm with:
-```bash
-LLVM_PATH=/opt/rocm/llvm HIP_VISIBLE_DEVICES=0 \
-  .lake/build/bin/mnist-cnn
-```
-
-## Why this exists, and why we moved on
+### Why this existed, and why we moved on
 
 [`mnist-lean4/`](../historical/mnist-lean4) (phase 1) built neural nets from scratch in Lean 4
 with C FFI → OpenBLAS → hipBLAS. That works, but requires hand-written gradients
@@ -213,13 +92,13 @@ The JAX path (phase 2) gives you:
 Compare: the Lean CNN backward pass in phase 1 is ~100 lines of hand-written gradient code.
 The JAX version: zero — `value_and_grad(loss_fn)` does it all.
 
-The phase 3 IREE pipeline (project root) goes one step further: instead of
-generating JAX *Python* and running it through XLA, the codegen emits
-StableHLO MLIR directly and IREE compiles it to a GPU flatbuffer. No Python
+The verified path (project root) goes one step further: instead of
+generating JAX *Python*, the codegen emits StableHLO MLIR directly and a
+lowerer (XLA/PJRT, or IREE) compiles it. No Python
 runtime, no autodiff library — the gradients are computed at codegen time
 in Lean. See the project root README for that path.
 
-## Models trained via this path
+### Models trained via this path
 
 | Model | File | Params | Accuracy | GPU time | Optimizer |
 |-------|------|--------|----------|---------|-----------|
@@ -240,7 +119,7 @@ in Lean. See the project root README for that path.
 
 All Imagenette models trained from scratch on 6× RTX 4060 Ti, no pretrained weights, random crop augmentation. The phase 3 numbers (which use a different training recipe and proper running BN stats) are in [`../historical/RESULTS.md`](../historical/RESULTS.md) and tend to be 5-10 points higher.
 
-## Differences from the S4TF book
+### Differences from the S4TF book
 
 All architectures are **structurally identical** to the Swift for TensorFlow
 implementations — same layer configs, same channel counts. The training recipes
