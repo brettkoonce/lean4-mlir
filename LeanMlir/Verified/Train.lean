@@ -133,7 +133,7 @@ structure VerifiedNet where
 
       There is deliberately no fallback: an empty value on an `.imagenet` net refuses at spawn,
       because a wrong shim fails silently — the wrong augmentation compiles, streams, trains and
-      descends. `scripts/gen_shims.sh` writes all five;
+      descends. `scripts/gen_shims.sh` writes every net's;
       `$SHIM_SCRIPT` still overrides with an explicit path, for a hand-placed or probe shim. -/
   shimScript : String := ""
 
@@ -789,8 +789,8 @@ AutoAugment / RandAugment / random erasing / repeated augmentation. Set it on th
     | some p => [p]
     | none   => [s!"jax/.lake/build/{shimScript}", s!".lake/build/{shimScript}"]
   let some script ← candidates.findM? (fun p => System.FilePath.pathExists p)
-    | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate ALL \
-five with `scripts/gen_shims.sh`, or one with `(cd jax && lake exe <net>-imagenet default \
+    | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate them \
+all with `scripts/gen_shims.sh`, or one with `(cd jax && lake exe <net>-imagenet default \
 --shim)`, or set $SHIM_SCRIPT"
   -- The interpreter must be the PINNED env (jax + tfds), not whatever `python3` is on PATH:
   -- the shim imports tensorflow_datasets and jax. $SHIM_PYTHON overrides; otherwise prefer the

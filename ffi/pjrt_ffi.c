@@ -53,8 +53,6 @@ static const char* const kDefaultPlugins[] = {
 #endif
   ".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so",
   ".venv/lib/python3.12/site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so",
-  "/home/skoonce/lean/claude_max/lean4-jax/.venv/lib/python3.12/"
-  "site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so",
 };
 #define N_DEFAULT_PLUGINS (sizeof(kDefaultPlugins)/sizeof(kDefaultPlugins[0]))
 

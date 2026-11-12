@@ -7511,7 +7511,7 @@ lake run imagenet start r34      # the job r34-default-bf16-4gpu
 \texttt{scripts/jobs/r34-default-bf16-4gpu.conf}, carries the device list,
 both replica knobs, the variant, the per-replica batch and the feed setting;
 \S\ref{sec:getting_started_track4} says what the supervisor behind it does.
-Table~\ref{tab:r34_pjrt} is the run.
+Table~\ref{tab:r34_pjrt} is the run. It takes $23.5$ hours against the reference's $12.7$; Appendix~\ref{app:imagenet_tier} has that ratio for every pair and where the time goes.
 
 \begin{table}[H]
 \centering
@@ -19829,8 +19829,7 @@ Appendix~\ref{app:verification}.
     found. The XLA plugin is missing or is built for a different CUDA/ROCm
     version than the one installed. Installing the plugin wheel into the repo's
     own \texttt{.venv}, as in \emph{Getting started}, puts it
-    where the shim looks by default; anywhere else, set
-    \texttt{\$PJRT\_PLUGIN}.
+    where the shim looks by default. That search expects the venv's Python to be 3.12; on another minor version, or with the plugin anywhere else, set \texttt{\$PJRT\_PLUGIN}.
   \item \textbf{Picking a card, and parameter residency.} As with any GPU
     program, the card is chosen by \texttt{CUDA\_VISIBLE\_DEVICES} on
     NVIDIA, \texttt{HIP\_VISIBLE\_DEVICES} on AMD, and
@@ -19842,10 +19841,8 @@ Appendix~\ref{app:verification}.
     \texttt{lake exe cache get} to populate the local cache. Without it the
     first build compiles all of Mathlib from source ($\sim$45 min), and with it
     oleans download in $\sim$30 seconds.
-  \item \textbf{A run refuses to start over a missing shim} (ImageNet tier).
-    Run \texttt{scripts/gen\_shims.sh}; Appendix~\ref{app:imagenet_tier}.
-  \item \textbf{\texttt{lake run imagenet <name>} refuses with ``OLDER than the render''}
-    (ImageNet tier). The row's precheck compares the binary's timestamp with its
+  \item \textbf{\texttt{imagenet shim not found}} (ImageNet tier). The run refuses to start without its net's generated augmentation shim. Run \texttt{scripts/gen\_shims.sh}; Appendix~\ref{app:imagenet_tier}.
+  \item \textbf{\texttt{lake run imagenet r34} or \texttt{r50} refuses with ``OLDER than the render''} (ImageNet tier). These two rows' precheck compares the binary's timestamp with its
     render's, and a regenerated render triggers it. \texttt{lake build <exe>}
     clears it; Table~\ref{tab:track4_runners} names each row's target.
 \end{itemize}
@@ -20702,6 +20699,33 @@ ViT-Tiny        & DeiT-Ti    & 300 & 71.64 & 90.98 & 71.61 & 90.95 & 48.3 / 62.6
 
 \noindent All seven pairs tie, within two tenths of a point on top-1
 either way.
+
+\medskip\noindent\textbf{Both paths wait on the host's CPU, and the
+verified path waits longer.} Decoding and augmenting $1.28$M images an
+epoch is CPU work, and on a 16-core workstation the data pipeline sets the
+pace, with the cards idle for part of every step. ViT-Tiny is the worked
+case from Chapter~\ref{chap:attention}'s numbers: four RTX 3060 at the
+benchmarked $919$ images a second each could take a $1024$-image step in
+about $280$\,ms, the reference takes $463$ and the verified path $573$. The
+verified path pays more for the same images because they cross a process
+boundary. The tfds pipeline runs in the shim, every batch is copied to
+the trainer as fp32, and some host-side steps send data back across it.
+The JAX trainer does the same work in one process, where those copies are
+fused away. That is the whole gap: its hours are $1.3$ to $1.5$ times the reference's on six
+of the seven rows and $1.85$ times on ResNet-34, and the proven graph
+itself steps faster than either trainer.
+
+The practical consequence is that core count limits this tier before the
+cards do, and a faster card makes it worse. On a rented A100 with 32
+vCPUs the same pipeline held the card to about $30\%$ utilization.
+Keeping the cards busy takes on the order of $64$ to $128$ cores, an
+estimate scaled from those two cases; on a desktop CPU the hours in
+Table~\ref{tab:track4_results} are what to expect. MobileNetV4
+(\S\ref{sec:mnv4_side_quest}) is the pair where the order flips: its
+reference is bound by its own input pipeline, and the verified path
+finishes in $91$ hours against $114$.
+
+\noindent
 \texttt{scripts/jobs/} also carries siblings of these rows that differ in
 precision or accumulation shape and never in recipe, plus
 \texttt{selftest}, which exercises the supervisor without a GPU.
