@@ -111,6 +111,11 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBDrop
 import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncBDrop
 import LeanMlir.Proofs.Nets.ResNet.ResNetFullEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncBDrop
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDropVJP
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBDoVJP
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0DropVJP
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtDropVJP
+import LeanMlir.Proofs.Nets.ViT.ViTDropVJP
 import LeanMlir.Proofs.Foundation.DropLayers
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
@@ -2840,6 +2845,35 @@ open Proofs
 #audit_axioms Proofs.StableHLO.mnv4Res7aDropGraphSync_shard
 #audit_axioms Proofs.StableHLO.mnv4Res7bDropGraphSync_shard
 #audit_axioms Proofs.StableHLO.mnv4FwdGraphSyncFullDrop_shard
+
+-- THE WHOLE-NET INPUT VJP AT THE MASKS, all six nets with a drop site
+#audit_axioms Proofs.r50SmoothAtBD_none
+#audit_axioms Proofs.r50NetDropLayer_fwd_apply
+#audit_axioms Proofs.r50SmoothAtBD_ok
+#audit_axioms Proofs.resnet50ForwardBFullDropHasVJPAt
+#audit_axioms Proofs.resnet50ForwardBFullDropHasVJPAt_correct
+#audit_axioms Proofs.r50NetDropLayer_graph_faithful
+#audit_axioms Proofs.resnet50ForwardBFullDrop_differentiableAt
+#audit_axioms Proofs.ResNet50TieB.r50LossSmoothAtB_of_smoothAtBD
+#audit_axioms Proofs.Mnv4TieB.mnv4ChainBDrop
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOptHasVJPAt
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOptHasVJPAt_correct
+#audit_axioms Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOpt_differentiableAt
+#audit_axioms Proofs.MobileNetV2TieB.mnv2HeadBDoOpt_differentiableAt
+#audit_axioms Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOptHasVJPAt
+#audit_axioms Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOptHasVJPAt_correct
+#audit_axioms Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOpt_differentiableAt
+#audit_axioms Proofs.efficientnetForwardBFullDrop_eq_chain
+#audit_axioms Proofs.efficientnetForwardBFullDropHasVJP
+#audit_axioms Proofs.efficientnetForwardBFullDropHasVJP_correct
+#audit_axioms Proofs.efficientnetForwardBFullDrop_differentiable
+#audit_axioms Proofs.CnxTieGB.cnxStemFwdOHasVJP
+#audit_axioms Proofs.CnxTieGB.cnxNetBHasVJPAt
+#audit_axioms Proofs.CnxTieGB.cnxNetBHasVJPAt_correct
+#audit_axioms Proofs.CnxTieGB.cnxNetB_differentiableAt
+#audit_axioms Proofs.ViTTieGB.vitNetBHasVJPAt
+#audit_axioms Proofs.ViTTieGB.vitNetBHasVJPAt_correct
+#audit_axioms Proofs.ViTTieGB.vitNetB_differentiableAt
 
 -- RESNET-34 AND RESNET-50 AT INFERENCE (ResNetFullEval.lean)
 #audit_axioms Proofs.StableHLO.r34IdGraphEval_faithful

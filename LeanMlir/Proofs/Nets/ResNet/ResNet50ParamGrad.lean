@@ -753,6 +753,14 @@ theorem r50LossSmoothAtB_of_smoothAtB {N q nCls : Nat} {w : R50BWeights nCls}
   s4b1 := by rw [r50PreD14_none]; exact r50IdSmoothAtD_none hx.s4b1
   s4b2 := by rw [r50PreD15_none]; exact r50IdSmoothAtD_none hx.s4b2
 
+/-- The masked input-VJP bundle implies the loss-gradient one at the same sites: only the stem
+    pool's clause differs, and the strict one implies the one that allows twins. -/
+theorem r50LossSmoothAtB_of_smoothAtBD {N q nCls : Nat} {w : R50BWeights nCls}
+    {sd : Option (Fin 16 → Vec N)}
+    {x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))}
+    (hx : R50SmoothAtBD N q w sd x) : R50LossSmoothAtB N q w sd x :=
+  ⟨hx.stem, stemPoolTwinAt_of_smoothAt _ _ _ _ hx.pool, hx.s1b0, hx.s1b1, hx.s1b2, hx.s2b0, hx.s2b1, hx.s2b2, hx.s2b3, hx.s3b0, hx.s3b1, hx.s3b2, hx.s3b3, hx.s3b4, hx.s3b5, hx.s4b0, hx.s4b1, hx.s4b2⟩
+
 /-- **Every ResNet-50 parameter gradient node is the derivative of the loss in that parameter.**
     For any loss `L` of the logits with gradient `g` at the net's output, each of the 161 nodes
     `r50_net_tiedB` ties — at the same cotangent — is `∂L/∂θ` of the WHOLE net,

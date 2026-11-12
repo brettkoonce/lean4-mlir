@@ -6359,6 +6359,7 @@ activation; see \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
 \begin{theorem}[ResNet-50 at batch \(N\) has the VJP]
   \label{thm:resnet50FullHasVJP}
   \lean{Proofs.resnet50ForwardBFullHasVJPAt_correct, Proofs.resnet50ForwardBFullHasVJPAt,
+        Proofs.resnet50ForwardBFullDropHasVJPAt_correct,
         Proofs.StableHLO.resnet50FwdGraphEval_faithful}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv,
@@ -6373,8 +6374,11 @@ activation; see \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
   \Prove{} the same for the full-width ResNet-50
   (\texttt{resnet50ForwardBFull}) at every resolution \(q\) --- the image side
   is \(32q\), so \(q = 7\) is the 224-pixel net and \(q = 5\) the 160-pixel
-  one. The eval forward graph denotes \texttt{resnet50ForwardEval} at every
-  \(q\), likewise.
+  one. With stochastic depth as an optional mask on each bottleneck's
+  residual branch, the same holds for the masked forward
+  (\texttt{resnet50ForwardBFullDrop}) at every choice of masks, under the
+  conditions at the masked forward's activations. The eval forward graph
+  denotes \texttt{resnet50ForwardEval} at every \(q\), likewise.
 \end{theorem}
 
 \begin{proof}
@@ -8468,7 +8472,8 @@ MobileNetV4-Conv-M take each of the six rungs in turn.
 
 \begin{theorem}[MobileNetV2 at batch \(N\) has the VJP]
   \label{thm:mobilenetv2FullHasVJP}
-  \lean{Proofs.mobilenetv2ForwardBFullHasVJPAt_correct, Proofs.mobilenetv2ForwardBFullHasVJPAt}
+  \lean{Proofs.mobilenetv2ForwardBFullHasVJPAt_correct, Proofs.mobilenetv2ForwardBFullHasVJPAt,
+        Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOptHasVJPAt_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
@@ -8488,7 +8493,10 @@ MobileNetV4-Conv-M take each of the six rungs in turn.
   (\texttt{mobilenetv2ForwardBFull}: seventeen blocks,
   \(3 \times 224 \times 224\)), equals the \(\pdiv\)-contracted Jacobian of
   the forward at every input, cotangent and index, generic in \(N\) and in
-  the weights.
+  the weights. With classifier dropout as an optional mask before the
+  dense, the same holds for the masked forward
+  (\texttt{mobilenetv2ForwardBFullDoOpt}) at either value of the mask, under
+  the same two conditions.
 \end{theorem}
 
 \begin{proof}
@@ -8503,7 +8511,8 @@ activation; see \leandocref{Proofs.mobilenetv2ForwardBFullHasVJPAt\_correct}.
   \lean{Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt_correct,
         Proofs.StableHLO.mnv4FwdGraphBFullDrop_faithful,
         Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt,
-        Proofs.StableHLO.mobilenetv4ForwardBFullDrop_ones}
+        Proofs.StableHLO.mobilenetv4ForwardBFullDrop_ones,
+        Proofs.Mnv4TieB.mobilenetv4ForwardBFullDropOptHasVJPAt_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
@@ -8525,7 +8534,9 @@ activation; see \leandocref{Proofs.mobilenetv2ForwardBFullHasVJPAt\_correct}.
   its eighteen skip rows and classifier dropout before the dense, the forward
   graph of the \texttt{dropdo} train steps denotes the masked forward at every
   pair of masks and at either precision, and at all-ones masks it is this
-  forward.
+  forward. The masked forward (\texttt{mobilenetv4ForwardBFullDropOpt}) has
+  its VJP the same way at every pair of masks, with every ReLU off its
+  corner at the masked forward's activations.
 \end{theorem}
 
 \begin{proof}
@@ -10140,13 +10151,14 @@ gradient and the data-parallel tie; no seal.
   \label{thm:efficientnetFullHasVJP}
   \lean{Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful,
         Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful, Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful,
-        Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful, Proofs.efficientnetForwardBFullHasVJP}
+        Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful, Proofs.efficientnetForwardBFullHasVJP,
+        Proofs.efficientnetForwardBFullDropHasVJP_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
       def:hasvjp3, def:hasvjpmat, thm:bnBatchTensor4HasVJP, thm:bnHasVJP,
-      thm:denseHasVJP, thm:pdiv_of_affine, thm:residualHasVJP, thm:rowwiseHasVJPMat,
-      thm:seBlockHasVJP, thm:vjpComp}
+      thm:denseHasVJP, thm:identityHasVJP, thm:pdiv_of_affine, thm:residualHasVJP,
+      thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item every BatchNorm's \(\varepsilon > 0\), forty-nine of them
@@ -10163,8 +10175,10 @@ gradient and the data-parallel tie; no seal.
   denote the masked forward at every mask: at training BatchNorm at either
   precision --- the committed \texttt{efficientnetin\_drop\_fwd} and
   \texttt{efficientnetin\_dropdo\_fwd} are the f32 instances --- and at
-  inference BatchNorm in f32, as the eval artifacts are. The graph ties take no hypothesis, and the VJP no
-  smooth-point one: swish and the SE gate have no corner.
+  inference BatchNorm in f32, as the eval artifacts are. The masked
+  training forward has its VJP at every mask and every input too. The graph
+  ties take no hypothesis, and the VJPs no smooth-point one: swish and the
+  SE gate have no corner.
 \end{theorem}
 
 \begin{proof}
@@ -11609,14 +11623,15 @@ step is the certified step; each node is the loss's derivative.
 \begin{theorem}[ConvNeXt-T: VJP and graph]
   \label{thm:convnextFullHasVJP}
   \lean{Proofs.convNextForwardTChHasVJP_correct,
-        Proofs.StableHLO.convNextFwdGraphTCh_faithful, convnextVerified_fwd_faithful}
+        Proofs.StableHLO.convNextFwdGraphTCh_faithful, convnextVerified_fwd_faithful,
+        Proofs.CnxTieGB.cnxNetBHasVJPAt_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:geluErfScalar, ax:geluErfScalarDeriv,
-      ax:geluScalar, ax:pdiv, ax:pdiv_reindex, def:geluForm, def:hasvjp, def:hasvjp3,
-      def:hasvjpmat, thm:chanLNTensor3HasVJP, thm:denseHasVJP, thm:geluHasVJP,
-      thm:identityHasVJP, thm:layerNormVecHasVJP, thm:pdiv_of_affine,
-      thm:residualHasVJP, thm:vjpComp}
+      ax:geluScalar, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex, def:geluForm, def:hasvjp,
+      def:hasvjp3, def:hasvjpmat, thm:biPathHasVJP, thm:chanLNTensor3HasVJP,
+      thm:convnext_loss_grad, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
+      thm:layerNormVecHasVJP, thm:pdiv_of_affine, thm:residualHasVJP, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) at the stem's, the four stages', the three
@@ -11631,7 +11646,10 @@ step is the certified step; each node is the loss's derivative.
   exactly that forward, with no hypothesis, and at the committed ten-class
   spec the function the spec denotes. Stated per example, on the drop-free
   f32 chain: the batched bf16 steps have no typed forward graph, and their
-  backward is tied by the next rung.
+  backward is tied by the next rung. At batch \(N\) with stochastic depth
+  as an optional mask at each block's site, the masked net
+  (\texttt{cnxNetB}) has its VJP at every choice of masks and every input,
+  under one \(\varepsilon > 0\).
 \end{theorem}
 
 \begin{proof}
@@ -13796,15 +13814,18 @@ Op by op along the graph, block by block along the tower; see
 
 \begin{theorem}[ViT-Tiny, the whole network]
   \label{thm:vitTinyHasVJP_correct}
-  \lean{Proofs.vitTinyHasVJP_correct, Proofs.vitTinyInputGrad_eq_vitTiny_vjp}
+  \lean{Proofs.vitTinyHasVJP_correct, Proofs.vitTinyInputGrad_eq_vitTiny_vjp,
+        Proofs.ViTTieGB.vitNetBHasVJPAt_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluErfScalar, ax:geluErfScalarDeriv,
-      ax:geluScalar, ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv,
-      ax:rowSoftmax_flat_differentiable, def:geluForm, def:hasvjp, def:hasvjpmat,
-      thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP,
-      thm:identityHasVJP, thm:identityMatHasVJP, thm:layerNormVecHasVJP,
-      thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
-      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP,
+      ax:geluScalar, ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable,
+      ax:patchEmbedFlatHasVJP, ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_comp,
+      ax:pdiv_reindex, ax:rowSoftmax_flat_differentiable, def:geluForm, def:hasvjp,
+      def:hasvjpmat, thm:biPathHasVJP, thm:biPathMatHasVJP, thm:bnHasVJP,
+      thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP, thm:identityMatHasVJP,
+      thm:layerNormVecHasVJP, thm:pdiv_of_affine, thm:rowwiseHasVJPMat,
+      thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
+      thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP, thm:vit_loss_grad,
       thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
@@ -13816,7 +13837,10 @@ Op by op along the graph, block by block along the tower; see
   \(768\), twelve blocks with distinct parameters, any number of classes ---
   equals the \(\pdiv\)-contracted Jacobian of the flat forward
   \texttt{vitForwardKV} at every input, cotangent and index. The
-  statement is generic in the weights and in the GELU form.
+  statement is generic in the weights and in the GELU form. At batch
+  \(N\) with stochastic depth as an optional mask at each block's two
+  sites, the masked net (\texttt{vitNetB}) has its VJP at every choice of
+  masks and every input.
 \end{theorem}
 
 \begin{proof}

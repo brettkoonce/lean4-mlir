@@ -30,6 +30,10 @@ no node and is `ResNet50FullB`'s forward by `rfl`, `some s` is the `dropPathB` n
   blocks before it; the stem is `r50Pre0`, which has no site. `r50Sd sd k` is block `k`'s site.
 * `resnet50ForwardBFullDrop` — the whole net; `resnet50ForwardBFullDrop_none` and `_ones` are
   the drop-free forward.
+* `r50NetDropLayer`, `R50SmoothAtBD`, `resnet50ForwardBFullDropHasVJPAt` and `_correct` — the
+  whole masked net as one certified layer and its input VJP at a smooth point: the backward is
+  the Jacobian of `resnet50ForwardBFullDrop` in the image, masks held fixed.
+  `r50NetDropLayer_graph_faithful` says the composed backward graph denotes it.
 * `resnet50FwdGraphBFullDrop` and `_faithful` — the typed forward graph at the render's tokens,
   `dropPathB` at `dpName k` exactly where the site is `some`. `FwdGraphTextTies` checks each
   block form against the render. The projection forms name their branch and skip
@@ -546,6 +550,158 @@ theorem resnet50ForwardBFullDrop_ones (N q : Nat) {nCls : Nat} (w : R50BWeights 
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     resnet50ForwardBFullDrop N q w (some fun _ _ => 1) x = resnet50ForwardBFull N q w x := by
   rw [resnet50ForwardBFullDrop, r50PreD16_ones, resnet50ForwardBFull_eq_chain]; rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The whole net as one certified layer, and its input VJP at the masks
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Every relu off its kink and every stem-pool window smooth or dead, at the masked forward's
+    activations**: `R50SmoothAtB` with each block's clauses at its site (`R50{Id,Proj,Down}SmoothAtD`)
+    and at the prefix the masked forward gives it. The stem's clauses are the drop-free ones. -/
+structure R50SmoothAtBD (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : Prop where
+  stem : R34StemSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ x
+  pool : StemPoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+    (cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q)))) w.sW w.sb w.sε w.sγ w.sβ x)
+  s1b0 : R50ProjSmoothAtD N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Sd sd 0) (r50Pre0 N q w x)
+  s1b1 : R50IdSmoothAtD N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Sd sd 1) (r50PreD1 N q w sd x)
+  s1b2 : R50IdSmoothAtD N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Sd sd 2) (r50PreD2 N q w sd x)
+  s2b0 : R50DownSmoothAtD N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 (r50Sd sd 3) (r50PreD3 N q w sd x)
+  s2b1 : R50IdSmoothAtD N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 (r50Sd sd 4) (r50PreD4 N q w sd x)
+  s2b2 : R50IdSmoothAtD N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 (r50Sd sd 5) (r50PreD5 N q w sd x)
+  s2b3 : R50IdSmoothAtD N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 (r50Sd sd 6) (r50PreD6 N q w sd x)
+  s3b0 : R50DownSmoothAtD N (2 * q) (2 * q) w.s3b0 (r50Sd sd 7) (r50PreD7 N q w sd x)
+  s3b1 : R50IdSmoothAtD N (2 * q) (2 * q) w.s3b1 (r50Sd sd 8) (r50PreD8 N q w sd x)
+  s3b2 : R50IdSmoothAtD N (2 * q) (2 * q) w.s3b2 (r50Sd sd 9) (r50PreD9 N q w sd x)
+  s3b3 : R50IdSmoothAtD N (2 * q) (2 * q) w.s3b3 (r50Sd sd 10) (r50PreD10 N q w sd x)
+  s3b4 : R50IdSmoothAtD N (2 * q) (2 * q) w.s3b4 (r50Sd sd 11) (r50PreD11 N q w sd x)
+  s3b5 : R50IdSmoothAtD N (2 * q) (2 * q) w.s3b5 (r50Sd sd 12) (r50PreD12 N q w sd x)
+  s4b0 : R50DownSmoothAtD N q q w.s4b0 (r50Sd sd 13) (r50PreD13 N q w sd x)
+  s4b1 : R50IdSmoothAtD N q q w.s4b1 (r50Sd sd 14) (r50PreD14 N q w sd x)
+  s4b2 : R50IdSmoothAtD N q q w.s4b2 (r50Sd sd 15) (r50PreD15 N q w sd x)
+
+/-- With no sites the bundle is `R50SmoothAtB`. -/
+theorem r50SmoothAtBD_none {N q nCls : Nat} {w : R50BWeights nCls}
+    {x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))}
+    (hx : R50SmoothAtB N q w x) : R50SmoothAtBD N q w none x where
+  stem := hx.stem
+  pool := hx.pool
+  s1b0 := by exact r50ProjSmoothAtD_none hx.s1b0
+  s1b1 := by rw [r50PreD1_none]; exact r50IdSmoothAtD_none hx.s1b1
+  s1b2 := by rw [r50PreD2_none]; exact r50IdSmoothAtD_none hx.s1b2
+  s2b0 := by rw [r50PreD3_none]; exact r50DownSmoothAtD_none hx.s2b0
+  s2b1 := by rw [r50PreD4_none]; exact r50IdSmoothAtD_none hx.s2b1
+  s2b2 := by rw [r50PreD5_none]; exact r50IdSmoothAtD_none hx.s2b2
+  s2b3 := by rw [r50PreD6_none]; exact r50IdSmoothAtD_none hx.s2b3
+  s3b0 := by rw [r50PreD7_none]; exact r50DownSmoothAtD_none hx.s3b0
+  s3b1 := by rw [r50PreD8_none]; exact r50IdSmoothAtD_none hx.s3b1
+  s3b2 := by rw [r50PreD9_none]; exact r50IdSmoothAtD_none hx.s3b2
+  s3b3 := by rw [r50PreD10_none]; exact r50IdSmoothAtD_none hx.s3b3
+  s3b4 := by rw [r50PreD11_none]; exact r50IdSmoothAtD_none hx.s3b4
+  s3b5 := by rw [r50PreD12_none]; exact r50IdSmoothAtD_none hx.s3b5
+  s4b0 := by rw [r50PreD13_none]; exact r50DownSmoothAtD_none hx.s4b0
+  s4b1 := by rw [r50PreD14_none]; exact r50IdSmoothAtD_none hx.s4b1
+  s4b2 := by rw [r50PreD15_none]; exact r50IdSmoothAtD_none hx.s4b2
+
+/-- **ResNet-50 with stochastic depth as one certified layer**, at every batch size, resolution
+    and choice of sites: the stem, the sixteen bottlenecks each with its drop site, and the head,
+    composed with `CertLayer.comp`. Its `.faithful` is a whole-net backward graph, `dropPathB`
+    nodes included, proven to denote the VJP. -/
+noncomputable def r50NetDropLayer (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) :
+    CertLayer (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))) (N * nCls) :=
+  (r34StemLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+      w.sW w.sb w.sε hp.s w.sγ w.sβ).comp <|
+  (r50ProjDropLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0 (r50Sd sd 0)).comp <|
+  (r50IdDropLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1 (r50Sd sd 1)).comp <|
+  (r50IdDropLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2 (r50Sd sd 2)).comp <|
+  (r50DownDropLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0 (r50Sd sd 3)).comp <|
+  (r50IdDropLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1 (r50Sd sd 4)).comp <|
+  (r50IdDropLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2 (r50Sd sd 5)).comp <|
+  (r50IdDropLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3 (r50Sd sd 6)).comp <|
+  (r50DownDropLayer N (2 * q) (2 * q) w.s3b0 hp.s3b0 (r50Sd sd 7)).comp <|
+  (r50IdDropLayer N (2 * q) (2 * q) w.s3b1 hp.s3b1 (r50Sd sd 8)).comp <|
+  (r50IdDropLayer N (2 * q) (2 * q) w.s3b2 hp.s3b2 (r50Sd sd 9)).comp <|
+  (r50IdDropLayer N (2 * q) (2 * q) w.s3b3 hp.s3b3 (r50Sd sd 10)).comp <|
+  (r50IdDropLayer N (2 * q) (2 * q) w.s3b4 hp.s3b4 (r50Sd sd 11)).comp <|
+  (r50IdDropLayer N (2 * q) (2 * q) w.s3b5 hp.s3b5 (r50Sd sd 12)).comp <|
+  (r50DownDropLayer N q q w.s4b0 hp.s4b0 (r50Sd sd 13)).comp <|
+  (r50IdDropLayer N q q w.s4b1 hp.s4b1 (r50Sd sd 14)).comp <|
+  (r50IdDropLayer N q q w.s4b2 hp.s4b2 (r50Sd sd 15)).comp <|
+  r34HeadLayer N q q w.Wd w.bd
+
+/-- The composed layer's forward IS `resnet50ForwardBFullDrop`. -/
+theorem r50NetDropLayer_fwd_apply (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
+    (r50NetDropLayer N q w hp sd).fwd x = resnet50ForwardBFullDrop N q w sd x := by
+  rw [r50NetDropLayer]
+  repeat rw [CertLayer.comp_fwd_apply]
+  rw [r34StemLayer_fwd, r50ProjDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50DownDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50DownDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd, r50DownDropLayer_fwd, r50IdDropLayer_fwd, r50IdDropLayer_fwd,
+    r34HeadLayer_fwd, resnet50ForwardBFullDrop, r50PreD16_apply, r50PreD15_apply, r50PreD14_apply, r50PreD13_apply, r50PreD12_apply, r50PreD11_apply, r50PreD10_apply, r50PreD9_apply, r50PreD8_apply, r50PreD7_apply, r50PreD6_apply, r50PreD5_apply, r50PreD4_apply, r50PreD3_apply, r50PreD2_apply, r50PreD1_apply, r50Pre0_apply]
+
+/-- `R50SmoothAtBD` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
+    input prefix. -/
+theorem r50SmoothAtBD_ok (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtBD N q w sd x) : (r50NetDropLayer N q w hp sd).ok x := by
+  refine CertLayer.comp_ok_of ⟨hx.stem, hx.pool⟩ (r50Pre0 N q w x) rfl ?_
+  refine CertLayer.comp_ok_of (r50ProjDropLayer_ok hp.s1b0 hx.s1b0) (r50PreD1 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s1b1 hx.s1b1) (r50PreD2 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s1b2 hx.s1b2) (r50PreD3 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50DownDropLayer_ok hp.s2b0 hx.s2b0) (r50PreD4 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s2b1 hx.s2b1) (r50PreD5 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s2b2 hx.s2b2) (r50PreD6 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s2b3 hx.s2b3) (r50PreD7 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50DownDropLayer_ok hp.s3b0 hx.s3b0) (r50PreD8 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s3b1 hx.s3b1) (r50PreD9 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s3b2 hx.s3b2) (r50PreD10 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s3b3 hx.s3b3) (r50PreD11 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s3b4 hx.s3b4) (r50PreD12 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s3b5 hx.s3b5) (r50PreD13 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50DownDropLayer_ok hp.s4b0 hx.s4b0) (r50PreD14 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s4b1 hx.s4b1) (r50PreD15 N q w sd x) rfl ?_
+  refine CertLayer.comp_ok_of (r50IdDropLayer_ok hp.s4b2 hx.s4b2) (r50PreD16 N q w sd x) rfl ?_
+  exact ⟨trivial, trivial⟩
+
+/-- **ResNet-50 with stochastic depth has a certified input-VJP at a smooth point**, at every
+    choice of the sixteen masks: `r50NetDropLayer`'s `.vjp`, read at `resnet50ForwardBFullDrop`.
+    The masks are held fixed; the derivative is in the image. `sd := none` is
+    `resnet50ForwardBFullHasVJPAt`'s statement. -/
+noncomputable def resnet50ForwardBFullDropHasVJPAt (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtBD N q w sd x) :
+    HasVJPAt (resnet50ForwardBFullDrop N q w sd) x :=
+  ((r50NetDropLayer N q w hp sd).vjp x (r50SmoothAtBD_ok N q w hp sd x hx)).congr
+    (funext fun v => r50NetDropLayer_fwd_apply N q w hp sd v)
+
+/-- **Public correctness theorem at the masks**: the backward of the masked ResNet-50 equals the
+    `pdiv`-contracted Jacobian of `resnet50ForwardBFullDrop` in the image, at every choice of
+    sites. -/
+theorem resnet50ForwardBFullDropHasVJPAt_correct (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtBD N q w sd x)
+    (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
+    (resnet50ForwardBFullDropHasVJPAt N q w hp sd x hx).backward dy i =
+      ∑ j : Fin (N * nCls), pdiv (resnet50ForwardBFullDrop N q w sd) x i j * dy j :=
+  (resnet50ForwardBFullDropHasVJPAt N q w hp sd x hx).correct dy i
+
+/-- **The whole-net backward graph at the masks denotes that VJP**: `r50NetDropLayer`'s
+    `.faithful`, read at the public VJP. The graph is the composed block backward graphs, each
+    block's `dropPathB` between its outer `selectPos` and bn₃'s backward. -/
+theorem r50NetDropLayer_graph_faithful (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtBD N q w sd x) (e : SHlo (N * nCls)) :
+    den ((r50NetDropLayer N q w hp sd).graph x e)
+      = (resnet50ForwardBFullDropHasVJPAt N q w hp sd x hx).backward (den e) :=
+  (r50NetDropLayer N q w hp sd).faithful x (r50SmoothAtBD_ok N q w hp sd x hx) e
+
+/-- The masked forward is differentiable in the image at every smooth point. -/
+theorem resnet50ForwardBFullDrop_differentiableAt (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (sd : Option (Fin 16 → Vec N)) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtBD N q w sd x) :
+    DifferentiableAt ℝ (resnet50ForwardBFullDrop N q w sd) x := by
+  rw [← funext (r50NetDropLayer_fwd_apply N q w hp sd)]
+  exact (r50NetDropLayer N q w hp sd).diff x (r50SmoothAtBD_ok N q w hp sd x hx)
 
 namespace StableHLO
 

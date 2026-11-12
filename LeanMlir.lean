@@ -147,7 +147,11 @@ MobileNetV2, MobileNetV4 and EfficientNet-B0 synchronise BatchNorm, and each net
 node at the global batch `R·N`. Stochastic depth and classifier dropout are optional mask
 binders on the capstones of the nets whose renders carry them (ResNet-50, MobileNetV2,
 MobileNetV4, EfficientNet-B0, ViT, ConvNeXt): `none` is the drop-free chain, `some` the `*drop*`
-/ `*do*` renders' (`LeanMlir.Proofs.Foundation.DropSites`).
+/ `*do*` renders' (`LeanMlir.Proofs.Foundation.DropSites`). Each of those six nets also has its
+whole-net input VJP stated at the masks, for the function the masked renders train
+(`resnet50ForwardBFullDropHasVJPAt`, `mobilenetv2ForwardBFullDoOptHasVJPAt`,
+`mobilenetv4ForwardBFullDropOptHasVJPAt`, `efficientnetForwardBFullDropHasVJP`,
+`cnxNetBHasVJPAt`, `vitNetBHasVJPAt`).
 
 * ResNet-34 (chapter 5) — [`r34_net_tiedB`](find/#doc/Proofs.ResNet34TieB.r34_net_tiedB);
   non-degeneracy on the full-width batched net,
