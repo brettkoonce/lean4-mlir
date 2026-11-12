@@ -432,9 +432,13 @@ cites \(\to\) move on.'' The dependency DAG is your friend.
 Install first, read while it downloads. Five steps put a trained network on
 your GPU, and after that every chapter opens with a command you can run. This
 is the default path, XLA through PJRT, and the one every number in this book
-was measured on. There is no compiler to build. The proofs rung, the
-GPU platforms with the second lowerer among them, and troubleshooting are
-Appendix~\ref{app:getting_started}; ImageNet-1k is
+was measured on. There is no compiler to build.
+
+With no GPU, the proofs still build: step 1, then
+\texttt{lake exe cache get \&\& lake build ProofsMinimal} lands the first two
+theorems in about a minute. Appendix~\ref{app:getting_started} has the rest
+of that rung, along with the GPU platforms, the second lowerer,
+troubleshooting and a table of every run command. ImageNet-1k is
 Appendix~\ref{app:imagenet_tier}.
 
 \section*{Install}
@@ -450,12 +454,14 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
   \item \textbf{Get an XLA PJRT plugin}, one prebuilt shared library. It
     ships as a JAX wheel because that is where XLA's GPU plugins are packaged,
     but the wheel carries the plugin and nothing else, and the shim opens it
-    directly, so no interpreter runs at training time.
+    directly, so no interpreter runs at training time. Make the venv, then
+    run the one line for your card:
 \begin{verbatim}
 python3 -m venv .venv && . .venv/bin/activate
+
 pip install jax-cuda12-pjrt     # NVIDIA, CUDA 12 -- the PJRT plugin ONLY
-bash deploy/rocm10_setup.sh     # AMD, ROCm 10.1 -- plugin + libraries, as wheels
-pip install jax-oneapi-pjrt 'jax-oneapi-plugin[with-oneapi]'   # Intel Arc
+bash deploy/rocm10_setup.sh     # or AMD, ROCm 10.1 -- plugin + libraries
+pip install jax-oneapi-pjrt 'jax-oneapi-plugin[with-oneapi]'  # or Intel Arc
 \end{verbatim}
     Match the wheel to your CUDA version. On AMD the ROCm 10.1 wheels bring
     ROCm itself, no root, into a venv of their own, and
@@ -477,6 +483,8 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 ./scripts/datasets/download_cifar.sh       # CIFAR-10    (cifar tier)
 ./scripts/datasets/download_imagenette.sh  # Imagenette 320px, 330 MB (imagenette)
 \end{verbatim}
+    \texttt{lake run download} fetches all three and skips what is already
+    on disk.
 
   \item \textbf{Build and run a trainer.} No backend selection: XLA finds
     the device. The linear MNIST classifier of Chapter~\ref{chap:tensor}
@@ -513,8 +521,7 @@ The three times are XLA wall-clocks on one consumer card, resident; the fourth
 tier is weeks of four-card time and has Appendix~\ref{app:imagenet_tier} to
 itself. The Imagenette figure is the five chapter nets at their chapters'
 times, about 4.3 hours between them, plus ResNet-50 (an hour and twenty
-minutes) and MobileNetV4 (forty-three minutes), which ride in the same tier. Each
-trainer's transcript is teed to \texttt{runs/<date>-<trainer>/}. Each tier
+minutes) and MobileNetV4 (forty-three minutes), which ride in the same tier. Each tier
 also has an \texttt{-iree} twin, which is Appendix~\ref{app:getting_started}'s
 business. The tiers bundle these targets, and \texttt{lake run train}
 runs any one of them on its own:
@@ -19762,7 +19769,9 @@ means is the work.
 
 \emph{Getting started}, at the front of the book, is the smallest path from
 zero to a trained model. This appendix is the rest of the toolchain: the
-proofs rung, the GPU platforms and the second lowerer, and troubleshooting.
+proofs rung, the GPU platforms and the suite that admits a new one, the
+second lowerer, troubleshooting, and a table of every run command
+(Table~\ref{tab:run_commands}).
 
 Table~\ref{tab:getting_started_tracks} is the ladder, each rung named by the
 command that climbs it. What you install depends on how far up it you want
@@ -19833,7 +19842,7 @@ tests/comparator/run.sh
 
 \noindent re-runs Lean's kernel typechecker, and five independent checkers
 beside it, over 111 theorems, sandboxed, with an axiom allowlist of exactly
-the three. It needs a built \texttt{Certs} and \texttt{bwrap}. Which 110,
+the three. It needs a built \texttt{Certs} and \texttt{bwrap}. Which 111,
 why thirteen of them are stated in a file that imports nothing but Mathlib,
 and what the run adds to \texttt{\#print axioms} is \S\ref{sec:comparator}
 in Appendix~\ref{app:verification}.
@@ -19856,33 +19865,38 @@ has, which is not a failure, and n/a where nothing can.
 \input{figures/platforms}
 \end{table}
 
-The CUDA 12 pin is the lock file under \texttt{jax/}, the ROCm 10.1 pins are
-in \texttt{deploy/rocm10\_setup.sh}; the CUDA
-13 box's is \texttt{scripts/jobs/\_box.sh}, the Orin's its build script, the
-Arc's its setup script, the Mac's \texttt{deploy/mac\_setup.sh}. Four of the rows are there to make
-a point. The Orin is the core sequence on a commodity computer rather than a
-training box --- the board, a plugin built for it and the tier's memory
-recipe, nothing else. The Imagenette tier runs there end to end, seven nets
-in about 29 hours with ConvNeXt-T as four accumulated micro-batches of
-eight, the six seeded nets inside or within a quarter of a point of their
-five-seed ranges in Table~\ref{tab:imagenette_five} and ConvNeXt-T above
-CUDA's one run; \texttt{deploy/ORIN.md} is its runbook. The Mac
-is the same point on Apple's silicon: Metal through a PJRT plugin, unified
-memory (nothing is staged to the device), float32 only (the MNIST renders use
-no float64), every rung through Imagenette on an M5 Pro Mac mini, and
-\texttt{deploy/MAC.md} is its runbook. The 7900 XTX is the
-second vendor's desktop card: AMD's PJRT plugin on the ROCm 10.1 wheels;
-\texttt{deploy/ROCM\_7900XTX.md} is its runbook.
-The Arc is the third
-vendor's desktop card through the same seam, Intel's PJRT plugin and nothing
-else from this side, with one shim workaround for a race in Intel's SYCL
-runtime, and \texttt{deploy/ARC\_B50.md} is its runbook. A new box is
-admitted by \texttt{scripts/\allowbreak platform/\allowbreak check.sh}: the
-plugin loads, the shim's guards hold and the committed artifacts match
-XLA:CPU goldens, in minutes and without Lean; that is the suite rung, and
-the same run regenerates \texttt{PLATFORMS.md} and Table~\ref{tab:platforms}.
-\texttt{PLATFORMS.md} has each cell's date and a link to its record; where
-a cell is a dash, the runbook says what has been tried.
+A new box is admitted by \texttt{scripts/\allowbreak platform/\allowbreak
+check.sh}: the plugin loads, the shim's guards hold and the committed
+artifacts match XLA:CPU goldens, in minutes and without Lean. That is the
+suite rung, and the same run regenerates \texttt{PLATFORMS.md} and
+Table~\ref{tab:platforms}. \texttt{PLATFORMS.md} has each cell's date and a
+link to its record, and where a cell is a dash the runbook says what has
+been tried. The pins are in the lock file under \texttt{jax/} (CUDA 12),
+\texttt{deploy/rocm10\_setup.sh} (ROCm 10.1), \texttt{scripts/jobs/\_box.sh}
+(the CUDA 13 box), and the build or setup script of the Orin, the Arc and
+the Mac. Four of the rows are there to make a point.
+
+\begin{itemize}
+  \item \textbf{The Orin} is the core sequence on a commodity computer and no
+    training box: the board, a plugin built for it and the tier's memory
+    recipe. The Imagenette tier runs there end to end, seven nets in about 29
+    hours with ConvNeXt-T as four accumulated micro-batches of eight, the six
+    seeded nets inside or within a quarter of a point of their five-seed
+    ranges in Table~\ref{tab:imagenette_five} and ConvNeXt-T above CUDA's one
+    run. \texttt{deploy/ORIN.md} is its runbook.
+  \item \textbf{The Mac} is the same point on Apple's silicon: Metal through
+    a PJRT plugin, unified memory (nothing is staged to the device), float32
+    only (the MNIST renders use no float64), and every rung through
+    Imagenette on an M5 Pro Mac mini. \texttt{deploy/MAC.md} is its runbook
+    and \texttt{deploy/mac\_setup.sh} its install.
+  \item \textbf{The 7900 XTX} is the second vendor's desktop card: AMD's PJRT
+    plugin on the ROCm 10.1 wheels. \texttt{deploy/ROCM\_7900XTX.md} is its
+    runbook.
+  \item \textbf{The Arc} is the third vendor's desktop card through the same
+    seam, Intel's PJRT plugin and nothing else from this side, with one shim
+    workaround for a race in Intel's SYCL runtime.
+    \texttt{deploy/ARC\_B50.md} is its runbook.
+\end{itemize}
 
 \medskip\noindent The last row is not a card but the second lowerer,
 \textbf{IREE}, which compiles every kernel itself and so runs where no
