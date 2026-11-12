@@ -12006,43 +12006,31 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \label{sec:convnext_imagenet}
 
 ConvNeXt's architecture reached this book through the Imagenette example
-earlier in this chapter, and the recipe is the architecture's whole
-thesis, so it comes first here: what it changes from ResNet-34's, then the
-reference, then the verified path, then the two side by side.
+earlier in this chapter, and the recipe is the architecture's whole thesis.
+Trained for 300 epochs by the official recipe, the reference reaches
+\textbf{81.99\%} top-1 and the verified path \textbf{82.15\%}, against the
+paper's $82.1\%$, and the two cannot be told apart on the validation set
+(McNemar $p = 0.18$).
 
-The recipe is the official one, facebookresearch/ConvNeXt's own
-\texttt{main.py} with its README command for ConvNeXt-T: AdamW at
-$4\mathrm{e}{-3}$ for a total batch of $4096$, which four replicas of
-$64$ reach as sixteen accumulated micro-batches, exact because nothing in
-the network couples the examples; a per-step cosine from a 20-epoch
-warmup to a floor of $10^{-6}$; weight decay $0.05$ excluded from the
-norms, biases and layer scales; Mixup $0.8$ or CutMix $1.0$ drawn once
-per batch at $p\,0.5$ with label smoothing $0.1$;
-\texttt{rand-m9-mstd0.5-inc1} with
-its geometric ops filled at the image mean; Random Erasing $p\,0.25$ in
-pixel mode; stochastic depth $0.1$; \texttt{timm}'s \texttt{ModelEma} at
-$0.9999$ held from step $0$ and scored every epoch; the exact erf GELU;
-torchvision's crop at bicubic; no gradient clipping; and an fp32
-evaluation forward, with bf16 under an fp32 classifier head on both
-paths. One thing is disclosed rather than matched: Mixup's $\lambda$ is
-drawn once per $4096$-image step on the reference and once per
-$256$-image micro-batch on the verified path, where the official trainer
-draws it once per $128$, so agreement there is distributional.
+The section runs as the earlier ones did: what the recipe changes from
+ResNet-34's, then the reference, the verified path, and the two side by
+side.
 
 \subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
 
-The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-2018-era recipe: the original paper's SGD-with-momentum plus
-the ``bag of tricks'' polish (cosine schedule, warmup, label
-smoothing, random-resized-crop). The config below is the 2022
-ConvNeXt recipe, DeiT's transformer-training procedure applied to a
-convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
-the 2018$\to$2021 jump on a fixed ResNet, this table shows the
-2018$\to$2022 jump with the block modernized in step. Since
-``the recipe is the thesis'' is this architecture's whole argument,
-Table~\ref{tab:cnx_vs_2018} is the chapter in table form. The
-\texttt{trainAdamSched} entry point is identical in both columns, and
-every row is a one-line change to the \texttt{VerifiedNetSpec}, the
+The recipe is the official one, facebookresearch/ConvNeXt's own
+\texttt{main.py} with its README command for ConvNeXt-T.
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the 2018-era recipe:
+the original paper's SGD with momentum plus the ``bag of tricks'' polish
+(cosine schedule, warmup, label smoothing, random-resized-crop). The 2022
+ConvNeXt recipe is DeiT's transformer-training procedure applied to a
+convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed the
+2018$\to$2021 jump on a fixed ResNet, Table~\ref{tab:cnx_vs_2018} shows the
+2018$\to$2022 jump with the block modernized in step. The recipe is this
+architecture's argument, so the table is the chapter in table form. The
+\texttt{trainAdamSched} entry point is identical in both columns, and every
+row is a one-line change to the \texttt{VerifiedNetSpec}, the
 \texttt{VerifiedConfig}, or the arguments beside them.
 
 \begin{table}[H]
@@ -12069,39 +12057,47 @@ EMA           & none                   & decay $0.9999$                & evaluat
 \end{table}
 
 \noindent What carries over unchanged: cosine LR decay, the
-warmup-then-anneal structure, random-resized-crop + horizontal flip
-as the base augmentation, label smoothing $0.1$, no gradient clipping,
-train and eval both at $224$ (no FixRes), and bf16 convolution under an
-fp32 classifier head.
+warmup-then-anneal structure, random-resized-crop + horizontal flip as the
+base augmentation, label smoothing $0.1$, no gradient clipping, train and
+eval both at $224$ (no FixRes), and bf16 convolution under an fp32
+classifier head.
 
-The augmentation row is the full DeiT pack: Mixup (Zhang et al.\ 2017,
-\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
-(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
+The common thread is the same ``regularize harder, train bigger'' as RSB-A3,
+arrived at from the transformer side: keep cross-entropy and soften the
+targets instead of switching losses, AdamW instead of LAMB at a large batch
+that accumulation reaches as A3's does, stochastic depth and EMA from the
+ViT toolkit, and a $3\times$ longer schedule to let the regularization show
+its gain.
+
+\textbf{The batch of 4096 is accumulated.} The official rate,
+$4\mathrm{e}{-3}$, is set for a total batch of $4096$. Four replicas of $64$
+reach it as sixteen accumulated micro-batches, and that is exact here
+because nothing in the network couples the examples: there is no BatchNorm.
+The optimizer takes $312$ steps an epoch.
+
+\textbf{The augmentation is the full DeiT pack:} Mixup (Zhang et al.\ 2017,
+\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix (Yun et
+al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
 Random Erasing (Zhong et al.\ 2017,
-\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
-RandAugment (Cubuk et al.\ 2019,
-\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
-are implemented as data-only kernels that mutate the input tensor
-before the graph sees it, tier 1 in our codegen scope, no MLIR
-plumbing required. Mixup and CutMix route through a soft-label
-train-step variant since they produce fractional labels. Random
-Erasing and RandAugment leave labels alone.
+\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and RandAugment
+(Cubuk et al.\ 2019,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four are
+data-only kernels that mutate the input tensor before the graph sees it, so
+none needs any MLIR. Mixup and CutMix produce fractional labels and route
+through a soft-label train-step variant.
 
-The common thread is the same ``regularize harder, train bigger''
-as RSB-A3, arrived at from the transformer side: keep cross-entropy
-and soften the targets instead of switching losses, AdamW instead of
-LAMB at a large batch that accumulation reaches as A3's does,
-stochastic depth and EMA from the ViT toolkit, and a $3\times$ longer
-schedule to let the regularization show its gain.
+\textbf{One row is disclosed and not matched.} Mixup's $\lambda$ is drawn
+once per $4096$-image step on the reference and once per $256$-image
+micro-batch on the verified path, where the official trainer draws it once
+per $128$, so agreement there is distributional.
 
 \prosesection{The reference (JAX)}
 
 The reference port wires the three ConvNeXt-specific layers
-(\texttt{.convNextStem} and the two above) into the JAX codegen. Because that path differentiates with
-\texttt{jax.value\_and\_grad}, only the forward had to be written, and
-the backward comes for free. The spec mirrors
-\texttt{jax/MainConvNeXtImagenet.lean}, its recipe as the run below
-trained it:
+(\texttt{.convNextStem} and the two above) into the JAX codegen. That path
+differentiates with \texttt{jax.value\_and\_grad}, so only the forward had
+to be written. The trainer is \texttt{jax/MainConvNeXtImagenet.lean}, and
+its config is the recipe row for row:
 
 \begin{verbatim}
 -- Faithful patchify stem, stage/downsample backbone, 1000 classes.
@@ -12164,50 +12160,37 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   dropPath       := 0.1      -- stochastic depth, ConvNeXt-T paper value
 \end{verbatim}
 
-Unlike ResNet-34's SGD and the RMSProp of MobileNetV2 and
-EfficientNet-B0, ConvNeXt trains with AdamW and a small decoupled weight
-decay. The modernized-convnet
-recipe is half the paper's argument. \texttt{bf16Conv} matters
-most here: the $7\times7$ depthwise is $\sim2.3\times$ faster
-in bfloat16 (a large kernel has enough arithmetic to keep the tensor
-cores busy, unlike the $3\times3$ depthwise, which gains nothing), and
-the inverted-bottleneck $1\times1$s are matmuls that love it. The
-channel LayerNorm and GELU stay in fp32.
+\noindent \texttt{bf16Conv} matters most here. The $7\times7$ depthwise is
+$\sim2.3\times$ faster in bfloat16, because a large kernel has enough
+arithmetic to keep the tensor cores busy where the $3\times3$ depthwise does
+not, and the inverted-bottleneck $1\times1$s are matmuls. The channel
+LayerNorm and GELU stay in fp32.
 
-The run reached $\mathbf{81.99\%}$ top-1 and
-$\mathbf{95.87\%}$ top-5 in $74.1$ hours on four RTX 3060. The same
-checkpoint's live weights score $81.92\%$ / $95.74\%$, so weight averaging
-gives $+0.07$ points at the end of this recipe: the cosine has annealed
-the learning rate to its floor over the final epochs, and weights that have
-stopped moving leave the average little to remove. The last twenty-five
-epochs average $81.93$ / $95.89$, so the final number is the tail's mean,
-not the top of a rise. That is the strongest result in this book's sweep by
-a wide margin, ahead of ResNet-50 RSB-A3 ($78.14\%$), EfficientNet-B0
-($77.17\%$) and ResNet-34 ($73.98\%$), and ConvNeXt-T's $82.1\%$ paper
-headline sits inside the run's 95\% interval ($81.65$--$82.32$).
+The run reached $\mathbf{81.99\%}$ top-1 and $\mathbf{95.87\%}$ top-5 in
+$74.1$ hours on four RTX 3060, and ConvNeXt-T's $82.1\%$ paper headline sits
+inside its 95\% interval ($81.65$--$82.32$). The last twenty-five epochs
+average $81.93$ / $95.89$, so the final number is the tail's mean and not
+the top of a rise. The same checkpoint's live weights score $81.92\%$ /
+$95.74\%$, so weight averaging gives only $+0.07$ points at the end of this
+recipe: the cosine has annealed the rate to its floor, and weights that have
+stopped moving leave the average little to remove.
 
-The validation curve has a shape the recipe predicts. The scored model is
-the EMA shadow at decay $0.9999$, and at batch $4096$ the optimizer takes
-only $312$ steps an epoch, so the initial weights' share of the shadow is
-$0.9999^{312e}$ after $e$ epochs: more than half at twenty, a fifth at
-fifty, a twenty-fifth at a hundred. The shadow scores near chance until
-that share is gone and then climbs steeply, while the training loss falls
-from the first epoch; the slow start is the averaging, not the optimizer.
-From there the curve rises for the rest of the schedule without an
-overfitting turn, which is what the heavy-regularization regime predicts
-and what justifies the long schedule.
+\textbf{The early curve is the EMA.} The scored model is the EMA shadow at
+decay $0.9999$, held from step $0$. At $312$ steps an epoch the initial
+weights' share of the shadow is $0.9999^{312e}$ after $e$ epochs: more than
+half at twenty, a fifth at fifty, a twenty-fifth at a hundred. The shadow
+scores near chance until that share is gone and then climbs steeply, while
+the training loss falls from the first epoch. The slow start is the
+averaging and not the optimizer.
 
-\textbf{Learning-rate robustness.} The full pack was also a test of
-ConvNeXt's learning-rate robustness under AdamW, the test
-Chapter~\ref{chap:se} ran on RMSProp, and here with nothing to lean on,
-because the official recipe does not clip. It is robust: at the
-$4\mathrm{e}{-3}$ peak, top-1 climbed across the whole 300-epoch schedule
-with no erosion and no divergence, where B0's RMSProp had to match TF's
-exact form.
-AdamW's bounded, decoupled step is what lets the heavy augmentation run
-to schedule instead of destabilizing it early. The curve never turns over: it rises through the
-schedule and flattens only across the final forty epochs, where the cosine
-has annealed the learning rate to its floor.
+\textbf{Learning-rate robustness.} The official recipe does not clip, so the
+run was also the test Chapter~\ref{chap:se} ran on RMSProp, with nothing to
+lean on. It passed: at the $4\mathrm{e}{-3}$ peak, top-1 climbed across the
+whole 300-epoch schedule with no erosion and no divergence, where B0's
+RMSProp had to match TF's exact form. The curve never turns over. It
+flattens only across the final forty epochs, where the cosine reaches its
+floor, which is what the heavy-regularization regime predicts and what
+justifies the long schedule.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:convnext_phase4}
@@ -12244,30 +12227,28 @@ $768 \times 1000$, which takes the count from 27,827,818 to
 together at everything else: equal \texttt{toSpecs.size}, equal
 \texttt{toSpecs.pop.pop}, and a \texttt{back!} of \texttt{(\#[1000], 2)}.
 
-\medskip\noindent\textbf{The collectives are gated by two gates, and
-they prove different things.}
-\texttt{tests/TestConvNeXtDpCheck.lean} pins the data-parallel forward
-bit-exactly against its single-device peer. That gate hands both
-replicas the same rows, so it is structurally blind to a shard-offset
-bug, and \texttt{tests/TestConvNeXtShardCheck.lean} closes exactly that
-hole by giving the replicas genuinely different data. Both gates run on
-this chapter's own specs, \texttt{convnext} and \texttt{convnextin}, and
-together they are the empirical half of what
-Theorem~\ref{thm:convnext_step_tie} leaves unstated: that the all-reduced
-step is one device's step on the global batch.
+\medskip\noindent\textbf{The variant carries the recipe.}
+\texttt{convnextin\_\allowbreak emaaccdp16xwxdroperfbf16} is the artifact
+the run used, and its name is the config in tags: the EMA (\texttt{ema}),
+the sixteen-fold accumulation (\texttt{acc\ldots16x}), the weight-decay
+exclusion (\texttt{wx}) and stochastic depth (\texttt{drop}), on top of
+AdamW, the exact GELU, bf16 and the four-way all-reduce. Its state is a
+five-region blob: the parameters, Adam's two moments, the accumulator and
+the EMA shadow. There is no clip, because the official recipe has none, and
+Mixup and CutMix never enter the graph, because they are data-side and ride
+the shim. Theorem~\ref{thm:convnext_step_tie} reaches its bf16 gradient
+nodes at its eighteen drop-path sites.
 
-\medskip\noindent\textbf{The regularizer knobs are render variants, and
-the run carries all of them.} Weight-decay exclusion, stochastic depth,
-EMA and the sixteen-fold accumulation are spelled \texttt{wx},
-\texttt{drop}, \texttt{ema} and \texttt{acc\ldots16x}, and
-\texttt{convnextin\_\allowbreak emaaccdp16xwxdroperfbf16} carries all
-four at once on top of AdamW, the exact GELU, bf16 and the four-way
-all-reduce: a five-region blob, the parameters, Adam's two moments, the
-accumulator and the EMA shadow. There is no clip, because the official
-recipe has none. Theorem~\ref{thm:convnext_step_tie} reaches its bf16
-gradient nodes at its eighteen drop-path sites. Mixup and CutMix never
-enter the graph at all, because they are data-side and ride the shim. It
-ran as the chapter's row in \texttt{lake run imagenet}:
+\medskip\noindent\textbf{Two gates cover the collectives, and they prove
+different things.} \texttt{tests/TestConvNeXtDpCheck.lean} pins the
+data-parallel forward bit-exactly against its single-device peer. It hands
+both replicas the same rows, so it is blind to a shard-offset bug, and
+\texttt{tests/TestConvNeXtShardCheck.lean} closes that hole by giving the
+replicas different data. Both run on this chapter's own specs,
+\texttt{convnext} and \texttt{convnextin}, and together they are the
+empirical half of what Theorem~\ref{thm:convnext_step_tie} leaves unstated:
+that the all-reduced step is one device's step on the global batch. The
+job:
 
 \begin{verbatim}
 lake run imagenet start cnx      # the job cnx-default-emabf16-4gpu
@@ -12281,7 +12262,9 @@ gives $+0.17$ on this path.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:cnx_paths} is the two paths.
+Table~\ref{tab:cnx_paths} is the two paths, Table~\ref{tab:cnx_paths_epochs}
+is both at selected epochs, and Figure~\ref{fig:cnx_paths_curve} is every
+epoch.
 
 \begin{table}[H]
 \centering
@@ -12302,39 +12285,35 @@ total                & 74.1 hr                  & 102.7 hr \\
 \end{tabular}
 \end{table}
 
-\medskip\noindent\textbf{The two paths agree to $0.16$ points on top-1
-and $0.04$ on top-5}, under half the 95\% Wilson half-width ($\pm0.34$ at
-$82\%$ on $50{,}000$ images), at one seed each, with the verified path the
-one ahead. Both checkpoints were scored on the same images in the same
-order, so the comparison can be paired instead of read off two intervals.
-Of the $50{,}000$, both paths get $39{,}347$ right and $7{,}280$ wrong;
-$1{,}647$ are right only on the reference and $1{,}726$ only on the
-verified path. McNemar's exact test asks whether those $3{,}373$
-discordant images split unevenly, and answers $p = 0.18$
-(\texttt{scripts/demos/\allowbreak mcnemar.py}): a net of $79$ flips does
-not separate the two checkpoints. The live weights say the same,
-$1{,}801$ against $1{,}830$ at $p = 0.64$. What the pair does not isolate
-is variance. The drop-path and Mixup masks are host-drawn on one path and
-\texttt{jax.random}'s on the other, and the seeds differ, so $6.7\%$ of
-images decided differently is what two ConvNeXt-Ts differing in seed and
-mask source disagree on here; a two-seed pair on one path, which would
-bound the spread alone, has not been run. ``Not separable'' is the claim,
-not ``identical''. Like ViT, ConvNeXt has no BatchNorm to normalize over
-a different group, and both arms score the same averaged weights, so
-this is a one-variable pair: the lowering.
+\medskip\noindent\textbf{The two paths tie.} The verified path is $+0.16$ on
+top-1 and $+0.04$ on top-5, under half the 95\% Wilson half-width
+($\pm0.34$ at $82\%$ on $50{,}000$ images) at one seed each. Paired on the
+same images, both paths get $39{,}347$ right and $7{,}280$ wrong; $1{,}647$
+are right only on the reference and $1{,}726$ only on the verified path.
+McNemar's exact test on those $3{,}373$ discordant images gives $p = 0.18$
+(\texttt{scripts/demos/\allowbreak mcnemar.py}), and the live weights say
+the same, $1{,}801$ against $1{,}830$ at $p = 0.64$. Like ViT, ConvNeXt has
+no BatchNorm to normalize over a different group, and both arms score the
+same averaged weights, so this is a one-variable pair: the lowering.
 
-\medskip\noindent\textbf{The curves are compared on every epoch}, because
-both paths score the same shadow over all $50{,}000$ images each epoch.
-They have the same shape: near chance while the EMA still carries the
-init, a steep climb once it does not, and a long rise through the anneal.
-On the climb the verified shadow is behind the reference's by about two
-epochs, which at that slope is several points; it catches up a third of
-the way through the schedule and is ahead at every window after it, by a
-fraction of a point, with its training loss a little lower. Which of the
-RNG streams --- the init, the augmentation, Mixup's $\lambda$ --- put one
-climb two epochs behind the other is not separated at one seed each.
-Table~\ref{tab:cnx_paths_epochs} is the selected epochs and
-Figure~\ref{fig:cnx_paths_curve} every epoch.
+\medskip\noindent\textbf{What the pair does not isolate is variance.} The
+drop-path and Mixup masks are host-drawn on one path and
+\texttt{jax.random}'s on the other, and the seeds differ. So $6.7\%$ of
+images decided differently is what two ConvNeXt-Ts differing in seed and
+mask source disagree on here. A two-seed pair on one path, which would bound
+the spread alone, has not been run. The claim is ``not separable'', and it
+is not ``identical''.
+
+\medskip\noindent\textbf{The curves have the same shape:} near chance while
+the EMA still carries the init, a steep climb once it does not, and a long
+rise through the anneal. Both paths score the same shadow over all
+$50{,}000$ images each epoch, so they are compared on every epoch. On the
+climb the verified shadow is behind the reference's by about two epochs,
+which at that slope is several points. It catches up a third of the way
+through the schedule and is ahead at every window after it, by a fraction of
+a point, with its training loss a little lower. Which of the RNG streams
+(the init, the augmentation, Mixup's $\lambda$) put one climb two epochs
+behind the other is not separated at one seed each.
 
 \begin{table}[H]
 \centering
