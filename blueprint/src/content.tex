@@ -928,7 +928,7 @@ this book carries one. 92.10\% is 9,210 images out of 10,000, and a
 different 10,000 handwritten digits would not have given exactly that
 number; the 95\% Wilson interval says the rate underneath it lies
 plausibly anywhere between 91.56 and 92.61\%. The six decimal places the
-trainer prints are formatting rather than precision --- only the first
+trainer prints are formatting: only the first
 three digits are real, and on a test set this size a gap of less than
 about half a point is not yet a result.
 
@@ -2213,15 +2213,13 @@ call. This chapter's run does 468 of those per epoch and finishes an epoch
 in about 224\,ms including a full pass over the 10,000 test images.
 
 \textbf{5. Validation.} Every epoch, not every tenth, because a forward
-pass over the test set is cheap next to the training epoch. Two details
-are worth naming now because every later chapter inherits them. The
-eval loop reads the parameters back with \texttt{readParams} rather than
+pass over the test set is cheap next to the training epoch. Every later chapter inherits two details of it. The eval loop reads the parameters back with \texttt{readParams} rather than
 using the \texttt{W0}/\texttt{b0} it already has, because under device
 residency those two are stale by design and \texttt{packed} is the
 authoritative copy. And \texttt{nbt} rounds up: the last eval
 batch is zero-padded to \texttt{bs} and the inner loop scores only the
 real rows, so a test set whose size is not a multiple of the batch size
-is fully scored rather than silently truncated. Ten thousand images and
+is fully scored. Ten thousand images and
 a batch of 128 would otherwise drop the last 16. The
 forward-only render is a separate artifact rather than a branch inside
 the training graph, which matters more from Chapter~\ref{chap:bn} on.
@@ -3024,16 +3022,14 @@ and $364\times$ the parameters, gains only $+1.0$. A $32{\to}32$ MLP already
 reaches 96.8\% at 27K parameters, $756\times$ smaller than the
 $4096{\to}4096$ net (98.0\%).
 
-\medskip\noindent The bars are what make that plateau concrete rather than
-merely visible. Every point from $d = 256$ rightward has an interval
+\medskip\noindent The bars are what make that plateau concrete. Every point from $d = 256$ rightward has an interval
 overlapping every other, so a $16\times$ increase in width and $74\times$
 in parameters gains nothing this test set can resolve. The climb up to the
 knee is real --- $d = 64$ and $d = 4096$ do not overlap --- and the plateau
 past it is not. The canonical $512{\to}512$ sits comfortably on that
 plateau, and anything past it changes only the third decimal place.
 
-\medskip\noindent Off the diagonal the story is capacity rather than
-failure. A $784{\to}8{\to}4096{\to}10$ net averages 93.70\%
+\medskip\noindent Off the diagonal the story is capacity. A $784{\to}8{\to}4096{\to}10$ net averages 93.70\%
 over five seeds (\texttt{runs/2026-09-01-mlp-grid-8x4096-seeds/}), with a
 spread of $0.56$ --- about 1.7 points above what the $8{\to}8$ net manages
 on its own (92.0\%). The 8-unit
@@ -4043,7 +4039,7 @@ by epoch~5 a loss the MLP has not reached by twelve. Test accuracy is
 interesting one. The CNN's training loss bumps at epoch~7 and then jumps
 almost eightfold at epoch~12, from $0.0044$ to $0.0334$ --- far enough to
 cross back above the MLP's $0.0291$. That is ordinary SGD at
-$\text{lr}=0.1$ rather than a measurement artifact. And the run's test
+$\text{lr}=0.1$. And the run's test
 accuracy is at its highest on that same epoch, 98.77\%. Training
 loss and held-out accuracy are different measurements, and a figure where
 the two disagree this loudly is the one to remember when a later chapter
@@ -4054,7 +4050,7 @@ Both curves come off the binaries these chapters' theorems describe.
 \subsection*{Why this network is still 99\% dense-head}
 
 At 3{,}489{,}130 total parameters, the no-BN CNN is actually
-$\sim$5.2$\times$ bigger than the MLP, not smaller. You
+$\sim$5.2$\times$ bigger than the MLP. You
 might have expected the opposite, because convolutions are supposed
 to be parameter-efficient. They are, but the head is what's
 eating the budget: the flatten of a $14 \times 14 \times 32$ feature
@@ -4138,7 +4134,7 @@ Draw five of the thirty runs in \S\ref{sec:cnn_runit}, build the ordinary 95\% i
 and ask whether it contains the mean of the twenty-five you did not
 draw: it does 79\% of the time, not 95\%, because five draws usually miss
 the tail and report a spread as small as $0.05$ against the true $0.27$.
-Chapter~\ref{chap:mlp}'s MLP, whose thirty runs are unremarkable, gets
+Chapter~\ref{chap:mlp}'s MLP, whose thirty runs have no such tail, gets
 92\% from the same procedure. How many runs a claim needs is a property
 of the network, and a convolution's is higher than a dense stack's. The
 early epochs of a conv net are not a measurement; the last one is, and
@@ -4263,7 +4259,7 @@ certified chain through \texttt{conv\_back\_bridge}
 (\texttt{dhc1B\_slice}), which is where the odd-kernel hypothesis
 enters. The cotangent each convolution's weight update is stated at is
 the slice of these emitted operations, not a hand-named value beside
-them. One detail of printing: this per-example renderer writes
+them. In printing, this per-example renderer writes
 \texttt{transpose} then \texttt{reverse}, and the batched renderers of
 Chapters~\ref{chap:residual} onward write \texttt{reverse} then
 \texttt{transpose}. The two kernels are the same tensor, since swapping
@@ -4307,8 +4303,7 @@ compute. The max-pool is the
 second convention after ReLU's, argmax ties broken by the lowest index, and
 its bridge holds where every window has one maximum. An all-zero window
 after ReLU fails that, so the excluded set is not null, and
-Theorem~\ref{thm:mnistCnnNoBnHasVJPAt} carries it as a stated hypothesis
-rather than hiding it. Theorems~\ref{thm:cnn_fold}
+Theorem~\ref{thm:mnistCnnNoBnHasVJPAt} carries it as a stated hypothesis. Theorems~\ref{thm:cnn_fold}
 and~\ref{thm:cnn_loss_grad} tie the four convolution updates and every
 gradient node to the loss's derivative, ties included, and
 Theorem~\ref{thm:cnn_sgd_descends} is the descent through the convolutions.
@@ -4390,8 +4385,7 @@ Together they are the layer.
   parameters \(\gamma\) and \(\beta\): \(\mathrm{bn}(x) = \gamma \hat{x} + \beta\).
 \end{enumerate}
 
-One thing to fix before the math, because the chapter's measurements
-depend on it. Ioffe \& Szegedy take \(\mu\) and \(\sigma^2\) over the
+The chapter's measurements depend on which cells the statistics are taken over. Ioffe \& Szegedy take \(\mu\) and \(\sigma^2\) over the
 batch: every image in the mini-batch, at every spatial position, for one
 channel, \(N \times H \times W\) cells per statistic. That is the layer
 this chapter trains, with running statistics kept for evaluation, as
@@ -4489,15 +4483,14 @@ also the first in this book you can't read off by inspection.
 
 \medskip\noindent The test accuracy is not monotone: it can fall several
 points from one epoch to the next while the training loss keeps
-falling. That is the evaluation rather than the training: the test
+falling. That is the evaluation: the test
 forward runs on running statistics that lag the weights at this learning
 rate. \S\ref{sec:bn_cifar_example} comes back to it, because it is where
 the chapter's spreads come from.
 
 \medskip\noindent The learning rate is constant here --- no warmup, no
 decay. Run five times at this setting the net lands between
-$74.9$ and $77.9\%$, so the number above is an ordinary
-draw rather than a best one, and the tables later in the chapter report
+$74.9$ and $77.9\%$, so the number above is an ordinary draw, and the tables later in the chapter report
 medians over five for the same reason.
 
 \S\ref{sec:bn_cifar_example} runs this same binary, its per-image sibling
@@ -5322,20 +5315,17 @@ Chapter~\ref{chap:cnn} did MNIST with two convolutions and a
 the same conv/ReLU/max-pool machinery, but stacks the convolutions four
 stages deep, eight $3 \times 3$ convolutions in all, because CIFAR-10 is
 a genuinely harder problem. \textbf{Same head, four times
-the body.} That extra depth is the whole point of the chapter: it is
-where BatchNorm starts to help, where the optimizer starts to matter,
+the body.} That extra depth is where BatchNorm starts to help, where the optimizer starts to matter,
 and the same depth ResNet-34 will scale to thirty-four layers. It also
 lets us ask a sharper question than ``does it train?'' We can ask
 ``what governs how it trains?''
 
 Two levers govern the answer, \textbf{normalization} and the
 \textbf{optimizer}; a third, the \textbf{arithmetic} the whole thing is
-computed in, turns out not to move it at all --- which is its own kind of
-finding --- and a knob, the width of the head, does not either. We move each against an identical, machine-checked
+computed in, does not move it at all, and a knob, the width of the head, does not either. We move each against an identical, machine-checked
 gradient, holding everything else fixed: same architecture, same 40
 epochs, the same data pipeline (per-epoch shuffle, random horizontal
-flip) and one constant learning rate. The findings,
-stated up front so the graphs are no surprise:
+flip) and one constant learning rate. The findings, stated up front:
 
 \begin{itemize}
 \item \textbf{Normalization adds accuracy, and speed on the way.}
@@ -5363,8 +5353,7 @@ stated up front so the graphs are no surprise:
 
 \item \textbf{The head barely matters.} This 2$\times$512 head carries
   about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
-  within a point of it. The convolutional body, not the head,
-  is doing the work. That is also why we can borrow MNIST's head
+  within a point of it. The convolutional body is doing the work. That is also why we can borrow MNIST's head
   wholesale: it was never the bottleneck.
 \end{itemize}
 
@@ -5558,7 +5547,7 @@ throughout.
 \begin{sloppypar}
 \medskip\noindent\textbf{The spec-to-proof tie.} These are
 \texttt{VerifiedNetSpec}s, which is what makes the listing above
-binding rather than descriptive. The \texttt{slug} names the committed
+binding. The \texttt{slug} names the committed
 render, so \texttt{cifar8wb\_bbn} names the six
 \texttt{cifar8wb\_bbn\_*\_train\_step.mlir} files in
 \texttt{verified\_mlir/}, the ones the run in \S\ref{sec:bn_runit} handed
@@ -5566,7 +5555,7 @@ to XLA, and \texttt{cifar8w\_bn} names the per-image set. The
 \texttt{layers} list folds to a parameter layout through
 \texttt{toSpecs}, and a \texttt{\#guard} in the same file pins that
 layout against the one the renderer emits, so a spec that drifts from
-its render fails the build rather than training something else. The
+its render fails the build. The
 gradient itself is \texttt{Proofs.cifarCnnBn8HasVJPAt}, proved once
 and parametrically in the head width, which is why the
 $512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
@@ -5719,7 +5708,7 @@ final per-parameter update op changes:
 
 \noindent Each tail is emitted onto the same certified gradient
 (\texttt{sgdParamF}, \texttt{momParamF} with \texttt{momVNextF}, \texttt{adamWParamF}),
-so the ablation is honest in the strong sense: identical, machine-checked
+so the ablation is controlled in the strong sense: identical, machine-checked
 gradients with different arithmetic stacked on top. And for plain
 SGD, that the binary32 step actually decreases the loss is itself a
 proved theorem.
@@ -5736,7 +5725,7 @@ net that sits at chance for all forty epochs, the $\dagger$ in
 Table~\ref{tab:cifar_optimizers}, is what that distinction looks like when
 it matters: the gradient was exact and the loss never left $\ln 10$.
 
-\medskip\noindent\textbf{One caution about what this table measures.} An
+\medskip\noindent\textbf{The proofs do not check the experiment design.} An
 ablation measures the thing you varied only if everything else is held
 constant, and ``everything else'' includes the data pipeline, the
 learning-rate schedule and the op family the graph is rendered through.
@@ -5814,8 +5803,7 @@ $1.87$), and all thirty runs train. Sixteen fewer mantissa bits do not
 register on this net at five seeds, with normalization or without it; what
 the bare net is fragile to is the optimizer (above), not the arithmetic.
 
-\medskip\noindent The same holds for a lever we did not mean to pull.
-Changing the op family at fixed fp32 --- per-example to batched, the same
+\medskip\noindent The same holds for the op family. Changing it at fixed fp32 --- per-example to batched, the same
 arithmetic throughout --- moves the un-normalized net by $+0.7$, $-0.3$ and
 $+0.9$ (the no-BN row of Table~\ref{tab:cifar_optimizers} against the fp32
 arms here), inside the seed ranges too. The rendering path is a lever, it
@@ -5825,7 +5813,7 @@ only running both says so.
 \medskip\noindent An fp8 (E4M3) arm exists in the repository and is left
 out of this table on purpose: its render rounds the forward convolutions
 only and leaves the backward in fp32, so it is a lowering
-probe rather than a trainable arm, and reporting it beside bf16 would
+probe, and reporting it beside bf16 would
 imply a comparison that was never run.
 
 \subsection*{Does the head width matter?}
@@ -5838,8 +5826,7 @@ in Figure~\ref{fig:cifar_head_width}, the two land a point and a half apart with
 intervals: $76.40\%$ narrow, $77.85\%$ wide. Seven times the parameters
 adds no accuracy the test set can resolve. The eight convolutions over
 the $32 \times 32$ maps dominate the compute, and the head is cheap
-matmul at these widths. That is the lesson the
-bridge makes concrete: at this scale the depth of the
+matmul at these widths. At this scale the depth of the
 convolutional body is the lever, not the width of the classifier on top.
 It is why the head can stay MNIST's, and why the next chapter puts its
 parameters into thirty-four layers of more convolution rather than a
@@ -5903,7 +5890,7 @@ is the whole reason the net could borrow MNIST's classifier untouched.
 (The $d{=}512$ point is the wide-head net of the tables above, and lands
 two points over its 40-epoch AdamW cell in
 Table~\ref{tab:cifar_optimizers}; that is the cosine schedule against the
-constant rate, not the width, and the shape is the point.)
+constant rate, not the width.)
 
 \subsection*{Why the levers work}
 
@@ -6238,7 +6225,7 @@ max-pool, taking 224$\times$224$\times$3 input to 56$\times$56$\times$64
 features) and a head (global average pool plus a 512-to-10
 dense layer). Total: 34 weight-bearing layers, 21.3M parameters.
 
-Two pieces of this template are new and worth naming:
+Two pieces of this template are new:
 
 \begin{enumerate}
 \item \textbf{The 7$\times$7 stride-2 stem.} Earlier chapters'
@@ -6896,13 +6883,11 @@ def runResnet34Adam (argv : List String) : IO Unit := do
     (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
 \end{verbatim}
 
-\noindent The one thing in that listing to carry forward is that \textbf{the recipe
-is arguments, not architecture.} The learning rate, the momentum pair, the warmup
+\noindent \textbf{The recipe is arguments, not architecture.} The learning rate, the momentum pair, the warmup
 length and the variant string are all passed to the driver; none of them is a
 property of the network. Swapping AdamW for momentum is a different argument
 against the same proven gradient, which is what makes
-\S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
-model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
+\S\ref{sec:r34_ablation}'s ablation a measurement of the recipe, and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
 
 \medskip\noindent \textbf{The BatchNorm list has 36 entries.} Every residual
 block normalizes after each of its two convolutions, and there are sixteen
@@ -7210,8 +7195,7 @@ additive ladder tells.
 \label{fig:r34_ablation}
 \end{figure}
 
-\noindent Each point is plotted as its difference from the full recipe
-rather than as an accuracy, so the line at zero is the baseline and distance
+\noindent Each point is plotted as its difference from the full recipe, so the line at zero is the baseline and distance
 from it is what the ingredient contributes. The intervals are paired by seed,
 since arms sharing a seed share initialization and data order. An arm whose bar
 crosses zero is not placed, however suggestive its mean.
@@ -7222,17 +7206,15 @@ move. None does: every arm's fp32 mean falls inside the bf16 interval and every
 bf16 mean inside the fp32 one. Four arms are resolved in both. Label smoothing is
 resolved in fp32 ($-0.69 \pm 0.42$) but not bf16 ($-0.50 \pm 0.62$), where the
 means agree and only the interval is wider. Weight decay is resolved in neither
-($-0.02 \pm 0.61$, $+0.14 \pm 0.45$): ten runs do not place it, and the honest
-reading is that here it contributes nothing measurable.
+($-0.02 \pm 0.61$, $+0.14 \pm 0.45$): ten runs do not place it, and the reading is that here it contributes nothing measurable.
 
 \medskip\noindent The cosine bar is the widest in both precisions because the
 constant-rate arm finishes wherever its noisy trajectory happens to be at
 epoch~80: fp32 seeds spread $82.0$--$86.8$ (sd $1.93$), bf16 $82.6$--$87.9$
 (sd $2.18$). Its contribution is large and imprecise, and both precisions
-agreeing on how imprecise says the width belongs to the arm, not to
-either number format.
+agreeing on how imprecise says the width belongs to the arm.
 
-\medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
+\medskip\noindent \textbf{The optimizer row measures step size as much as the optimizer.} Reading
 the $-$AdamW gap as ``what the adaptive optimizer gains'' assumes its replacement
 got a rate that suits it. Heavy-ball at $\mu = 0.9$ multiplies the effective step
 by $1/(1-\mu) = 10$, so the comparison that isolates momentum is against plain
@@ -7299,8 +7281,7 @@ Figure~\ref{fig:r34_optimizer_matched} is that comparison.
 \label{fig:r34_optimizer_matched}
 \end{figure}
 
-\noindent At a matched step, plain SGD does not merely match momentum ---
-it ends slightly ahead on the paired mean, $+0.403 \pm 0.162$ with all five seeds
+\noindent At a matched step, plain SGD ends slightly ahead of momentum on the paired mean, $+0.403 \pm 0.162$ with all five seeds
 agreeing in sign (the single runs plotted on the right finish in the other order,
 $87.82$ against $88.13$). The two lower bars overlap while that difference is resolved,
 which is no contradiction: the arms share seeds, so their difference is better
@@ -7498,8 +7479,7 @@ def runResnet34Imagenet (argv : List String) : IO Unit := do
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 \end{verbatim}
 
-\noindent Three things in it are worth pulling out, because they turn the
-listing from a description into a claim.
+\noindent Three things in it turn the listing from a description into a claim.
 
 \textbf{The \texttt{slug} is the artifact.} \texttt{resnet34in} names
 \texttt{verified\_mlir/resnet34in\_<variant>\_train\_step.mlir}, which is
@@ -7687,7 +7667,7 @@ is diffed against.
 The 2018 row below is the original paper's SGD-with-momentum plus the
 ``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
 random-resized-crop). RSB-A3 is the 2021 ``ResNet Strikes Back'' recipe
-(Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
+(Wightman et al.). Both rows are ResNet-50, so every knob that
 A3 sets differently is one lever of the three-year jump in how these networks
 are trained, and holding the architecture fixed is what stops the comparison
 confounding the recipe with the backbone. The backbone and the entry point
@@ -8106,7 +8086,7 @@ and~\ref{thm:resnet50_step_tie}), and the data-parallel twins
 step compute one card's step at four times the batch. This is also the
 chapter that sets the ImageNet pattern every later chapter repeats: a
 reference trainer, the verified path, the two side by side at the end,
-the recipe measured one ingredient at a time rather than inherited, and
+the recipe measured one ingredient at a time, and
 every later recipe stated as a diff from this one.
 
 ResNet-50 runs the two ends of the recipe ladder. On 2018 the two paths
@@ -9133,7 +9113,7 @@ subject written as a shape.
 AdamW at $10^{-3}$, cosine with a three-epoch warmup, label smoothing
 $0.1$, the same augmentation. That is on purpose. Holding the recipe fixed
 is what makes the accuracy in \S\ref{sec:mnv2_runit} a comparison between
-two architectures rather than between two training setups, and it
+two architectures, and it
 is the same move Chapter~\ref{chap:bn} used to compare optimizers against
 one proven gradient. MobileNetV2's own optimizer is RMSProp, which
 \S\ref{sec:mnv2_imagenet} comes back to, and it is rendered at this shape
@@ -9152,7 +9132,7 @@ than a point. It is the second row of Table~\ref{tab:imagenette_five}.
 
 \medskip\noindent\textbf{Where the time goes.} A step is about 96\,ms at
 batch 32, against ResNet-34's 134 at the same batch and the same 295 steps to
-the epoch, so the run takes thirty-eight minutes rather than fifty-three. That
+the epoch, so the run takes thirty-eight minutes against fifty-three. That
 is a real $1.4\times$, and it is far short of what the parameter count
 promises: $9.5\times$ fewer weights gives $1.4\times$ the throughput. Depthwise
 convolution is memory-bound. It does nine multiply-accumulates per output
@@ -11073,8 +11053,7 @@ expensive in memory traffic. The fused block is already in the kit as
 \texttt{.fusedMbConvNB}, MobileNetV4's stage 0
 (\S\ref{sec:mnv4_side_quest}), so V2 is a spec away.
 
-The chapter's other lesson is that a recipe is a specification, not a list
-of hyperparameters: RMSProp in TensorFlow's form, the EMA shadowing the
+The chapter's other lesson is that a recipe is a specification: RMSProp in TensorFlow's form, the EMA shadowing the
 BatchNorm buffers, the warmup-corrected decay, each a detail that moves
 the number. The two paths tie, every recipe row held equal by construction.
 The next chapter takes the recipe
@@ -11195,8 +11174,7 @@ Eighty epochs at about 68 seconds each, an hour and a half in total, and
 \textbf{83.75\%} top-1 with \textbf{96.10\%} top-5 on Imagenette's
 3,925-image validation split. That is the lowest top-1 of the convnets in
 this book's Imagenette column, from much the largest network among them,
-and \S\ref{sec:convnext_results} is about why that is the expected answer
-rather than a defect.
+and \S\ref{sec:convnext_results} is about why that is the expected answer.
 
 \medskip\noindent\textbf{Two compile lines, where the previous three
 chapters each had three.} ResNet-34, MobileNetV2 and EfficientNet-B0 all
@@ -11327,7 +11305,7 @@ Figure~\ref{fig:depgraph_layernorm} is the dependency graph of this section.
   \leanok
   \uses{ax:geluScalar}
   Defined as Mathlib's \(\mathrm{deriv}\, \mathrm{geluScalar}\) --- so
-  the connection to the forward is automatic, not asserted. The
+  the connection to the forward is automatic. The
   closed form (what the verified \texttt{geluBack} emitter renders) is
   the separate theorem \texttt{geluScalarDeriv\_eq}, proved by
   assembling \texttt{HasDerivAt} for the inner polynomial, \(\tanh\)
@@ -11919,8 +11897,7 @@ it does.
 \texttt{.convNextDownsample 96 192} is two entries here, a
 \texttt{.layerNorm 96} and a \texttt{.conv 96 192 2 2}, and the patchify
 stem is likewise a \texttt{.conv} followed by a \texttt{.layerNorm}. The
-spec's job is the parameter layout, not the block vocabulary, so
-it names weights rather than concepts.
+spec's job is the parameter layout, so it names weights.
 
 \textbf{182 parameter tensors, 27,827,818 scalars.}
 \texttt{convnextVerified.toSpecs} is kernel-\texttt{\#guard}ed against
@@ -11953,8 +11930,7 @@ starts at the paper's $10^{-6}$, which holds every residual branch back for
 too much of this short schedule (above). It is the fourth row of
 Table~\ref{tab:imagenette_five}.
 
-\medskip\noindent\textbf{That is the chapter's thesis arriving as a result
-rather than a claim.} ConvNeXt's paper argues that much of the modernization lives in the
+\medskip\noindent\textbf{That is the chapter's thesis arriving as a result.} ConvNeXt's paper argues that much of the modernization lives in the
 training recipe, so a ConvNeXt run on somebody else's recipe should
 underperform, and it does. \S\ref{sec:convnext_imagenet} is the control: the
 same architecture, given the official recipe and 300 epochs, reaches
@@ -12013,7 +11989,7 @@ map is its own transpose, so its VJP is itself, and the two
 backward, this multiply and the GELU, LayerNorm and convolution backwards
 below it, denotes the certified block VJP, and
 Theorem~\ref{thm:convnext_step_tie} threads it through the eighteen
-blocks. One honesty note on \texttt{\%v1560}: this is the last block, so
+blocks. One note on \texttt{\%v1560}: this is the last block, so
 its output cotangent comes down from the head, and the
 global-average-pool backward there is the one hand-written region of the
 file, declared in the file's own header comment.
@@ -12450,8 +12426,7 @@ GELU is a smooth scalar function, in its tanh approximation and in the exact
 \(x \cdot \Phi(x)\) alike, so its Jacobian is a diagonal like ReLU's
 with a derivative that exists everywhere; LayerNorm is BatchNorm along the
 channel axis, and its backward is the same emitted graph; layer scale is a
-per-channel multiply and the patchify stem is a strided convolution. Nothing
-here needed new analysis, which is the point: the full ConvNeXt-T, eighteen
+per-channel multiply and the patchify stem is a strided convolution. Nothing here needed new analysis: the full ConvNeXt-T, eighteen
 blocks, is proved from the kit as it stood, and the step is tied
 (Theorem~\ref{thm:convnext_step_tie}). What the chapter adds is the recipe
 as the thesis, the 2018 to 2022 jump laid out knob by knob, with the
@@ -14076,7 +14051,7 @@ nothing new. The separate name only marks its bias for the initializer
 \textbf{The CLS token and the positional embedding are
 \texttt{.param} entries.} They are learned weights that no layer
 computes from an input, and the spec's job is the parameter
-layout, so it names them rather than folding them into a block. The
+layout, so it names them. The
 $197$ is $196$ patches plus the prepended CLS row.
 
 \textbf{\texttt{.transformerBlock 192 768} is one block per line, twelve
@@ -14168,7 +14143,7 @@ ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{88 ms} & \textbf{35 min} & 68
 \end{tabular}
 \end{table}
 
-\noindent Read down the column rather than across the chapters. Accuracy is
+\noindent Read down the column. Accuracy is
 not a function of parameters at this data size: the three networks between
 $88.9$ and $90.0$ span 2.24M to 21.3M parameters, and the two designed for far
 more data, ConvNeXt-T and ViT-Tiny, are the lowest two for the reason each
@@ -16555,7 +16530,7 @@ not what gets the net into the field.
 
 \medskip\noindent What this classifier is not: a diagnosis. It reads one
 leaf at one moment --- no severity, no spread across a field, no symptom
-before the lesion shows --- and the honest number for even that, on a
+before the lesion shows --- and the number for even that, on a
 photograph a grower would take, is the right-hand column.
 
 \section{Remote sensing --- demo: which wavelengths travel, EuroSAT to the Amazon and the Cerrado}
@@ -18451,8 +18426,7 @@ convolutions for raw audio sample prediction (van den Oord et al.\
 2016, \href{https://arxiv.org/abs/1609.03499}{arXiv:1609.03499}): exponential receptive field, linear parameter
 growth. The foundation of neural TTS and PixelCNN. Variants: single
 stack (0.4M), 3-stack (paper setup, with a NetSpec-linearity
-approximation), music (single stack, 4.1M), tiny. One honest
-limitation: the residual-vs-skip dual-output pattern doesn't
+approximation), music (single stack, 4.1M), tiny. One limitation: the residual-vs-skip dual-output pattern doesn't
 linearize cleanly, so the 3-stack variant uses a simplified
 channel-flow approximation.
 
