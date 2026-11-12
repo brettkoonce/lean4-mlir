@@ -14262,49 +14262,34 @@ same three pieces: denoted graph, tie theorem, printer.
 \label{sec:vit_imagenet}
 
 The Imagenette ViT-Tiny above trained on $\sim$9.5K images. The full
-1000-class run is the same architecture with a 1000-class head, the
-\texttt{.imagenet} dataset, and the DeiT-Ti training recipe, so it is
-still patch16, embed 192, 12 transformer blocks and 3 heads, at
-5{,}717{,}416 parameters. As in every ImageNet section, the recipe runs
-on both paths, and this is the chapter where the pair is cleanest,
-because a transformer has no BatchNorm to normalize differently. What
-the recipe changes from ResNet-34's comes first, then the reference, then
-the verified path, then the two side by side.
+1000-class run is the same architecture with a 1000-class head: still
+patch16, embed 192, 12 transformer blocks and 3 heads, at 5{,}717{,}416
+parameters. Trained for 300 epochs by DeiT-Ti's recipe, the reference
+reaches \textbf{71.64\%} top-1 and the verified path \textbf{71.61\%},
+against DeiT-Ti's $72.2\%$ without distillation, and the two cannot be told
+apart on the validation set (McNemar $p = 0.78$). This is the chapter where
+the pair is cleanest, because a transformer has no BatchNorm to normalize
+differently.
 
-The recipe is DeiT's as DeiT runs it (Touvron et al.\ 2021, its
-\texttt{main.py} with timm underneath): batch $1024$, which four replicas of
-$256$ reach in one optimizer step, with no gradient accumulation, since
-nothing in a transformer couples the examples; the learning rate that batch
-sets, $5\times10^{-4}\cdot
-1024/512 = 10^{-3}$; no gradient clipping; timm's cosine stepped once an
-epoch from a $10^{-6}$ warmup over all $300$ epochs to a $10^{-5}$ floor;
-AdamW at weight decay $0.05$ excluding the norms, biases, CLS and position
-embedding; Mixup $0.8$ or CutMix $1.0$ drawn once per batch at $p\,0.5$ with
-label smoothing $0.1$ folded into the mixed target;
-\texttt{rand-m9-mstd0.5-inc1} with its geometric ops filled at the image
-mean; Random-Erase $p\,0.25$ in pixel mode; repeated augmentation $3\times$
-with the copies adjacent in one optimizer step; stochastic depth $0.1$;
-the model EMA at $0.99996$ held from step $0$; LayerNorm at
-$\varepsilon = 10^{-6}$; the exact erf GELU; torchvision's crop; and an
-fp32 evaluation forward, with bf16 under an fp32 patch embedding and head
-on both paths. One setting differs from DeiT's, disclosed on both paths:
-the patch-embedding bias starts at zero here, where DeiT leaves it at
-PyTorch's \texttt{Conv2d} default, $U(\pm 1/\sqrt{768})$ (ViT-S and B
-start it there, \S\ref{sec:vit_sb}). Both
-halves of the pair ran on the same four RTX 3060 cards.
+The section runs as the earlier ones did: what the recipe changes from
+ResNet-34's, then the reference, the verified path, and the two side by
+side.
 
 \subsection*{What the DeiT recipe changes from the 2018 recipe}
 
+The recipe is DeiT's as DeiT runs it (Touvron et al.\ 2021), read from its
+\texttt{main.py} with timm underneath.
+
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the 2018-era
 recipe: SGD with momentum plus the ``bag of tricks'' polish (cosine
-schedule, warmup, label smoothing, random-resized-crop). The config below
-is DeiT's 2021 recipe for ViT-Tiny, and it is where the previous chapter's
-recipe came from: ConvNeXt applied it to a convnet a year
-later, so Table~\ref{tab:vit_vs_2018} is Chapter~\ref{chap:layernorm}'s
-table a year earlier, with four rows moved and no layer scale. The
-\texttt{trainAdamSched} entry point is identical in both columns, and
-every row is a one-line change to the \texttt{VerifiedNetSpec}, the
-\texttt{VerifiedConfig}, or the arguments beside them.
+schedule, warmup, label smoothing, random-resized-crop). DeiT's 2021 recipe
+for ViT-Tiny is where the previous chapter's recipe came from: ConvNeXt
+applied it to a convnet a year later, so Table~\ref{tab:vit_vs_2018} is
+Chapter~\ref{chap:layernorm}'s table a year earlier, with four rows moved
+and no layer scale. The \texttt{trainAdamSched} entry point is identical in
+both columns, and every row is a one-line change to the
+\texttt{VerifiedNetSpec}, the \texttt{VerifiedConfig}, or the arguments
+beside them.
 
 \begin{table}[H]
 \centering
@@ -14380,6 +14365,25 @@ regularization out of the optimizer and puts it into the data, which is
 why the same recipe transferred to a convnet in the next year without a
 change.
 
+\medskip\noindent\textbf{The batch of 1024 is one step.} Four replicas of
+$256$ reach DeiT's batch in a single optimizer step with no gradient
+accumulation, and since nothing in a transformer couples the examples of a
+batch, the split is exact. The rate is the one that batch sets,
+$5\times10^{-4}\cdot 1024/512 = 10^{-3}$.
+
+\medskip\noindent\textbf{The augmentation is
+Chapter~\ref{chap:layernorm}'s pack plus repeated augmentation.}
+RandAugment, the per-batch choice of Mixup or CutMix with label smoothing
+folded into the mixed target, and Random Erasing are set as they are
+there. Repeated augmentation is the row ConvNeXt dropped: each image
+enters a step three times under three independent augmentations, with the
+copies adjacent in the one optimizer step.
+
+\medskip\noindent\textbf{One setting is disclosed and not matched.} The
+patch-embedding bias starts at zero here, on both paths, where DeiT leaves
+it at PyTorch's \texttt{Conv2d} default, $U(\pm 1/\sqrt{768})$ (ViT-S and
+B start it there, \S\ref{sec:vit_sb}).
+
 
 \prosesection{The reference (JAX)}
 
@@ -14442,16 +14446,17 @@ def main (args : List String) : IO Unit :=
     vitTinyImagenetRecipes args
 \end{verbatim}
 
-\noindent \texttt{vitInit} is the row the result depends on. DeiT draws
-every weight from a truncated normal at $0.02$ and sizes the patch embed
-by its input fan, $c \cdot p^2$; a generic Xavier-uniform scales as
-$1/\sqrt{d}$ instead, $3.6\times$ too wide at ViT-Tiny's $d = 192$, and
-sizes the patch embed by its output fan, ${\sim}6\times$ too narrow. The
-smallest model is the worst case for both.
+\noindent\textbf{The initialization is the row the result depends on.}
+With \texttt{vitInit}, every weight is drawn as DeiT draws it, from a
+truncated normal at $0.02$, and the patch embed is sized by its input fan,
+$c \cdot p^2$. A generic Xavier-uniform scales as $1/\sqrt{d}$ instead,
+$3.6\times$ too wide at ViT-Tiny's $d = 192$, and sizes the patch embed by
+its output fan, ${\sim}6\times$ too narrow. The smallest model is the
+worst case for both.
 
-\textbf{bf16.} ViT is matmul-bound --- patch embed, QKV, scores, output,
-MLP and head are all dense matmuls, no convolution --- so \texttt{bf16}
-is the only precision flag that applies and there is no
+\medskip\noindent\textbf{bf16.} ViT is matmul-bound: patch embed, QKV,
+scores, output, MLP and head are all dense matmuls, with no convolution,
+so \texttt{bf16} is the only precision flag that applies and there is no
 \texttt{bf16Conv} to set. It gives $\mathbf{1.47\times}$: $205.1 \to
 139.2$\,ms/step, $624 \to 919$\,img/s, measured on one RTX 3060 at batch
 128 (\texttt{jax/scripts/jax\_vit\_bench.py tiny 128}, synthetic). The
@@ -14471,7 +14476,7 @@ points to DeiT-Ti's $74.5\%$ headline are the \emph{distillation} variant (a
 second ``distillation token''
 trained against a strong CNN teacher), which we do not implement.
 
-\medskip\noindent\textbf{The early curve is the EMA, not the model.} With the
+\medskip\noindent\textbf{The early curve is the EMA.} With the
 decay held at $0.99996$ from step $0$, the shadow still carries
 $0.99996^t$ of the random initialization: $78\%$ of it at epoch~5,
 $29\%$ at~25, $5\%$ at~60, under $1\%$ from epoch~100. The trainer
@@ -14515,40 +14520,28 @@ render does not bake: the $10^{-3}$ base rate, the EMA at $0.99996$ with
 no ramp, the per-epoch schedule from $10^{-6}$ and the $10^{-5}$ floor,
 all host-side.
 
-\medskip\noindent\textbf{The collectives have the first gate here, and only
-half of the second.}
-\texttt{tests/TestViTDpCheck.lean} pins the
-data-parallel step against its single-device peer by handing both
-replicas the same rows, where the all-reduce mean is an
-identity. ViT has no BatchNorm, so that identity is exact rather than
-approximate. But a gate built on duplicated rows is structurally blind
-to a shard-offset bug, and the check that closes that hole works by
-giving the replicas genuinely different data. That one covers the
-Imagenette \texttt{vit} spec and not \texttt{vitin}.
-Two gates that sound alike are not one property, and this chapter has
-the first and half of the second, where ConvNeXt has both.
-
-\medskip\noindent\textbf{The regularizer knobs are render variants, and
-here they compose.} Weight-decay exclusion and stochastic depth are
-spelled \texttt{wx} and \texttt{drop}, EMA is a variant too, and
-\texttt{vitin\_\allowbreak emadp256x4\allowbreak wxdrop\allowbreak eps0000001\allowbreak smxerfbf16}
-is the render that carries them on top of AdamW and the four-way
-all-reduce at $256$ a replica, at LayerNorm $\varepsilon = 10^{-6}$ (the
-digits spell the $\varepsilon$), the exact GELU (\texttt{erf}) and no
-clip: four regions, $[\theta \mid m \mid v \mid \mathrm{ema}]$, 831
-operands and 200 all-reduces, with an fp32 evaluation forward at the
-same $\varepsilon$ beside it. Mixup, CutMix and repeated augmentation
-never enter the graph at all, because they are data-side and are applied
-in the shim.
+\medskip\noindent\textbf{The variant carries the recipe.} The render is
+\texttt{vitin\_\allowbreak emadp256x4\allowbreak wxdrop\allowbreak eps0000001\allowbreak smxerfbf16},
+and each tag is a row of the config: \texttt{ema} the shadow,
+\texttt{dp256x4} the four-way all-reduce at $256$ a replica, \texttt{wx}
+the weight-decay exclusion, \texttt{drop} stochastic depth,
+\texttt{eps0000001} LayerNorm's $\varepsilon$ (the digits spell it),
+\texttt{smx} the shifted softmax of the next paragraph, \texttt{erf} the
+exact GELU and \texttt{bf16} the block matmuls. Here the regularizer tags
+compose in one render. Its state is four regions,
+$[\theta \mid m \mid v \mid \mathrm{ema}]$, with 831 operands and 200
+all-reduces, and an fp32 evaluation forward at the same $\varepsilon$
+sits beside it. Mixup, CutMix and repeated augmentation never enter the
+graph at all, because they are data-side and are applied in the shim.
 
 \medskip\noindent\textbf{The \texttt{smx} in the name is the row
 maximum.} Each of the 36 attention softmaxes subtracts its row's maximum
 before the $\exp$, forward and backward, as JAX's \texttt{softmax} does:
 the plain $\exp(s)/\sum\exp(s)$ overflows f32 once a score passes
 $88.72$, and attention scores in this net reach $90$. The shift is in
-the AST rather than the printer: a shifted constructor for the forward
-and one for the backward, denoting $\mathrm{softmax}(s - \max s)$ row by
-row, with \texttt{softmax\_sub\_const} proving the shift away
+the AST, where the proofs can see it: a shifted constructor for the
+forward and one for the backward, denoting $\mathrm{softmax}(s - \max s)$
+row by row, with \texttt{softmax\_sub\_const} proving the shift away
 ($\exp(z_j - c)/\sum_k \exp(z_k - c)$ is $\exp(z_j)/\sum_k \exp(z_k)$)
 and \texttt{rowSoftmaxShiftFlat\_eq},
 \texttt{den\_softmaxRowBackShiftB\_eq} lifting that to the rendered
@@ -14562,7 +14555,22 @@ forward with the softmax plain or shifted, and the backward recompute
 denotes the plain softmax backward at both
 (\texttt{den\_softmaxRowBackBAt}). The 200 gradient nodes of
 Theorem~\ref{thm:vit_step_tie} are nodes the shift never touches, so
-the tie is this render's as it stands. It runs with:
+the tie is this render's as it stands.
+
+\medskip\noindent\textbf{The collectives have the first gate here, and only
+half of the second.}
+\texttt{tests/TestViTDpCheck.lean} pins the
+data-parallel step against its single-device peer by handing both
+replicas the same rows, where the all-reduce mean is an
+identity. ViT has no BatchNorm, so that identity is exact. But a gate
+built on duplicated rows is structurally blind
+to a shard-offset bug, and the check that closes that hole works by
+giving the replicas genuinely different data. That one covers the
+Imagenette \texttt{vit} spec and not \texttt{vitin}.
+Two gates that sound alike are not one property, and this chapter has
+the first and half of the second, where ConvNeXt has both.
+
+The run is launched with:
 
 \begin{verbatim}
 lake run imagenet start vit      # the job vit-default-emabf16-4gpu
@@ -14575,7 +14583,9 @@ gives $71.73\%$ / $91.08\%$.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:vit_paths} is the two paths.
+Table~\ref{tab:vit_paths} is the two paths, Table~\ref{tab:vit_paths_epochs}
+the selected epochs, and Figure~\ref{fig:vit_paths_curve} the curve at
+every fifth epoch.
 
 \begin{table}[H]
 \centering
@@ -14601,26 +14611,42 @@ live weights, top-1 / top-5 & 71.87\% / 91.12\% & 71.73\% / 91.08\% \\
 \end{table}
 
 \noindent Above the horizontal line sit the lowering, what it costs, and
-the two things the runs did not share: where the Mixup and CutMix draws are
-made --- once over the global batch on the reference, once per replica's
-$256$ rows on the verified path, whose four producers each mix their own
-shard, which is also how timm mixes under DDP --- and how often the
-shadow was scored, which changes no weight.
+the two things the runs did not share. One is where the Mixup and CutMix
+draws are made: once over the global batch on the reference, once per
+replica's $256$ rows on the verified path, whose four producers each mix
+their own shard, which is also how timm mixes under DDP. The other is how
+often the shadow was scored, which changes no weight.
 
-\medskip\noindent\textbf{The pair ties.} $-0.03$ on top-1 and $-0.03$ on
-top-5 are a tenth of one run's $\pm0.39$ Wilson half-width at
-$n = 50{,}000$: at epoch~300 the two score $35{,}819$ and $35{,}806$
-images correct, thirteen apart, and the means of the scored epochs
-$280$--$300$ are $71.48$ and $71.44$. The route there is not flat. The
+\medskip\noindent\textbf{The extra hours are the data feed.} The verified
+step is $573$\,ms against the reference's $463$, and the graph itself runs
+faster than either. The difference is the shim, which augments each image
+out of process and streams it to the trainer as fp32, about $600$\,MB a
+step at batch $1024$, host work the JAX trainer does in-process. The
+every-epoch evaluation is the rest. The same accounting holds for every
+verified ImageNet run in this book.
+
+\medskip\noindent\textbf{The two paths tie.} The verified path is $-0.03$
+on top-1 and $-0.03$ on top-5: at epoch~300 the two score $35{,}819$ and
+$35{,}806$ images correct, thirteen apart, a tenth of one run's $\pm0.39$
+Wilson half-width at $n = 50{,}000$. Both runs score the same images, so
+the comparison can also be made image by image, as \S\ref{sec:r34_pjrt}
+does. The reference arm of that test is its final checkpoint rescored on
+CPU in fp32, $35{,}826$ correct, seven images over its in-run line, which
+puts the pair twenty images apart. The reference is right on $2{,}347$
+images the verified model misses, and the verified model on $2{,}327$ the
+reference misses; McNemar's exact test gives $p = 0.78$. Matched row for
+row at DeiT's own batch, the verified path is not behind its reference.
+
+\medskip\noindent\textbf{The curves converge from an early gap.} The
 verified path is ahead by up to a point and a half through the first third
 of the run, the gap narrows through the middle third and is gone before
-the last, and the training loss runs within $\pm0.02$ of the reference's
-in every 25-epoch window. The early gap is the shadow's: at a constant
+the last, and the means of the scored epochs $280$--$300$ are $71.48$ and
+$71.44$. The training loss runs within $\pm0.02$ of the reference's in
+every 25-epoch window. The early gap is the shadow's: at a constant
 $0.99996$ both EMAs carry the random initialization through the first
 fifth of the schedule, so the early scorings compare two averages of
-noise, and the shifted softmax, which changes no function, is not where
-to look for it. Table~\ref{tab:vit_paths_epochs} is the selected epochs
-and Figure~\ref{fig:vit_paths_curve} every five.
+noise. The shifted softmax changes no function and is not where to look
+for it.
 
 \begin{table}[H]
 \centering
@@ -14666,25 +14692,6 @@ $\Delta$              & $+1.08$ & $+0.82$ & $+0.99$ & $+0.47$ & $+0.16$ & $+0.16
 \caption{ViT-Tiny validation top-1 on both paths, every five epochs: one recipe, two paths to XLA, the EMA shadow scored over all $50{,}000$ validation images.}
 \label{fig:vit_paths_curve}
 \end{figure}
-
-\medskip\noindent\textbf{The extra hours are the data feed, not the
-renderer.} The verified step is $573$\,ms against the reference's $463$,
-and the graph itself runs faster than either. The difference is the
-shim, which augments each image out of process and streams it to the
-trainer as fp32, about $600$\,MB a step at batch $1024$, host work the
-JAX trainer does in-process. The every-epoch evaluation is the rest.
-The same accounting holds for every verified ImageNet run in this book.
-
-\medskip\noindent\textbf{Paired per image, it is still a tie.} Both runs
-score the same $50{,}000$ images, so the comparison can be made image by
-image, as \S\ref{sec:r34_pjrt} does; the reference arm here is its final
-checkpoint rescored on CPU in fp32, $35{,}826$ correct, seven images over
-its in-run line, so the pair sits twenty images apart rather than
-thirteen. The reference is right on $2{,}347$
-images the verified model misses, and the verified model on $2{,}327$
-the reference misses; McNemar's exact test gives $p = 0.78$. The two
-checkpoints cannot be told apart on this validation set. Matched row for
-row at DeiT's own batch, the verified path is not behind its reference.
 
 \medskip\noindent\textbf{The live weights are the number DeiT
 publishes.} Scored without the shadow, the reference is $71.87$ /
