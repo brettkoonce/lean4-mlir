@@ -9225,44 +9225,38 @@ seventeen blocks.
 \section{ImageNet recipe}
 \label{sec:mnv2_imagenet}
 
-The Imagenette run above trained on $\sim$9.5K images. The same backbone
-scales to full 1000-class ImageNet exactly the way ResNet-34 did in
-Chapter~\ref{chap:residual}: the inverted-residual stack is unchanged, only
-the head widens to 1000 and the dataset and schedule grow. The recipe is
-not the paper's sentence but TF-slim's own reproduction command
-(\texttt{research/slim/nets/mobilenet/README.md}), read with the sources it
-runs: $0.045$ per $96$ images, so $0.12$ at $256$, stepped $\times0.98$ every
-$2.5$ epochs of data as a staircase from step $0$ with no warmup; TF~1's
-RMSProp, with the learning rate folded into the momentum buffer and the
-mean-square started at $1$; coupled weight decay $4 \times 10^{-5}$ on the
-\texttt{conv2d} kernels alone, so off BatchNorm, biases and the depthwise
-kernels; slim's truncated-normal initialization ($\sigma = 0.09$) on every
-kernel; label smoothing $0.1$; the weight average at $0.9999$, which is what
-the README scores; slim's crop ranges, its color distortion (brightness,
-then saturation), TF~1's bilinear kernel on every resize, its validation
-crop ($0.875$ of both sides, then $224^2$) and $(x - 0.5) \times 2$ inputs;
-and the README's ``about 700K steps'' of $768$, which is $420$ epochs of
-data. One row is not reproduced, on either path: Sandler et al.\ trained
-asynchronously on sixteen workers of $96$ images each, and this run is four
-replicas of $64$, synchronous.
+The Imagenette run above trained on $\sim$9.5K images. On full ImageNet-1k
+the inverted-residual stack is unchanged and the head widens to 1000 classes,
+exactly as ResNet-34's did in Chapter~\ref{chap:residual}. Trained for 420
+epochs by TF-slim's own reproduction recipe, the reference reaches
+\textbf{71.84\%} top-1 and the verified path \textbf{71.69\%}, against the
+paper's $72.0\%$, and the two cannot be told apart on the validation set
+(McNemar $p = 0.30$).
 
-As there, the recipe runs on both paths, the reference first, then the
-verified path, then the two side by side; what it changes from ResNet-34's
-comes first.
+The section runs as that chapter's did: what the recipe changes from
+ResNet-34's, then the reference, the verified path, and the two side by
+side.
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
-The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-2018-era recipe of the SGD lineage: momentum, cosine polish,
-label smoothing. MobileNetV2 is a 2018 paper too, but from the other
-side of a fork. Google's TensorFlow and Inception training tradition
-runs RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
-tiny weight decay, and nothing beyond crop and flip on the data
-side. So this diff is not a time jump but two contemporary recipes
-side by side, and it is the base that the next chapter's 2019
-EfficientNet recipe is built on. The entry point is the same on both
-paths, and every row of Table~\ref{tab:mnv2_vs_2018} is one argument or one
-field:
+The recipe is TF-slim's reproduction command
+(\texttt{research/slim/nets/mobilenet/README.md}) read with the sources it
+runs, and not the paper's sentence: the README for the rate, the batch, the
+smoothing and the weight average; \texttt{train\_image\_classifier.py} for
+the optimizer and the staircase; \texttt{training\_scope} for the
+initialization, the regularizer's reach and the BatchNorm constants; and
+\texttt{inception\_preprocessing} for the crop, the resize, the color
+distortion and the input scale.
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the 2018 recipe of
+the SGD lineage: momentum, cosine polish, label smoothing. MobileNetV2 is a
+2018 paper too, from the other lineage. Google's TensorFlow and
+Inception tradition runs RMSProp with a huge $\varepsilon$, an exponential
+LR staircase, a tiny weight decay, and little beyond crop and flip on the
+data side. So Table~\ref{tab:mnv2_vs_2018} is two contemporary recipes side
+by side and no jump in time, and it is the base the next chapter's 2019
+EfficientNet recipe is built on. The entry point is the same on both paths,
+and every row is one argument or one field.
 
 \begin{table}[H]
 \centering
@@ -9285,26 +9279,35 @@ Augmentation  & RRC + hflip            & slim's crop + hflip + color   & brightn
 \end{tabular}
 \end{table}
 
-\noindent What carries over unchanged: batch 256, train and eval both
-at $224$, running-BN evaluation, and bf16 convolution under an fp32
-classifier head. R34's
-5-epoch warmup does not: MobileNetV2's staircase starts at step $0$, as
-the paper's does.
+\noindent What carries over unchanged: batch 256, train and eval both at
+$224$, running-BN evaluation, and bf16 convolution under an fp32 classifier
+head. ResNet-34's 5-epoch warmup does not: the staircase starts at step $0$.
+One row is reproduced on neither path. Sandler et al.\ trained
+asynchronously on sixteen workers of $96$ images each, and this run is four
+synchronous replicas of $64$.
 
-The common thread of this fork is that nothing here regularizes harder.
-MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
-network $1/6$ the size, and its distinctive knobs (adaptive
-optimizer, staircase decay, a tiny weight decay on the kernels alone, the
-weight average)
-are the ones EfficientNet inherits and ConvNeXt eventually replaces
-wholesale. The 2019--2022 tables that follow all diff against the
-same 2018 SGD column. This one shows where their other half came
-from.
+Nothing in the TensorFlow lineage's recipe regularizes harder. It is the SGD recipe's
+contemporary, tuned for a network $1/6$ the size, and its distinctive knobs
+(the adaptive optimizer, the staircase, a tiny weight decay on the kernels
+alone, the weight average) are the ones EfficientNet inherits and ConvNeXt
+eventually replaces wholesale.
+
+\textbf{Why 420 epochs.} The paper fixes the optimizer, the peak, the batch,
+the weight decay and the decay rate, $\times0.98$ per epoch, and leaves the
+length of the schedule unstated. The README's command does not: about $700$K
+steps on eight clones of $96$, which is $700{,}000 \times 768 / 1{,}281{,}167
+\approx 420$ epochs of data, with the stair every $2.5$ epochs and not every
+one. That staircase decays two fifths as often as the paper's sentence, so at
+epoch $420$ the rate is still $0.12 \times 0.98^{167} \approx 4.1 \times
+10^{-3}$. The end-of-schedule polish a cosine run gets from annealing to zero
+comes here from the weight average at $0.9999$, which is what the README
+scores.
 
 \prosesection{The reference (JAX)}
 
-The reference trainer is \texttt{jax/MainMobilenetV2Imagenet.lean}; its spec,
-and its recipe, as the run below trained it:
+The reference trainer is \texttt{jax/MainMobilenetV2Imagenet.lean}, launched
+by \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}. Its config is
+the recipe row for row, each value's source beside it:
 
 \begin{verbatim}
 -- Same inverted-residual backbone, 1000 classes instead of 10.
@@ -9374,53 +9377,27 @@ def mobilenetV2ImagenetConfig : TrainConfig where
 
 \end{verbatim}
 
-\noindent Every value in that config is read off TF-slim's tree rather than
-the paper: the README command for the rate, the batch, the smoothing and the
-weight average; \texttt{train\_image\_classifier.py} for the optimizer and
-the staircase; \texttt{training\_scope} for the initialization, the
-regularizer's reach and the BatchNorm constants; and
-\texttt{inception\_preprocessing} for the crop, the resize, the color
-distortion and the input scale. The run below was launched by
-\texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}.
-
-The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
-convolutions cast to bfloat16 the instant the flag is on, and MobileNet's
-compute lives inside inverted-residual blocks (a $1\times1$ expansion, a
-depthwise $3\times3$, a $1\times1$ projection). The flag routes those
-through the same \texttt{convdt} cast as the plain convolutions, which is
-what lets bf16 reach the bulk of the network, and the whole block runs
+\noindent The one knob specific to MobileNet is \texttt{bf16Conv}. The
+network's compute lives inside inverted-residual blocks, and the flag routes
+their three convolutions through the same \texttt{convdt} cast as the plain
+ones, which is what lets bf16 reach the bulk of the network. The block runs
 $\sim2\times$ faster on cuDNN for it: the $1\times1$s are really matmuls and
-run well in bfloat16, and the
-depthwise $3\times3$ gains nothing from it.
-
-\textbf{Why 420 epochs.} The paper fixes the optimizer, the peak, the
-batch, the weight decay and the decay rate --- $\times0.98$ per epoch ---
-and leaves the length of the schedule unstated. The README's command does
-not: about $700$K steps on eight clones of $96$, which is $700{,}000 \times
-768 / 1{,}281{,}167 \approx 420$ epochs of data, with the stair every $2.5$
-epochs rather than every one. That staircase decays two fifths as often as the
-paper's sentence, so at epoch $420$ the rate is still $0.12 \times
-0.98^{167} \approx 4.1 \times 10^{-3}$, and the end-of-schedule polish a
-cosine run gets from annealing to zero comes here from the weight average
-at $0.9999$ that the README scores instead.
+run well in bfloat16, and the depthwise $3\times3$ gains nothing.
 
 The run finished at \textbf{71.84\%} top-1 and \textbf{90.53\%} top-5 in
-$48.7$ hours on four RTX 4060 Ti. The last $25$ epochs average $71.72\%$, a
-tenth of a point under the endpoint. The paper's figure is $72.0\%$ and the
-README promises ``roughly 72.0''; at $n=50{,}000$ the Wilson 95\% interval
-on this run is $[71.44, 72.23]$, so the README's command is not
-distinguishable from the README's number, which is the claim here and a
-weaker one than closing a gap by a measured amount.
+$48.7$ hours on four RTX 4060 Ti, and the last $25$ epochs average $71.72\%$.
+The README promises ``roughly 72.0''. At $n=50{,}000$ the Wilson 95\%
+interval on this run is $[71.44, 72.23]$, so the README's command is not
+distinguishable from the README's number. That is the claim here, and it is
+a weaker one than closing a gap by a measured amount.
 
-The wall-clock gain over the
-$6.2\times$-larger ResNet-34 is real but sub-proportional, as
-\S\ref{sec:mnv2_runit} measured at small scale: depthwise convolution is
-memory-bound, so an order of magnitude fewer FLOPs gives a factor of two or
-three on this hardware rather than six. The RMSProp peak of $0.12$ started
-without instability, because $\varepsilon=1.0$ keeps the adaptive step well
-damped
---- in sharp contrast to EfficientNet's $\varepsilon=10^{-3}$ in
-Chapter~\ref{chap:se}.
+The wall-clock gain over the $6.2\times$-larger ResNet-34 is real and
+sub-proportional, as \S\ref{sec:mnv2_runit} measured at small scale:
+depthwise convolution is memory-bound, so an order of magnitude fewer FLOPs
+gives a factor of two or three on this hardware. The RMSProp peak of $0.12$
+started without instability, because $\varepsilon=1.0$ keeps the adaptive
+step well damped. EfficientNet's $\varepsilon=10^{-3}$ in
+Chapter~\ref{chap:se} does not.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:mnv2_phase4}
@@ -9455,43 +9432,33 @@ def main (argv : List String) : IO Unit :=
 
 \noindent \texttt{slug} names
 \texttt{verified\_mlir/mobilenetv2in\_<variant>\_train\_step.mlir}, the
-rendered graph, and \texttt{shimScript} names this net's own augmentation shim rather
-than ResNet-34's --- the shim the reference consumes, which is what makes
-the two a matched pair (\S\ref{sec:r34_pjrt}). The head is the only parameter shape that
-moves, from $1280 \times 10$ to $1280 \times 1000$, which takes the count
-from 2.24M to \textbf{3,504,872} and matches the reference exactly.
-The BatchNorm layout is required to be byte-identical to the Imagenette
-net's, and a \texttt{\#guard} enforces it, because the running-stat region
-is positional and a drift there would misalign every frozen statistic at
-evaluation.
+rendered graph, and \texttt{shimScript} names this net's own augmentation
+shim, the one the reference consumes, which is what makes the two a matched
+pair (\S\ref{sec:r34_pjrt}). The head is the only parameter shape that moves,
+from $1280 \times 10$ to $1280 \times 1000$, which takes the count from 2.24M
+to \textbf{3,504,872} and matches the reference exactly. A \texttt{\#guard}
+requires the BatchNorm layout to be byte-identical to the Imagenette net's,
+because the running-stat region is positional and a drift there would
+misalign every frozen statistic at evaluation.
 
 \textbf{The variant carries the recipe.}
-\texttt{emarmstfdp64wxdwdoeps0001bf16} is the artifact the run below used,
-the reference's recipe row for row: TF~1's RMSProp (\texttt{rmstf}) at
-$\rho = 0.9$, $\mu = 0.9$, $\varepsilon = 1.0$ with the rate inside the
-momentum term and the mean-square started at $1$, coupled weight decay
-$4 \times 10^{-5}$ off BatchNorm $\gamma/\beta$, biases and the seventeen
-depthwise kernels (\texttt{wx}, \texttt{dw}), peak LR $0.12$ with the
-$\times 0.98$ staircase every $2.5$ epochs from step $0$ and no warmup,
-classifier dropout $0.2$ (\texttt{do}), label smoothing $0.1$, BatchNorm at
-TF-slim's $0.997$ / $10^{-3}$ with the running statistics read at that
-$\varepsilon$ by its eval graph
-\texttt{mobilenetv2in\_fwd\_eval\_eps0001}, the weight average at $0.9999$
-in TF's warmup-corrected form (\texttt{ema},
-Theorem~\ref{thm:ema_faithful}), which is what is scored, bf16
-convolution under an fp32 classifier head, data-parallel over four replicas
-of $64$ with each of the $52$ BatchNorms all-reducing its mean and variance
-across them, so the statistic group is the global $256$. Slim's
-truncated-normal $\sigma = 0.09$ is host-side, in the driver. The peak, the
-decay rate and the stair live in \texttt{mnv2ImagenetRmsSchedule}, which
-the driver reads, so the two paths cannot carry a different $0.98$ or
-$2.5$; the Imagenette peer's \texttt{mnv2RmsSchedule} is the paper's
-sentence, and the optimizer constants are \texttt{mnv2RmsHyper}.
+\texttt{emarmstfdp64wxdwdoeps0001bf16} is the artifact the run used, and its
+name is the reference's config in tags: the warmup-corrected weight average
+that is scored (\texttt{ema}, Theorem~\ref{thm:ema_faithful}), TF~1's RMSProp
+(\texttt{rmstf}), the weight decay kept off BatchNorm, the biases and the
+seventeen depthwise kernels (\texttt{wx}, \texttt{dw}), the classifier
+dropout (\texttt{do}), BatchNorm's $\varepsilon = 10^{-3}$, which its eval
+graph \texttt{mobilenetv2in\_fwd\_eval\_eps0001} also reads, and bf16
+convolution under an fp32 head. It runs data-parallel over four replicas of
+$64$, with each of the $52$ BatchNorms all-reducing its mean and variance
+across them, so the statistic group is the global $256$. The peak, the decay
+rate and the stair live in \texttt{mnv2ImagenetRmsSchedule}, which the driver
+reads, so the two paths cannot carry a different $0.98$ or $2.5$.
 Theorem~\ref{thm:mobilenetv2_sync_tie} ties this render's bf16 gradient
-nodes to one device's step at the global batch, its classifier dropout
-inside the statement.
-\texttt{adam64} is AdamW at $10^{-3}$ instead, the driver's default because
-it matches the other ImageNet drivers. The job:
+nodes to one device's step at the global batch, with the classifier dropout
+inside the statement. The driver's default variant is \texttt{adam64}, AdamW
+at $10^{-3}$ like the other ImageNet drivers, so the recipe is launched by
+its job:
 
 \begin{verbatim}
 lake run imagenet start mnv2     # the job mnv2-default-4gpu
@@ -9502,7 +9469,9 @@ top-5 in $63.7$ hours on the same four cards.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:mnv2_paths} is the two paths.
+Table~\ref{tab:mnv2_paths} is the two paths, Table~\ref{tab:mnv2_paths_epochs}
+is both at selected epochs, and Figure~\ref{fig:mnv2_paths_curve} is every
+tenth.
 
 \begin{table}[H]
 \centering
@@ -9523,20 +9492,19 @@ total                & $48.7$ hr                & $63.7$ hr \\
 \end{tabular}
 \end{table}
 
-\medskip\noindent\textbf{The two paths tie}, $-0.15$ on top-1 (78 images)
-and $-0.01$ on top-5, inside the 95\% Wilson interval ($\pm0.40$ at $71\%$
-on $50{,}000$ images) at one seed each, and the curves sit on each other the
-whole way: the training losses agree to within $0.005$ in every 25-epoch
-window, and the sampled accuracies never part by more than $0.35$ at any
-epoch in the table. Paired on the same images, the two checkpoints agree on
-$44{,}494$ and disagree on $5{,}506$, $2{,}792$ against $2{,}714$, and
-McNemar's exact test gives $p = 0.30$: they cannot be told apart on this
-validation set. Table~\ref{tab:mnv2_paths_epochs} is the two paths at selected
-epochs and Figure~\ref{fig:mnv2_paths_curve} every ten. At the README's
-length both curves are flattening, not flat: the stair is still at
-$4 \times 10^{-3}$, and the last fifty epochs move the reference's top-1 by
-$0.37$, so this is where another hundred epochs stops being worth a day
-rather than where the run stops moving.
+\medskip\noindent\textbf{The two paths tie.} The verified path is $-0.15$ on
+top-1 (78 images) and $-0.01$ on top-5, inside the 95\% Wilson interval
+($\pm0.40$ at $71\%$ on $50{,}000$ images) at one seed each. Paired on the
+same images, the two checkpoints agree on $44{,}494$ and disagree on
+$5{,}506$, $2{,}792$ against $2{,}714$, and McNemar's exact test gives
+$p = 0.30$. The curves sit on each other the whole way: the training losses
+agree to within $0.005$ in every 25-epoch window, and the sampled accuracies
+never part by more than $0.35$ at any epoch in the table.
+
+At the README's length both curves are flattening and not yet flat. The
+stair is still at $4 \times 10^{-3}$, and the last fifty epochs move the
+reference's top-1 by $0.37$: this is where another hundred epochs stops
+being worth a day, and the run has not stopped moving.
 
 \begin{table}[H]
 \centering
