@@ -6969,13 +6969,10 @@ grid, is $3 \times 3 \times 64 \times 64$ multiply-accumulates per output
 location, about $1.2 \times 10^8$ per convolution, six convolutions in the
 stage, times the batch; the backward costs about twice the forward again.
 
-\medskip\noindent\textbf{The loss ends near 0.50, not at zero}, here and in
-every later chapter's run. That is the label-smoothing floor: with
-$\epsilon = 0.1$ and $K = 10$ classes the smoothed target puts
-$1 - \epsilon + \epsilon/K = 0.91$ on the true class and $\epsilon/K = 0.01$
-on each of the other nine, and the minimum cross-entropy against it is that
-target's entropy, $-0.91 \log 0.91 - 9 \cdot 0.01 \log 0.01 \approx 0.500$.
-A run that ends on the floor has converged; more epochs would not move it.
+\medskip\noindent\textbf{The loss ends near 0.50}, here and in every later
+chapter's run. That is label smoothing's floor, and a run that ends on it
+has converged; \S\ref{sec:r34_recipe} derives the number with the rest of
+the recipe.
 
 
 \section{MLIR: Residual}
@@ -7134,9 +7131,12 @@ on every other, the form Szegedy et al.\ give and the one
 \texttt{TrainConfig.labelSmoothing} and \texttt{timm} implement. Stops the
 network from producing arbitrarily large logits on
 the correct class, which keeps training stable and improves calibration.
-Explains the \textbf{0.50 loss floor} in the Results section above: the
-target's entropy at $\varepsilon = 0.1$, $K = 10$ is
-$-0.91 \log 0.91 - 9 \cdot 0.01 \log 0.01 \approx 0.500$.
+It also sets the \textbf{0.50 loss floor} of the Results above. With
+$\varepsilon = 0.1$ and $K = 10$ classes the smoothed target puts $0.91$
+on the true class and $0.01$ on each of the other nine, and the minimum
+cross-entropy against it is that target's entropy,
+$-0.91 \log 0.91 - 9 \cdot 0.01 \log 0.01 \approx 0.500$. More epochs
+would not move a run that ends there.
 
 Every chapter after this one uses the same six ingredients. The
 \texttt{NetSpec} changes, and the recipe stays.
@@ -7331,47 +7331,55 @@ of the recipe gets credit for is augmentation.
 \subsection{ResNet-34: the 2018 recipe}
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
-epochs. This section is the same network, 21.8M parameters with the 1000-class head, on 1.28M images
-and 1000 classes, trained on the standard 90-epoch schedule. The
-architecture is unchanged. Only the dataset, the output head width, and
-the training schedule differ.
+epochs. This section is the same network, 21.8M parameters with the
+1000-class head, on ImageNet's 1.28M images and 1000 classes, on the
+standard 90-epoch schedule. The architecture is unchanged. Only the
+dataset, the output head width, and the training schedule differ.
 
-This section runs it twice. The \emph{reference} is the
+It runs twice. The \emph{reference} is the
 Lean$\to$JAX trainer of \S\ref{sec:jax_pipeline}: JAX traces the generated
 program and hands XLA the graph. The \emph{verified path} hands XLA
-\texttt{pretty(provenGraph)} --- the rendered artifact the proofs reason
-about --- through the PJRT C API, with no Python at run time. Same
+\texttt{pretty(provenGraph)}, the rendered artifact the proofs reason
+about, through the PJRT C API, with no Python at run time. Same
 architecture, same recipe, same data loader, same compiler; the only
-difference is who wrote the StableHLO. Every ImageNet section reports the
-reference first, the verified path second, and then the two side by side.
+difference is who wrote the StableHLO. The reference reaches
+\textbf{73.98\%} top-1 and the verified path \textbf{74.14\%}, and the two
+cannot be told apart on the validation set (McNemar $p = 0.29$).
 
-The recipe in full: SGD with momentum $0.9$ at batch 256, cosine LR with a
-5-epoch warmup from peak $0.1$, label smoothing $0.1$, a random-resized
-crop to $224\times224$ plus a horizontal flip, $\ell_2$ weight decay
-$10^{-4}$ on the convolution and dense weights with BatchNorm's $\gamma$,
-$\beta$ and the biases left undecayed, every block's second BatchNorm
-starting its $\gamma$ at $0$, and running statistics that decay at $0.9$.
-The crop is torchvision's \texttt{RandomResizedCrop} ($8$--$100\%$ of the
-area at a $\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, bilinear) on both
-halves, from the one generated shim. SGD with momentum and the weight
-decay are the original paper's; the cosine schedule, the warmup, the label
-smoothing, the random-resized crop, the undecayed BatchNorm parameters and
-the zero-$\gamma$ are He et al.\ 2018's Bag of Tricks. What the rows do
-not take from that paper, each a training-time change that no later
-chapter's recipe shares either: 120 epochs, Nesterov momentum, Xavier
-initialization, the hue/saturation/brightness jitter with PCA noise, and
-the ResNet-D downsampling blocks --- the networks here are torchvision's,
-ResNet-B (also known as ResNet v1.5): the stride-2
-on a bottleneck's $3\times3$ rather than its first $1\times1$.
+Every ImageNet section runs in the same order: the recipe, the reference,
+the verified path, and then the two side by side.
+
+The recipe is the 2018 one, and it has three sources:
+\begin{itemize}
+  \item \textbf{The original paper:} SGD with momentum $0.9$ at batch 256,
+    and $\ell_2$ weight decay $10^{-4}$ on the convolution and dense
+    weights.
+  \item \textbf{He et al.\ 2018's Bag of Tricks:} the cosine schedule with
+    a 5-epoch warmup from peak $0.1$, label smoothing $0.1$, a
+    random-resized crop to $224\times224$ plus a horizontal flip,
+    BatchNorm's $\gamma$, $\beta$ and the biases left undecayed, and every
+    block's second BatchNorm starting its $\gamma$ at $0$.
+  \item \textbf{torchvision:} the crop is its \texttt{RandomResizedCrop}
+    ($8$--$100\%$ of the area at a $\frac{3}{4}$--$\frac{4}{3}$ aspect
+    ratio, bilinear) on both halves, from the one generated shim; the
+    running statistics decay at $0.9$; and the networks are its ResNet-B
+    (also known as ResNet v1.5), with the stride-2 on a bottleneck's
+    $3\times3$ where the original has it on the first $1\times1$.
+\end{itemize}
+
+\noindent\textbf{Five things in Bag of Tricks are not taken,} each a
+training-time change that no later chapter's recipe shares either: 120
+epochs, Nesterov momentum, Xavier initialization, the
+hue/saturation/brightness jitter with PCA noise, and the ResNet-D
+downsampling blocks.
 
 \prosesection{The reference (JAX)}
 
 The reference trainer is \texttt{jax/MainResnetImagenet.lean}, built in
 \texttt{jax/} as \texttt{lake build resnet34-imagenet}, with \texttt{.imagenet} streamed
-through tfds. It runs in bf16 --- the convolutions cast to bfloat16
-against fp32 master weights, the classifier head left in fp32 --- which is
-a throughput choice
-rather than a fidelity one, and the verified render makes the same one
+through tfds. It runs in bf16: the convolutions cast to bfloat16
+against fp32 master weights, with the classifier head left in fp32. That
+is a throughput choice, and the verified render makes the same one
 (Table~\ref{tab:r34_paths}). Table~\ref{tab:r34_jax} is the run.
 
 \begin{table}[H]
@@ -7490,17 +7498,19 @@ def runResnet34Imagenet (argv : List String) : IO Unit := do
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 \end{verbatim}
 
-\noindent Three things in it are worth pulling out, because they are what
-makes the listing a claim rather than a description.
+\noindent Three things in it are worth pulling out, because they turn the
+listing from a description into a claim.
 
 \textbf{The \texttt{slug} is the artifact.} \texttt{resnet34in} names
-\texttt{verified\_mlir/resnet34in\_<variant>\_train\_step.mlir} ---
-\texttt{momdp64wxbf16} for the run below --- which is
+\texttt{verified\_mlir/resnet34in\_<variant>\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the same renderer every earlier chapter used.
-Scaling to ImageNet needed nothing new in it. \texttt{nClasses}, the batch, the
+The variant carries the recipe: the run below used \texttt{momdp64wxbf16},
+heavy-ball momentum, data-parallel at $64$ a replica, the weight-decay
+exclusion and bf16 convolutions.
+Scaling to ImageNet needed nothing new in the renderer. \texttt{nClasses}, the batch, the
 optimizer and the slug are all ordinary parameters, so the ImageNet artifacts
 are three \texttt{\#eval}s of machinery that was already proved. What had to be
-built was the data path, not the compiler.
+built was the data path.
 
 \textbf{The \texttt{\#guard}s pin it to the Imagenette net.} The 1000-class
 spec must be the 10-class one with a different head, and the three guards fail
@@ -7508,9 +7518,8 @@ the build if any other parameter shape moves. That is what licenses reading the
 Imagenette chapter's theorems as being about this network's body.
 
 \textbf{The \texttt{shimScript} is per-net and decides the data.} It names this
-net's own generated augmentation shim --- the same shim the reference
-consumes, which is what makes the two a matched pair rather than two
-separate stories.
+net's own generated augmentation shim, the same shim the reference
+consumes, which is what makes the two a matched pair.
 
 \medskip\noindent It runs with:
 
@@ -7537,6 +7546,12 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{tabular}
 \end{table}
 
+\medskip\noindent\textbf{Both paths normalize over the global $256$.} The
+reference's \texttt{@jit} mesh reduces the batch statistics across its
+shards, and each of the verified render's 36 BatchNorms all-reduces its
+mean and variance across the four replicas. That is the data-parallel step
+Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
+
 \medskip\noindent\textbf{The proof-carrying tier reaches this render as a
 step.} Theorems~\ref{thm:resnet34_step_tie} and \ref{thm:resnet34_sync_tie}
 are stated at either precision, and read over $\mathbb{R}$ the bf16 text's
@@ -7546,9 +7561,13 @@ trusted, as it is at every op of an fp32 render.
 
 \prosesection{The two paths, side by side}
 
+Table~\ref{tab:r34_paths} is the two paths, row by row,
+Table~\ref{tab:r34_paths_epochs} the selected epochs, and
+Figure~\ref{fig:r34_paths_curve} the curve at every epoch.
+
 \begin{table}[H]
 \centering
-\caption{ResNet-34 on ImageNet-1k: the reference and the verified path, row by row. Both are the 2018 recipe, 90 epochs, on the same four RTX 4060 Ti cards, scored over the same $50{,}000$ validation images under the same protocol; rows above the first rule differ, rows between the rules are held equal by construction.}
+\caption{ResNet-34 on ImageNet-1k: the reference and the verified path, row by row. Both are the 2018 recipe, 90 epochs, on the same four RTX 4060 Ti cards, scored over the same $50{,}000$ validation images under the same protocol; rows above the first rule differ, rows between the rules are held equal by construction. One seed per arm, run one after the other: \texttt{runs/2026-10-20-r34-bot-jax} and \texttt{runs/2026-10-20-r34-bot-verified}.}
 \label{tab:r34_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -7576,39 +7595,28 @@ schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \end{tabular}
 \end{table}
 
-\medskip\noindent\textbf{The two paths agree to $0.16$ points on top-1 and
-$0.15$ on top-5}, and that is inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson interval is $\pm0.38$ points on either top-1
---- $[73.59, 74.36]$ for the reference, $[73.75, 74.52]$ for the verified
-path --- so the gap in the table is under half the interval, and
-at this scale a gap under about $0.4$ points is not yet a result in either
-direction. That is the floor every side-by-side table in this book is read
-against. Paired on the same images the reading is the same: the two
+\medskip\noindent\textbf{The two paths tie.} The verified path is $+0.16$
+on top-1 and $+0.15$ on top-5, and that is inside what one run can
+resolve. At $n = 50{,}000$ the 95\% Wilson interval is $\pm0.38$ points on
+either top-1, $[73.59, 74.36]$ for the reference and $[73.75, 74.52]$ for
+the verified path, so the gap in the table is under half the interval. At
+this scale a gap under about $0.4$ points is not yet a result in either
+direction, and that is the floor every side-by-side table in this book is
+read against. Paired on the same images the reading is the same: the two
 checkpoints disagree on $5{,}807$ of them, $2{,}863$ one way and $2{,}944$
 the other, and McNemar's exact test puts $p = 0.29$ on the $81$ images
 between them.
 
-\medskip\noindent The two halves ran one after the other on the same four
-cards (\texttt{runs/2026-10-20-r34-bot-jax},
-\texttt{runs/2026-10-20-r34-bot-verified}), one seed per arm.
-
-\medskip\noindent Both paths normalize over the global $256$: the
-reference's \texttt{@jit} mesh reduces the batch statistics across its
-shards, and each of the verified render's 36 BatchNorms all-reduces its
-mean and variance across the four replicas --- the data-parallel step
-Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
-
-\medskip\noindent\textbf{The curves converge; they do not merely end
-together.} The middle of the schedule is noisy on both paths --- at peak
-learning rate SGD moves top-1 by a point or two between consecutive
-epochs, in both directions, up to three and a half on the verified path and three on the reference --- so the row
-is read for its ends. Neither path is ahead for long through the first third:
-the verified path is ahead at eighteen of the first thirty epochs and
-behind at twelve, the gap swings between $-4.4$ and $+2.7$ points, and its
-mean is two tenths. The gap closes as the cosine anneals: over the
-last fifteen epochs the two average within $0.15$ of each other on top-1
-and $0.20$ on top-5.
-Table~\ref{tab:r34_paths_epochs} is the selected epochs and
-Figure~\ref{fig:r34_paths_curve} every epoch.
+\medskip\noindent\textbf{The curves converge over the schedule.} The
+middle of it is noisy on both paths: at peak learning rate SGD moves top-1
+by a point or two between consecutive epochs, in both directions, up to
+three and a half on the verified path and three on the reference, so the
+epochs row is read for its ends. Neither path is ahead for long through
+the first third: the verified path is ahead at eighteen of the first
+thirty epochs and behind at twelve, the gap swings between $-4.4$ and
+$+2.7$ points, and its mean is two tenths. The gap closes as the cosine
+anneals: over the last fifteen epochs the two average within $0.15$ of
+each other on top-1 and $0.20$ on top-5.
 
 \begin{table}[H]
 \centering
@@ -7658,15 +7666,18 @@ $\Delta$              & $+1.72$ & $+2.58$ & $+1.04$ & $+0.28$ & $+0.11$ & $+0.29
 \subsection{ResNet-50: the 2018 recipe and RSB-A3}
 
 The basic block that ResNet-34 is built from generalizes to the
-\emph{bottleneck} block of ResNet-50 --- a $1\times1$ down, a $3\times3$, a
-$1\times1$ back up --- at 25.6M parameters against 21.8M. This section
+\emph{bottleneck} block of ResNet-50, a $1\times1$ down, a $3\times3$ and a
+$1\times1$ back up, at 25.6M parameters against 21.8M. This section
 moves one lever at a time. First the architecture, with the recipe held
 fixed: ResNet-50 on the 2018 recipe of \S\ref{sec:r34_pjrt}, unchanged,
-which gains $3.0$ points over ResNet-34 on the reference. Then the
+reaches \textbf{77.01\%} top-1 on the reference and \textbf{76.99\%} on
+the verified path, $3.0$ points over ResNet-34. Then the
 recipe, with the architecture held fixed: the same network on RSB-A3
-(Wightman et al.\ 2021, ``ResNet Strikes Back''), which gains another
-point on each path. Both
-recipes run on both paths, so the result is a grid rather than a pair, and
+(Wightman et al.\ 2021, ``ResNet Strikes Back'') reaches \textbf{78.14\%}
+and \textbf{77.99\%}, against the paper's $78.1\%$, another point on each
+path. Neither pair can be told apart on the validation set (McNemar
+$p = 0.88$ and $p = 0.23$). Both
+recipes run on both paths, so the result is a grid of four runs, and
 the table that opens it is the 2018 column every later chapter's recipe
 is diffed against.
 
@@ -7722,6 +7733,38 @@ one-line \texttt{TrainConfig} change; on the verified path each is a render
 variant or a shim setting on the same backbone, and the $160$ train
 resolution is a spec of its own.
 
+\medskip\noindent\textbf{The batch of 2048 is accumulated, and that makes
+the BatchNorm ghost.} A3 accumulates $4 \times 512$ to reach $2048$, so
+each micro-step normalizes over its own $512$ images, where the 2018
+recipe normalizes over a true global batch of $256$. That is \emph{ghost}
+batch norm (Hoffer, Hubara \& Soudry 2017,
+\href{https://arxiv.org/abs/1705.08741}{arXiv:1705.08741}): the
+statistics come from a fixed sub-batch of the whole batch, here as a side
+effect of accumulation. The A3 render accumulates the same way, so the
+setting changes between the two recipes on both paths at once. Both paths
+run $625$ steps an epoch and leave $0.08\%$ of it unused, because
+$4 \nmid 2{,}502$.
+
+\medskip\noindent\textbf{A3 is \texttt{timm}'s recipe as \texttt{timm}
+ran it,} on both paths. A transcription of the paper would miss seven
+settings:
+\begin{itemize}
+  \item The cosine is stepped once an epoch, from $10^{-4}$ over the five
+    warmup epochs to the peak and down to a floor of $10^{-6}$.
+  \item Mixup or CutMix is drawn once per GPU batch of $256$ images at
+    $p = 0.5$, so the draw is per $256$-row chunk, eight a step.
+  \item RandAugment fills at the image mean.
+  \item The BCE targets are binarized at $0.2$.
+  \item BatchNorm's $\gamma/\beta$ and the biases are excluded from weight
+    decay.
+  \item LAMB clips the gradient, at \texttt{timm}'s default.
+  \item The \texttt{no\_weight\_decay} group is left out of layer
+    adaptation.
+\end{itemize}
+One setting is not taken, on either path: \texttt{timm}'s then-default
+\texttt{cooldown\_epochs 10} at the floor (the paper counts 100 epochs,
+and $10^{-6}$ moves nothing).
+
 \prosesection{The reference (JAX)}
 
 The reference is \texttt{jax/MainResnet50Imagenet.lean}, the bottleneck
@@ -7729,32 +7772,17 @@ backbone on the same tfds stream, with the recipe as an argument. The 2018
 row is the ResNet-34 recipe, zero-$\gamma$ on each bottleneck's last
 BatchNorm and the $0.9$ statistics decay included (A3 keeps both), and
 BatchNorm's $\gamma$, $\beta$ and the biases undecayed as there.
-A3 is LAMB at effective batch
-2048 (accumulated as $4\times512$), BCE over Mixup/CutMix targets binarized
-at \texttt{timm}'s $0.2$ threshold, RandAugment, and train@160 / eval@224.
 On the 2018 recipe the run finished at $\mathbf{77.01\%}$ top-1 and
 $\mathbf{93.51\%}$ top-5, 90 epochs in about $22.2$ hours on four RTX 4060
 Ti; on A3 at $\mathbf{78.14\%}$ and $\mathbf{93.70\%}$, 100 epochs in about
 $14.0$ hours on four RTX 3060.
 
-A3 normalizes per $512$-image micro-batch because it accumulates
-$4 \times 512$ to reach $2048$; the 2018 row is a true global batch of
-$256$. That is \emph{ghost} batch norm (Hoffer, Hubara \& Soudry 2017,
-\href{https://arxiv.org/abs/1705.08741}{arXiv:1705.08741}): the
-statistics come from a fixed sub-batch rather than the whole batch, here
-as a side effect of accumulation rather than a choice, and the A3 render
-below reproduces it by accumulating the same way. The
-architecture lever: against ResNet-34's $73.98\%$ on the same
-recipe, the bottleneck gains $+3.03$ points. The recipe lever: A3 adds
-$+1.13$ on the same network, in less wall clock, because it trains at
-$160^2$. It lands on the paper's $78.1\%$, and $0.09$ over the $78.05\%$
-that \texttt{timm}'s own \texttt{resnet50.a3\_in1k} weights score under
-this protocol. One setting Table~\ref{tab:r50_a3_vs_2018} does not list:
-\texttt{timm} draws Mixup or CutMix once per GPU batch of $256$ images,
-so the draw is per $256$-row chunk, eight a step, on both paths. This A3 is
-\texttt{timm}'s recipe as \texttt{timm} ran it, on both paths; the
-paragraph after the side-by-side table names the settings a bare
-transcription would miss, and the one not taken.
+\medskip\noindent\textbf{The two levers.} Architecture: against
+ResNet-34's $73.98\%$ on the same recipe, the bottleneck gains $+3.03$
+points. Recipe: A3 adds $+1.13$ on the same network, in less wall clock,
+because it trains at $160^2$. It lands on the paper's $78.1\%$, and $0.09$
+over the $78.05\%$ that \texttt{timm}'s own \texttt{resnet50.a3\_in1k}
+weights score under this protocol.
 
 A3 starts far lower and stays behind for most of the schedule: its whole first
 epoch runs at \texttt{timm}'s warmup start of $10^{-4}$, an eightieth of
@@ -7769,10 +7797,12 @@ endpoints are what the $+1.13$ is measured from.
 The verified trainer is the ResNet-34 one of \S\ref{sec:r34_pjrt} with the
 bottleneck backbone substituted, and each recipe is its own render:
 \begin{itemize}
-\item 2018: \texttt{resnet50in\_momdp64wxbf16}.
-\item A3: \texttt{resnet50in160\_lambaccdp4x128wxclipbcebf16}, LAMB $\times$
-  BCE-with-logits $\times$ accumulation $k=4$ at four replicas of $128$ to
-  the recipe's $2048$, train@160 / eval@224.
+\item 2018: \texttt{resnet50in\_momdp64wxbf16}, ResNet-34's variant on the
+  new backbone.
+\item A3: \texttt{resnet50in160\_lambaccdp4x128wxclipbcebf16}. The slug's
+  \texttt{160} is the train resolution, and the tags are LAMB,
+  accumulation $k=4$ at four replicas of $128$ to the recipe's $2048$, the
+  decay exclusion, the clip, BCE-with-logits and bf16.
 \end{itemize}
 They run with:
 
@@ -7792,25 +7822,24 @@ every BatchNorm's mean and variance across the four replicas
 the global $256$ and the A3 render over $4 \times 128 = 512$, the ghost
 batch the reference's accumulation gives it.
 
-\medskip\noindent The A3 render carries the recipe as
-Table~\ref{tab:r50_a3_vs_2018} tabulates it, including the three places a bare
-transcription would miss: BN $\gamma/\beta$ and biases excluded from weight
-decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
+\medskip\noindent\textbf{What the A3 render's theorems cover.} Three
+settings of the list above are optimizer-side and so are in the graph:
+the weight-decay exclusion, LAMB's gradient clip (after the all-reduce
 and the accumulation, at threshold $kC$,
 \texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
-left out of layer adaptation; all three are
+left out of layer adaptation. All three are
 Theorem~\ref{thm:lamb_clip_faithful}, and the four-fold accumulation is
 Theorem~\ref{thm:accum_mean_step}. The optimizer is also tied to the
 reference numerically, at the update as well as the gradient, seven
-variants to $\sim\!10^{-7}$. Both
-paths run $625$ steps an epoch and leave $0.08\%$ of it unused, because
-$4 \nmid 2{,}502$. Mixup's $\lambda$ is drawn host-side, per $256$-row
-chunk on both paths (\texttt{SHIM\_MIX\_CHUNK=256} on this one), so
-agreement there is distributional rather than per-step.
+variants to $\sim\!10^{-7}$. Mixup's $\lambda$ is drawn host-side
+(\texttt{SHIM\_MIX\_CHUNK=256} on this path), so agreement there is
+distributional and holds over the run, with no step-for-step match.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:r50_paths} is the two paths, for both recipes.
+Table~\ref{tab:r50_paths} is the two paths, for both recipes,
+Table~\ref{tab:r50_paths_epochs} the selected epochs, and
+Figure~\ref{fig:r50_paths_curves} the curves at every epoch.
 
 \begin{table}[H]
 \centering
@@ -7839,50 +7868,35 @@ total               & 14.0 hr                  & 21.0 hr \\
 \end{tabular}
 \end{table}
 
-\noindent The BatchNorm statistic group is the setting that changes between
-the two recipes, on both paths at once: the 2018 recipe normalizes over
-the global $256$, and A3 over the $512$-image micro-batch its accumulation
-hands each step --- ghost batch norm, on the reference and the verified
-path alike. A3 is \texttt{timm}'s recipe as \texttt{timm} ran it, in the
-settings a transcription of the paper would miss: the cosine stepped once
-an epoch, from $10^{-4}$ over the five warmup epochs to the peak and down
-to a floor of $10^{-6}$; Mixup or CutMix drawn per $256$-row chunk at $p = 0.5$;
-RandAugment's fill at the image mean; the BCE targets binarized at $0.2$
---- on both paths. Not taken, on either path: \texttt{timm}'s then-default
-\texttt{cooldown\_epochs 10} at the floor (the paper counts 100 epochs,
-and $10^{-6}$ moves nothing).
-
-\medskip\noindent The A3 number is the final checkpoint rescored at
+\noindent The A3 number is the final checkpoint rescored at
 \texttt{timm}'s eval resize, the short side at $235$; the trainer's own
 read at $236$ differs by one image.
 
-\medskip\noindent\textbf{The two paths tie on 2018}, a tie being a gap the
-seeds or the paired test cannot tell from zero: the gap is $0.02$ points
-on top-1 and none on top-5, at one seed per cell. Paired on the same
-images, the two checkpoints disagree on $4{,}641$, $2{,}326$ against
-$2{,}315$, and McNemar's exact test puts $p = 0.88$ on the eleven-image
-difference: the ResNet-34 reading again. \textbf{And on A3}: the
+\medskip\noindent\textbf{The two paths tie on both recipes}, a tie being
+a gap the seeds or the paired test cannot tell from zero. On 2018 the gap
+is $0.02$ points on top-1 and none on top-5, at one seed per cell. Paired
+on the same images, the two checkpoints disagree on $4{,}641$, $2{,}326$
+against $2{,}315$, and McNemar's exact test puts $p = 0.88$ on the
+eleven-image difference: the ResNet-34 reading again. On A3 the
 reference lands on the paper's number and the verified path $0.15$ under
 it on top-1, $0.01$ on top-5; the two checkpoints disagree on $3{,}960$
 images, $1{,}942$ against $2{,}018$, and McNemar puts $p = 0.23$ on the
 $76$-image difference.
 
-\medskip\noindent One thing the table does not settle: the A3 column
-trains at $160$ and evaluates at $224$ while 2018 does both at $224$, so
-the recipe delta, $+1.13$ on the reference and $+1.00$ on the verified
-path, confounds resolution with recipe, by A3's own design.
+\medskip\noindent\textbf{What the table does not settle is the recipe
+delta.} The A3 column trains at $160$ and evaluates at $224$ while 2018
+does both at $224$, so $+1.13$ on the reference and $+1.00$ on the
+verified path confound resolution with recipe, by A3's own design.
 
 \medskip\noindent\textbf{The curves travel together.} On both recipes
 the two paths swing both ways through the schedule, as ResNet-34's do,
 several points apart at the widest and together at the end; on A3 the
 verified path runs ahead through the middle of the schedule and the
 reference draws level over the last ten epochs. The swings are why these
-pairs are read at their endpoints and nowhere
-else (the rows are the runs' own per-epoch evaluation, the reference's
-through its bf16 forward on 2018 and through fp32 on A3; the headline
-numbers are the final checkpoints scored through fp32, within $0.04$ of
-the last column). Table~\ref{tab:r50_paths_epochs} is the selected epochs and
-Figure~\ref{fig:r50_paths_curves} every epoch.
+pairs are read at their endpoints. The epochs rows are the runs' own
+per-epoch evaluation, the reference's through its bf16 forward on 2018
+and through fp32 on A3; the headline numbers are the final checkpoints
+scored through fp32, within $0.04$ of the last column.
 
 \begin{table}[H]
 \centering
@@ -8077,12 +8091,6 @@ For the fastest path through this book, the route is roughly:
     tree. Appendix~\ref{app:verification} walks through how that
     claim is auditable if you ever want to spot-check it.
 \end{itemize}
-
-Reading through this chapter is enough to know the framework works. Read
-the AlphaGo Zero paper
-(\bestiaryref{bestiary:alphagozero}{bestiary entry}), which combines
-reinforcement learning with a large residual network of
-convolutions.
 
 \section{Recap}
 
