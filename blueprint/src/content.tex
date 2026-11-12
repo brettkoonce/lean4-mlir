@@ -6320,7 +6320,8 @@ of the emitted text and take none; (v) is at fixed weights.
 
 \begin{theorem}[ResNet-34 at batch \(N\) has the VJP]
   \label{thm:resnet34FullHasVJP}
-  \lean{Proofs.resnet34ForwardBFullHasVJPAt_correct, Proofs.resnet34ForwardBFullHasVJPAt}
+  \lean{Proofs.resnet34ForwardBFullHasVJPAt_correct, Proofs.resnet34ForwardBFullHasVJPAt,
+        Proofs.StableHLO.resnet34FwdGraphEval_faithful}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv,
       ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
@@ -6342,6 +6343,9 @@ of the emitted text and take none; (v) is at fixed weights.
   and index, generic in \(N\) and in the weights. The strict pool clause is
   one real batches do not meet; the parameter gradients of
   Theorem~\ref{thm:resnet34_loss_grad} are stated under one they do.
+  At inference BatchNorm, the emitted eval forward graph denotes the
+  forward at frozen running statistics (\texttt{resnet34ForwardEval}), one
+  example at a time, with no hypothesis.
 \end{theorem}
 
 \begin{proof}
@@ -6354,7 +6358,8 @@ activation; see \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
 
 \begin{theorem}[ResNet-50 at batch \(N\) has the VJP]
   \label{thm:resnet50FullHasVJP}
-  \lean{Proofs.resnet50ForwardBFullHasVJPAt_correct, Proofs.resnet50ForwardBFullHasVJPAt}
+  \lean{Proofs.resnet50ForwardBFullHasVJPAt_correct, Proofs.resnet50ForwardBFullHasVJPAt,
+        Proofs.StableHLO.resnet50FwdGraphEval_faithful}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv,
       ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
@@ -6368,7 +6373,8 @@ activation; see \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
   \Prove{} the same for the full-width ResNet-50
   (\texttt{resnet50ForwardBFull}) at every resolution \(q\) --- the image side
   is \(32q\), so \(q = 7\) is the 224-pixel net and \(q = 5\) the 160-pixel
-  one.
+  one. The eval forward graph denotes \texttt{resnet50ForwardEval} at every
+  \(q\), likewise.
 \end{theorem}
 
 \begin{proof}
@@ -6510,6 +6516,7 @@ to a maximal cell.
   \label{thm:resnet50_step_tie}
   \lean{Proofs.ResNet50TieB.r50_net_tiedB, Proofs.ResNet50TieB.r50_lossCot_is_smoothedCE_grad,
         Proofs.ResNet50TieB.r50_lossCot_is_bce_grad,
+        Proofs.StableHLO.resnet50FwdGraphBFullDrop_faithful, Proofs.resnet50ForwardBFullDrop_none,
         Proofs.ResNet50TieB.r50IdCotIn_eq_vjp, Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp,
         Proofs.ResNet50TieB.r50DownCotIn_eq_vjp}
   \leanok
@@ -6526,7 +6533,12 @@ to a maximal cell.
   at the label-smoothed cross-entropy for targets summing to one and at
   BCE-with-logits over \(N \cdot K\), the two losses the ResNet-50
   artifacts train. Stated at
-  either precision, as for ResNet-34.
+  either precision, as for ResNet-34, with stochastic depth as an optional
+  mask at each of the sixteen bottlenecks, on the residual branch before
+  the skip add: at \texttt{none} the chain is the drop-free artifacts', at
+  \texttt{some} the \texttt{drop} renders', where every node of
+  the block's residual branch reads the cotangent scaled by its example's
+  mask, and the skip and the projection read it raw.
 \end{theorem}
 
 \begin{proof}
@@ -6552,15 +6564,17 @@ As for ResNet-34, over the three block kinds; see
   \Assume{}
   \begin{enumerate}
     \item every BatchNorm's \(\varepsilon > 0\) \hfill[\texttt{R50PosB}]
-    \item the ResNet-34 smooth-point condition at the batch's activations,
-          up to twins at the stem pool \hfill[\texttt{R50LossSmoothAtB}]
+    \item the ResNet-34 smooth-point condition at the activations of the
+          masked forward, up to twins at the stem pool
+          \hfill[\texttt{R50LossSmoothAtB}]
     \item \(L\) is any loss of the logits, with gradient \(g\) there
           \hfill[\texttt{hL}]
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:resnet50_step_tie}, the node at
   the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
-  \texttt{resnet50ForwardBFull} with that one parameter varied, at any batch
-  and number of classes. Instantiated at both losses of
+  \texttt{resnet50ForwardBFullDrop} with that one parameter varied and the
+  masks held fixed, at any batch and number of classes. At \texttt{none}
+  that forward is \texttt{resnet50ForwardBFull}. Instantiated at both losses of
   Theorem~\ref{thm:resnet50_step_tie} for targets summing to one, and at
   the stem at any routing to a maximal cell, as for ResNet-34.
 \end{theorem}
@@ -6645,7 +6659,8 @@ its shard, so its node is the global node's sum over that shard, scaled by
 \begin{theorem}[ResNet-50 data-parallel step is one device's step at \(R \cdot N\)]
   \label{thm:resnet50_sync_tie}
   \lean{Proofs.ResNet50SyncTieB.r50_net_syncTiedB, Proofs.ResNet50SyncTieB.r50_net_syncTiedB_smoothedCE,
-        Proofs.ResNet50SyncTieB.r50_net_syncTiedB_bce}
+        Proofs.ResNet50SyncTieB.r50_net_syncTiedB_bce,
+        Proofs.StableHLO.resnet50FwdGraphSyncFullDrop_shard}
   \leanok
   \uses{ax:conv2d, ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv,
       ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:denseHasVJP,
@@ -6653,7 +6668,11 @@ its shard, so its node is the global node's sum over that shard, scaled by
   \Prove{} the same for ResNet-50's 161 gradients at side \(32q\), \(q > 0\),
   instantiated at the label-smoothed cross-entropy for targets summing to
   one and at BCE with the committed divisors \(N \cdot K\) per replica and
-  \((R \cdot N) \cdot K\) on one device.
+  \((R \cdot N) \cdot K\) on one device. Stochastic depth is an optional
+  mask as in Theorem~\ref{thm:resnet50_step_tie}: at \texttt{some}, each
+  replica's masks are its shards of global ones. The forward half is its
+  own statement: each replica's forward graph, at its shard of the masks,
+  denotes its shard of the single-device forward at the global masks.
 \end{theorem}
 
 \begin{proof}
@@ -8869,7 +8888,8 @@ its shard, so its node is the global node's sum over that shard, scaled by
 
 \begin{theorem}[MobileNetV4 data-parallel step is one device's step at \(R \cdot N\)]
   \label{thm:mobilenetv4_sync_tie}
-  \lean{Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB, Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB_smoothedCE}
+  \lean{Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB, Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB_smoothedCE,
+        Proofs.StableHLO.mnv4FwdGraphSyncFullDrop_shard}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
@@ -8881,7 +8901,9 @@ its shard, so its node is the global node's sum over that shard, scaled by
   side and with stochastic depth and the classifier dropout as optional
   masks: at \texttt{some}, each replica's masks are its shards of global
   ones. Instantiated at the label-smoothed cross-entropy. The forward
-  half at the masks is not stated for this net.
+  half is its own statement: each replica's forward graph, at its shards
+  of the masks, denotes its shard of the single-device forward at the
+  global masks.
 \end{theorem}
 
 \begin{proof}

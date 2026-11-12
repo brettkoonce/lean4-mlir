@@ -2,7 +2,7 @@ module
 
 public import LeanMlir.Proofs.Foundation.GradNodesBAt
 public import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
-public import LeanMlir.Proofs.Foundation.DropSites
+public import LeanMlir.Proofs.Foundation.DropLayers
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 @[expose] public section
@@ -809,17 +809,6 @@ private theorem den_denseRowBack {N a nC : Nat} (W : Mat a nC) (e : SHlo (N * nC
     den (SHlo.denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e)
       = rowDenseBackFlat N a nC W (den e) := rfl
 
-/-- **The classifier-dropout site as a certified layer**: `dropoutOpt cd`, certified everywhere,
-    its backward graph the `dropoutB` node at the same mask (nothing at `none`). -/
-noncomputable def dropoutOptLayer (N : Nat) {n : Nat} (cd : Option (Vec (N * n))) :
-    CertLayer (N * n) (N * n) where
-  fwd := dropoutOpt cd
-  ok := fun _ => True
-  diff := fun x _ => (dropoutOpt_differentiable cd) x
-  vjp := fun x _ => (dropoutOptHasVJP cd).toHasVJPAt x
-  graph := fun _ e => dropoutOptG "%do" cd e
-  faithful := fun x _ e => by rw [den_dropoutOptG]; rfl
-
 /-- **The head's input cotangent — block 21's `dyOut` — is its certified VJP's backward**, at
     any loss cotangent `g`. -/
 theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
@@ -877,16 +866,6 @@ def mnv4Sd {N : Nat} (sd : Option (Fin 18 → Vec N)) (k : Fin 18) : Option (Vec
 
 @[simp] theorem mnv4Sd_some {N : Nat} (m : Fin 18 → Vec N) (k : Fin 18) :
     mnv4Sd (some m) k = some (m k) := rfl
-
-/-- **A stochastic-depth site as a certified layer**: `dropPathOpt N n s`, certified everywhere,
-    its backward graph the `dropPathB` node at the same per-example scale (nothing at `none`). -/
-noncomputable def dropPathOptLayer (N n : Nat) (s : Option (Vec N)) : CertLayer (N * n) (N * n) where
-  fwd := dropPathOpt N n s
-  ok := fun _ => True
-  diff := fun x _ => (dropPathOpt_differentiable N n s) x
-  vjp := fun x _ => (dropPathOptHasVJP N n s).toHasVJPAt x
-  graph := fun _ e => dropPathOptG "%dp" s e
-  faithful := fun x _ e => by rw [den_dropPathOptG]; rfl
 
 /-- **A skip row with its stochastic-depth site**, certified: the body, then the site on the
     BRANCH, then the identity skip — `x ↦ dropPathOpt s (L.fwd x) + x`. At `none` its forward is

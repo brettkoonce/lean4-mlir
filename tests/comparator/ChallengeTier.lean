@@ -188,79 +188,98 @@ theorem chk_smoothedCE_grad :
 /-- `Proofs.ResNet50TieB.r50_net_tiedB` -/
 theorem chk_r50_net_tiedB :
     ∀ (N q : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls)
-      (bf16 : Bool)
+      (bf16 : Bool) (sd : Option (Fin (16 : ℕ) → Proofs.Vec N))
       (x :
         Proofs.Vec
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
       (g : Proofs.Vec (N * nCls)),
-      have dy16 := Proofs.ResNet34TieB.r34HeadCotBlk N q q w.Wd w.bd (Proofs.r50Pre16 N q w x) g;
-      have dy15 := Proofs.ResNet50TieB.r50IdCotIn N q q w.s4b2 (Proofs.r50Pre15 N q w x) dy16;
-      have dy14 := Proofs.ResNet50TieB.r50IdCotIn N q q w.s4b1 (Proofs.r50Pre14 N q w x) dy15;
-      have dy13 := Proofs.ResNet50TieB.r50DownCotIn N q q w.s4b0 (Proofs.r50Pre13 N q w x) dy14;
-      have dy12 := Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b5 (Proofs.r50Pre12 N q w x) dy13;
-      have dy11 := Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b4 (Proofs.r50Pre11 N q w x) dy12;
-      have dy10 := Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b3 (Proofs.r50Pre10 N q w x) dy11;
-      have dy9 := Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b2 (Proofs.r50Pre9 N q w x) dy10;
-      have dy8 := Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b1 (Proofs.r50Pre8 N q w x) dy9;
-      have dy7 := Proofs.ResNet50TieB.r50DownCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b0 (Proofs.r50Pre7 N q w x) dy8;
+      have dy16 := Proofs.ResNet34TieB.r34HeadCotBlk N q q w.Wd w.bd (Proofs.r50PreD16 N q w sd x) g;
+      have dy15 :=
+        Proofs.ResNet50TieB.r50IdCotIn N q q w.s4b2 (Proofs.r50Sd sd (15 : Fin (16 : ℕ))) (Proofs.r50PreD15 N q w sd x)
+          dy16;
+      have dy14 :=
+        Proofs.ResNet50TieB.r50IdCotIn N q q w.s4b1 (Proofs.r50Sd sd (14 : Fin (16 : ℕ))) (Proofs.r50PreD14 N q w sd x)
+          dy15;
+      have dy13 :=
+        Proofs.ResNet50TieB.r50DownCotIn N q q w.s4b0 (Proofs.r50Sd sd (13 : Fin (16 : ℕ))) (Proofs.r50PreD13 N q w sd x)
+          dy14;
+      have dy12 :=
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b5 (Proofs.r50Sd sd (12 : Fin (16 : ℕ)))
+          (Proofs.r50PreD12 N q w sd x) dy13;
+      have dy11 :=
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b4 (Proofs.r50Sd sd (11 : Fin (16 : ℕ)))
+          (Proofs.r50PreD11 N q w sd x) dy12;
+      have dy10 :=
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b3 (Proofs.r50Sd sd (10 : Fin (16 : ℕ)))
+          (Proofs.r50PreD10 N q w sd x) dy11;
+      have dy9 :=
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b2 (Proofs.r50Sd sd (9 : Fin (16 : ℕ)))
+          (Proofs.r50PreD9 N q w sd x) dy10;
+      have dy8 :=
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b1 (Proofs.r50Sd sd (8 : Fin (16 : ℕ)))
+          (Proofs.r50PreD8 N q w sd x) dy9;
+      have dy7 :=
+        Proofs.ResNet50TieB.r50DownCotIn N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b0 (Proofs.r50Sd sd (7 : Fin (16 : ℕ)))
+          (Proofs.r50PreD7 N q w sd x) dy8;
       have dy6 :=
-        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b3 (Proofs.r50Pre6 N q w x)
-          dy7;
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b3
+          (Proofs.r50Sd sd (6 : Fin (16 : ℕ))) (Proofs.r50PreD6 N q w sd x) dy7;
       have dy5 :=
-        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b2 (Proofs.r50Pre5 N q w x)
-          dy6;
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b2
+          (Proofs.r50Sd sd (5 : Fin (16 : ℕ))) (Proofs.r50PreD5 N q w sd x) dy6;
       have dy4 :=
-        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b1 (Proofs.r50Pre4 N q w x)
-          dy5;
+        Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b1
+          (Proofs.r50Sd sd (4 : Fin (16 : ℕ))) (Proofs.r50PreD4 N q w sd x) dy5;
       have dy3 :=
         Proofs.ResNet50TieB.r50DownCotIn N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b0
-          (Proofs.r50Pre3 N q w x) dy4;
+          (Proofs.r50Sd sd (3 : Fin (16 : ℕ))) (Proofs.r50PreD3 N q w sd x) dy4;
       have dy2 :=
         Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.s1b2
-          (Proofs.r50Pre2 N q w x) dy3;
+          (Proofs.r50Sd sd (2 : Fin (16 : ℕ))) (Proofs.r50PreD2 N q w sd x) dy3;
       have dy1 :=
         Proofs.ResNet50TieB.r50IdCotIn N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.s1b1
-          (Proofs.r50Pre1 N q w x) dy2;
+          (Proofs.r50Sd sd (1 : Fin (16 : ℕ))) (Proofs.r50PreD1 N q w sd x) dy2;
       have cotPool :=
         Proofs.ResNet50TieB.r50ProjCotIn N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))
-          w.s1b0 (Proofs.r50Pre0 N q w x) dy1;
+          w.s1b0 (Proofs.r50Sd sd (0 : Fin (16 : ℕ))) (Proofs.r50Pre0 N q w x) dy1;
       Proofs.ResNet34TieB.r34StemTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN cotN
           vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotPool ∧
         Proofs.ResNet50TieB.r50ProjTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-            cotN vN epsStr w.s1b0 bf16 (Proofs.r50Pre0 N q w x) dy1 ∧
+            cotN vN epsStr w.s1b0 bf16 (Proofs.r50Sd sd (0 : Fin (16 : ℕ))) (Proofs.r50Pre0 N q w x) dy1 ∧
           Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-              cotN vN epsStr w.s1b1 bf16 (Proofs.r50Pre1 N q w x) dy2 ∧
+              cotN vN epsStr w.s1b1 bf16 (Proofs.r50Sd sd (1 : Fin (16 : ℕ))) (Proofs.r50PreD1 N q w sd x) dy2 ∧
             Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-                cotN vN epsStr w.s1b2 bf16 (Proofs.r50Pre2 N q w x) dy3 ∧
+                cotN vN epsStr w.s1b2 bf16 (Proofs.r50Sd sd (2 : Fin (16 : ℕ))) (Proofs.r50PreD2 N q w sd x) dy3 ∧
               Proofs.ResNet50TieB.r50DownTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                  w.s2b0 bf16 (Proofs.r50Pre3 N q w x) dy4 ∧
+                  w.s2b0 bf16 (Proofs.r50Sd sd (3 : Fin (16 : ℕ))) (Proofs.r50PreD3 N q w sd x) dy4 ∧
                 Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                    w.s2b1 bf16 (Proofs.r50Pre4 N q w x) dy5 ∧
+                    w.s2b1 bf16 (Proofs.r50Sd sd (4 : Fin (16 : ℕ))) (Proofs.r50PreD4 N q w sd x) dy5 ∧
                   Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                      w.s2b2 bf16 (Proofs.r50Pre5 N q w x) dy6 ∧
+                      w.s2b2 bf16 (Proofs.r50Sd sd (5 : Fin (16 : ℕ))) (Proofs.r50PreD5 N q w sd x) dy6 ∧
                     Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                        w.s2b3 bf16 (Proofs.r50Pre6 N q w x) dy7 ∧
+                        w.s2b3 bf16 (Proofs.r50Sd sd (6 : Fin (16 : ℕ))) (Proofs.r50PreD6 N q w sd x) dy7 ∧
                       Proofs.ResNet50TieB.r50DownTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b0 bf16
-                          (Proofs.r50Pre7 N q w x) dy8 ∧
+                          (Proofs.r50Sd sd (7 : Fin (16 : ℕ))) (Proofs.r50PreD7 N q w sd x) dy8 ∧
                         Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b1 bf16
-                            (Proofs.r50Pre8 N q w x) dy9 ∧
+                            (Proofs.r50Sd sd (8 : Fin (16 : ℕ))) (Proofs.r50PreD8 N q w sd x) dy9 ∧
                           Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b2 bf16
-                              (Proofs.r50Pre9 N q w x) dy10 ∧
+                              (Proofs.r50Sd sd (9 : Fin (16 : ℕ))) (Proofs.r50PreD9 N q w sd x) dy10 ∧
                             Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b3 bf16
-                                (Proofs.r50Pre10 N q w x) dy11 ∧
+                                (Proofs.r50Sd sd (10 : Fin (16 : ℕ))) (Proofs.r50PreD10 N q w sd x) dy11 ∧
                               Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b4 bf16
-                                  (Proofs.r50Pre11 N q w x) dy12 ∧
+                                  (Proofs.r50Sd sd (11 : Fin (16 : ℕ))) (Proofs.r50PreD11 N q w sd x) dy12 ∧
                                 Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b5 bf16
-                                    (Proofs.r50Pre12 N q w x) dy13 ∧
+                                    (Proofs.r50Sd sd (12 : Fin (16 : ℕ))) (Proofs.r50PreD12 N q w sd x) dy13 ∧
                                   Proofs.ResNet50TieB.r50DownTiedB N q q xN cotN vN epsStr w.s4b0 bf16
-                                      (Proofs.r50Pre13 N q w x) dy14 ∧
+                                      (Proofs.r50Sd sd (13 : Fin (16 : ℕ))) (Proofs.r50PreD13 N q w sd x) dy14 ∧
                                     Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b1 bf16
-                                        (Proofs.r50Pre14 N q w x) dy15 ∧
+                                        (Proofs.r50Sd sd (14 : Fin (16 : ℕ))) (Proofs.r50PreD14 N q w sd x) dy15 ∧
                                       Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b2 bf16
-                                          (Proofs.r50Pre15 N q w x) dy16 ∧
-                                        Proofs.ResNet34TieB.r34HeadTiedB N q q xN cotN w.Wd w.bd (Proofs.r50Pre16 N q w x) g := by sorry
+                                          (Proofs.r50Sd sd (15 : Fin (16 : ℕ))) (Proofs.r50PreD15 N q w sd x) dy16 ∧
+                                        Proofs.ResNet34TieB.r34HeadTiedB N q q xN cotN w.Wd w.bd
+                                          (Proofs.r50PreD16 N q w sd x) g := by sorry
 
 /-- `Proofs.ViTTie.vit_net_tied` -/
 theorem chk_vit_net_tied :
@@ -902,16 +921,16 @@ theorem chk_r50_net_lossGrad :
     ∀ (N q : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
       (w : Proofs.R50BWeights nCls),
       Proofs.R50PosB w →
-        ∀ (bf16 : Bool)
+        ∀ (bf16 : Bool) (sd : Option (Fin (16 : ℕ) → Proofs.Vec N))
           (x :
             Proofs.Vec
               (N *
                 ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
                   ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
-          Proofs.ResNet50TieB.R50LossSmoothAtB N q w x →
+          Proofs.ResNet50TieB.R50LossSmoothAtB N q w sd x →
             ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
-              Proofs.HasGradAt L (Proofs.resnet50ForwardBFull N q w x) g →
-                Proofs.ResNet50TieB.R50NetLossTiedB N q xN cotN vN epsStr w bf16 x L g := by sorry
+              Proofs.HasGradAt L (Proofs.resnet50ForwardBFullDrop N q w sd x) g →
+                Proofs.ResNet50TieB.R50NetLossTiedB N q xN cotN vN epsStr w bf16 sd x L g := by sorry
 
 /-- `Proofs.MobileNetV2TieB.mnv2_net_lossGrad` -/
 theorem chk_mnv2_net_lossGrad :
@@ -1432,6 +1451,7 @@ theorem chk_r50_net_syncTiedB :
         ∀ (q : ℕ),
           (0 : ℕ) < q →
             ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls) (bf16 : Bool)
+              (sd : Option (Fin (16 : ℕ) → Proofs.Vec (R * N)))
               (X :
                 Proofs.Vec
                   (R * N *
@@ -1439,7 +1459,7 @@ theorem chk_r50_net_syncTiedB :
                       ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
               (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
               (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-                Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 X G gs := by sorry
+                Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 sd X G gs := by sorry
 
 /-- `Proofs.StableHLO.mnv4FwdGraphSyncFull_shard` -/
 theorem chk_mnv4FwdGraphSyncFull_shard :

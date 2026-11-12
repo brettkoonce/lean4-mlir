@@ -139,13 +139,15 @@ emitted parameter-gradient node denotes the certified batched gradient `Σ_n` at
 that chain delivers. The optimizer ops that consume those nodes are tied per op, by
 `Proofs.StableHLO.sgdParamF_faithful`, `Proofs.StableHLO.mom_pair_faithful`,
 `Proofs.StableHLO.adamW_triple_faithful` and `Proofs.StableHLO.lamb_triple_faithful`. The
-capstones are stated at one replica, in f32, on the chain without drop-path. A bf16 render emits
-its own `*GradBBf16` gradient nodes, tied per op kind in
-`LeanMlir.Proofs.Foundation.Bf16GradNodes`. The data-parallel renders of ResNet-34, ResNet-50,
+capstones are stated at one replica. A bf16 render emits its own `*GradBBf16` gradient nodes,
+tied per op kind in `LeanMlir.Proofs.Foundation.Bf16GradNodes`, and the capstones take the
+precision as a flag. The data-parallel renders of ResNet-34, ResNet-50,
 MobileNetV2, MobileNetV4 and EfficientNet-B0 synchronise BatchNorm, and each net's
 `*SyncStepTie*` file proves that the replica mean of its gradient nodes equals the one-replica
-node at the global batch `R·N`. The `*drop*` renders' cotangent chains carry drop-path sites the
-capstones do not name.
+node at the global batch `R·N`. Stochastic depth and classifier dropout are optional mask
+binders on the capstones of the nets whose renders carry them (ResNet-50, MobileNetV2,
+MobileNetV4, EfficientNet-B0, ViT, ConvNeXt): `none` is the drop-free chain, `some` the `*drop*`
+/ `*do*` renders' (`LeanMlir.Proofs.Foundation.DropSites`).
 
 * ResNet-34 (chapter 5) — [`r34_net_tiedB`](find/#doc/Proofs.ResNet34TieB.r34_net_tiedB);
   non-degeneracy on the full-width batched net,

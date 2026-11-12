@@ -1296,7 +1296,7 @@ end Proofs.StableHLO
 -- trains without one, so the live weights are scored), at the paper's wd 0.1, with stochastic depth
 -- on the 18 skip blocks (`sd`, masks `%dp0 … %dp17`, the keeps the driver's
 -- `mnv4ImagenetFullVerified` draws). Dropout 0.2 is the driver's mask keep, not a render change.
--- The drop masks are not in the tie statements (stated at the drop-free net), as for
+-- Both masks are optional sites on the tie statements (`mnv4_net_tiedB`'s `sd` and `cd`), as for
 -- EfficientNet's and ResNet-50's `drop` renders.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepText 128 1000 "1.0e-5" 4 "mnv4in" true

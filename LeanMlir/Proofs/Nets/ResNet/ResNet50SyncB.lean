@@ -51,7 +51,8 @@ The conv/relu chain runs at the left-assoc index `N·(c·h·w)`; `bnSyncF` and i
 
 ## What is NOT claimed here
 
-No stochastic depth: the graph is the drop-path-free forward, as the single-device graph is. The
+No stochastic depth here: the graph is the drop-path-free forward, as the single-device graph
+is. The `drop` DP artifacts' forward is `ResNet50SyncBDrop`'s `resnet50FwdGraphSyncFullDrop_shard`. The
 nodes at either precision — `bf16` selects the conv kinds at every site, as `ResNet34SyncB`,
 `true` being the bf16 DP artifacts' graph (`resnet50in160_lambaccdp4x128wxclipbcebf16`, …), read
 at the identity rounding (`Bf16Erasure`). The DP artifacts run with no conv biases;

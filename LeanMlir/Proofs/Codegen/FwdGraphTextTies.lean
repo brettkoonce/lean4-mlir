@@ -1,7 +1,8 @@
 module
 
 public import LeanMlir.Proofs.Codegen.ResNet50RenderB -- shake: keep
-public import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
+public import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBDrop -- shake: keep
+public import LeanMlir.Proofs.Nets.ResNet.ResNetFullEval -- shake: keep
 public import LeanMlir.Proofs.Codegen.MobileNetV2RenderB -- shake: keep
 public import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB -- shake: keep
 public import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
@@ -20,6 +21,8 @@ meta import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT -- shake: keep
 meta import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB -- shake: keep
 meta import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval -- shake: keep
 meta import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB -- shake: keep
+meta import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBDrop -- shake: keep
+meta import LeanMlir.Proofs.Nets.ResNet.ResNetFullEval -- shake: keep
 meta import LeanMlir.Proofs.Codegen.ConvNeXtRender -- shake: keep
 meta import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop -- shake: keep
 meta import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval -- shake: keep
@@ -181,6 +184,100 @@ def r50ProjW0 (ic mid oc : Nat) : R50ProjW ic mid oc :=
 #guard textOf (r50HeadFwdB 2 7 10 "%in") (·.1) ==
   prettyText 2 (r34HeadGraphB 2 7 7 (c := 2048) (nCls := 10) (fun _ _ => 0) (fun _ => 0)
     (leaf "%in" _))
+
+/-- A projection-form bottleneck with a drop site, printed in the RENDER's order: the branch, the
+    projection skip, the `dropPathB` on the branch's output, then `relu(addVB(dropped, skip))`.
+    The pieces are `r50{Proj,Down}GraphBD`'s own subgraphs, joined at operand leaves. -/
+def r50ProjFormDropText {N n : Nat} (body skip : SHlo (N * n)) (dpN : String) :
+    StateM EmitS String := do
+  let z : Vec (N * n) := fun _ => 0
+  let (cB, nB) ← pretty N body
+  let (cS, nS) ← pretty N skip
+  let (cD, nD) ← pretty N (.dropPathB (N := N) (n := n) dpN (fun _ => 0) (.operand nB z))
+  let (cO, _) ← pretty N (.batchOp (N := N) (.relu (n := n)) (.addVB (.operand nD z) (.operand nS z)))
+  pure (cB ++ cS ++ cD ++ cO)
+
+-- With a stochastic-depth site (`ResNet50FullBDrop`): the identity bottleneck's emitter at
+-- `drop := some k` is `pretty` of `r50IdGraphBD` at `some`, the `dropPathB` on the branch between
+-- bn₃ and the add. At f32 and at bf16.
+#guard textOf (bnkIdFwdB 2 128 512 28 "1.0e-05" "s2b1" "%in" (drop := some 4)) (·.code) ==
+  prettyText 2 (r50IdGraphBD "s2b1" "1.0e-05" (dpName 4) 2 28 28 (r50IdW0 128 512) false
+    (some fun _ => 0) (leaf "%in" _))
+#guard textOf (bnkIdFwdB 2 128 512 28 "1.0e-05" "s2b1" "%in" (bf16 := true) (drop := some 4)) (·.code) ==
+  prettyText 2 (r50IdGraphBD "s2b1" "1.0e-05" (dpName 4) 2 28 28 (r50IdW0 128 512) true
+    (some fun _ => 0) (leaf "%in" _))
+-- The two PROJECTION forms are tied piece by piece, in the render's emission order. The render
+-- writes the branch up to bn₃, then the whole projection, then the `dropPathB`, then the add;
+-- `pretty` of `r50{Proj,Down}GraphBD` writes the `dropPathB` straight after the branch, before
+-- the projection. Both are linearisations of the same graph (the drop reads only the branch),
+-- so `r50ProjFormDropText` prints `r50{Proj,Down}GraphBD`'s own four pieces — branch, skip, the
+-- site on the branch's output, the add and relu on the two results — in the render's order, and
+-- the guards compare that. At `drop := none` the orders coincide and the plain guards above
+-- already cover it.
+#guard textOf (bnkProjFwdB 2 64 64 256 56 "1.0e-05" "s1b0" "%in" (drop := some 0)) (·.code) ==
+  textOf (r50ProjFormDropText (r50ProjBodyGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) false (leaf "%in" _))
+    (r50ProjSkipGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) false (leaf "%in" _)) (dpName 0)) id
+#guard textOf (bnkProjFwdB 2 64 64 256 56 "1.0e-05" "s1b0" "%in" (bf16 := true) (drop := some 0)) (·.code) ==
+  textOf (r50ProjFormDropText (r50ProjBodyGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) true (leaf "%in" _))
+    (r50ProjSkipGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) true (leaf "%in" _)) (dpName 0)) id
+#guard textOf (bnkStridedFwdB 2 512 256 1024 14 "1.0e-05" "s3b0" "%in" (drop := some 7)) (·.code) ==
+  textOf (r50ProjFormDropText (r50DownBodyGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) false (leaf "%in" _))
+    (r50DownSkipGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) false (leaf "%in" _)) (dpName 7)) id
+#guard textOf (bnkStridedFwdB 2 512 256 1024 14 "1.0e-05" "s3b0" "%in" (bf16 := true) (drop := some 7)) (·.code) ==
+  textOf (r50ProjFormDropText (r50DownBodyGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) true (leaf "%in" _))
+    (r50DownSkipGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) true (leaf "%in" _)) (dpName 7)) id
+-- At `none` the graph with a site is the drop-free one, and the emitter emits no node.
+#guard prettyText 2 (r50IdGraphBD "s2b1" "1.0e-05" (dpName 4) 2 28 28 (r50IdW0 128 512) false none
+    (leaf "%in" _)) ==
+  prettyText 2 (r50IdGraphB "s2b1" "1.0e-05" 2 28 28 (r50IdW0 128 512) false (leaf "%in" _))
+-- Sixteen sites, one per bottleneck, numbered in forward order: `resnet50FwdGraphBFullDrop`'s
+-- `dpName 0 … dpName 15` are the render's `dpAt sd 0 … dpAt sd 15`.
+#guard r50DropTotal == 16
+#guard (List.range r50DropTotal).map (dpAt true) == (List.range 16).map some
+
+-- ════════════════════════════════════════════════════════════════
+-- § ResNet-34 and ResNet-50 at inference — `r34FwdChain` / `r50FwdChain`'s pieces vs
+--   `resnet34FwdGraphEval` / `resnet50FwdGraphEval`'s (`ResNetFullEval`)
+--   The eval chains are per-example constructors printed at batch `B`; the guards compare them at
+--   `B = 2` with `convBias := false`, the committed artifacts' setting.
+-- ════════════════════════════════════════════════════════════════
+
+def r34IdWEval0 (c : Nat) : R34IdWEval c := ⟨fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+def r34DownWEval0 (ic oc : Nat) : R34DownWEval ic oc := ⟨fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+def r50IdWEval0 (mid oc : Nat) : R50IdWEval mid oc := ⟨fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+def r50ProjWEval0 (ic mid oc : Nat) : R50ProjWEval ic mid oc := ⟨fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+-- Stem (shared): 7×7/s2 (3 → 64) → BN → relu → 3×3/s2 pool, at 224 (ResNet-34, ResNet-50 `q = 7`)
+-- and at 160 (ResNet-50 `q = 5`).
+#guard textOf (resnetEvalStemFwd 2 56 "1.0e-05" false) (·.1) ==
+  prettyText 2 (resnetStemGraphEval "1.0e-05" 56 56 0 (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (leaf "%x" _))
+#guard textOf (resnetEvalStemFwd 2 40 "1.0e-05" false) (·.1) ==
+  prettyText 2 (resnetStemGraphEval "1.0e-05" 40 40 0 (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (leaf "%x" _))
+
+-- ResNet-34 identity block (`s1b0`, 64 ch at 56²) and downsample block (`d2`, 64 → 128, 56² → 28²).
+#guard textOf (idFwd 2 64 56 "1.0e-05" "s1b0" "%in" false) (·.code) ==
+  prettyText 2 (r34IdGraphEval "s1b0" "1.0e-05" 56 56 0 (r34IdWEval0 64) (leaf "%in" _))
+#guard textOf (downFwd 2 64 128 28 "1.0e-05" "d2" "%in" false) (·.code) ==
+  prettyText 2 (r34DownGraphEval "d2" "1.0e-05" 28 28 0 (r34DownWEval0 64 128) (leaf "%in" _))
+
+-- ResNet-50's three bottleneck forms, at the blocks the training ties use.
+#guard textOf (bnkIdFwdV 2 128 512 28 "1.0e-05" "s2b1" "%in") (·.1) ==
+  prettyText 2 (r50IdGraphEval "s2b1" "1.0e-05" 28 28 0 (r50IdWEval0 128 512) (leaf "%in" _))
+#guard textOf (bnkProjFwdV 2 64 64 256 56 "1.0e-05" "s1b0" "%in") (·.1) ==
+  prettyText 2 (r50ProjGraphEval "s1b0" "1.0e-05" 56 56 0 (r50ProjWEval0 64 64 256) (leaf "%in" _))
+#guard textOf (bnkStridedFwdV 2 512 256 1024 14 "1.0e-05" "s3b0" "%in") (·.1) ==
+  prettyText 2 (r50DownGraphEval "s3b0" "1.0e-05" 14 14 0 (r50ProjWEval0 512 256 1024) (leaf "%in" _))
+
+-- Head (shared): GAP(7²) → dense, at 512 (ResNet-34) and 2048 (ResNet-50).
+#guard textOf (resnetEvalHeadFwd 2 512 7 10 "%in") (·.1) ==
+  prettyText 2 (resnetHeadGraphEval 7 7 (c := 512) (nCls := 10) (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
+#guard textOf (resnetEvalHeadFwd 2 2048 7 10 "%in") (·.1) ==
+  prettyText 2 (resnetHeadGraphEval 7 7 (c := 2048) (nCls := 10) (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV2 — `mnv2FwdChainB` vs `mobilenetv2FwdGraphBFull`

@@ -152,6 +152,39 @@ def r34StatSigList : List (String × String) := List.map (fun (n, ds) => (n, ty 
 -- § The shared forward chain (all three renders emit this, so they cannot disagree)
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The ResNet eval forward's stem**, on `%x`: 7×7/s2 conv (3 → 64) → BN (`stn`, frozen
+    statistics) → relu → He et al.'s 3×3/s2 max-pool, from side `4·q2` to `q2`. Shared by
+    `r34FwdChain` (`q2 = 56`) and `ResNet50RenderB`'s `r50FwdChain` (its `q2`): the two nets'
+    stems are one function. Returns the code and the pool output's name.
+
+    The pool is the 3×3/s2 one the train steps emit. A 2×2 pool here would train a 3×3-pool net
+    and score it with a 2×2-pool forward (the `mobilenetv2_fwd` defect class, logits rel 1.86). -/
+def resnetEvalStemFwd (B q2 : Nat) (epsStr : String) (convBias : Bool) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+  let q1 := 2 * q2
+  let zx   : Vec (3*(2*q1)*(2*q1)) := fun _ => 0
+  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64  : Vec 64 := fun _ => 0
+  let z112 : Vec (64*q1*q1) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := q1) (w := q1) "%sW" (biasName convBias "%sbi" 64) zSk z64 (.operand "%x" zx))
+  let (cStn, nStn) ← bnEvalSite B 64 q1 q1 epsStr "%sg" "%sbt" "stn" nStc
+  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
+  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := q2) (w := q2) (.operand nStr z112))
+  pure (cStc ++ cStn ++ cStr ++ cStp, nStp)
+
+/-- **The ResNet eval forward's head**, on the last block's output `xin`: GAP(`q × q`) →
+    dense(`c → nClasses`). Shared by `r34FwdChain` (`c = 512`) and `r50FwdChain` (`c = 2048`).
+    Returns the code and the logits' name. -/
+def resnetEvalHeadFwd (B c q nClasses : Nat) (xin : String) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+  let zL   : Vec (c*q*q) := fun _ => 0
+  let zc   : Vec c := fun _ => 0
+  let zWd  : Mat c nClasses := fun _ _ => 0
+  let zNC  : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.gapF (c := c) (h := q) (w := q) (.operand xin zL))
+  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap zc))
+  pure (cGap ++ cLog, nLog)
+
 /-- The ResNet-34 eval forward: its code and the `logits` name the eval function returns. (The train
     step walks the batched `r34FwdChainB` instead.) -/
 structure R34Fwd where
@@ -166,19 +199,7 @@ structure R34Fwd where
 def r34FwdChain (B nClasses : Nat) (epsStr : String)
     (convBias : Bool) : StateM Proofs.StableHLO.EmitS R34Fwd := do
   -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
-  let zx   : Vec (3*224*224) := fun _ => 0
-  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
-  let z64  : Vec 64 := fun _ => 0
-  let z112 : Vec (64*112*112) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64 (.operand "%x" zx))
-  let (cStn, nStn) ← bnEvalSite B 64 112 112 epsStr "%sg" "%sbt" "stn" nStc
-  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-  -- He et al.'s 3×3/s2 stem pool — see the note on `ResNet34RenderB`'s peer. This renderer
-  -- writes `resnet34_fwd{,_eval}` as well as the SGD train step, and the ADAMW trainer evals
-  -- through `resnet34_fwd_eval`. So it must match `ResNet34RenderB`: a 2×2 pool here would
-  -- train a 3×3-pool net and score it with a 2×2-pool forward (the `mobilenetv2_fwd` defect
-  -- class, logits rel 1.86).
-  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
+  let (cSt, nStp) ← resnetEvalStemFwd B 56 epsStr convBias
   -- ═══ 16 blocks ═══
   let f1  ← idFwd   B 64 56 epsStr "s1b0" nStp convBias
   let f2  ← idFwd   B 64 56 epsStr "s1b1" f1.o convBias
@@ -197,16 +218,11 @@ def r34FwdChain (B nClasses : Nat) (epsStr : String)
   let f15 ← idFwd   B 512 7 epsStr "s4b0" f14.o convBias
   let f16 ← idFwd   B 512 7 epsStr "s4b1" f15.o convBias
   -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
-  let zL   : Vec (512*7*7) := fun _ => 0
-  let z512 : Vec 512 := fun _ => 0
-  let zWd  : Mat 512 nClasses := fun _ _ => 0
-  let zNC  : Vec nClasses := fun _ => 0
-  let (cGap, nGap) ← pretty B (.gapF (c := 512) (h := 7) (w := 7) (.operand f16.o zL))
-  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z512))
-  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+  let (cHd, nLog) ← resnetEvalHeadFwd B 512 7 nClasses f16.o
+  pure { code := cSt ++
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
            f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
-           f16.code ++ cGap ++ cLog,
+           f16.code ++ cHd,
          logits := nLog }
 
 /-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with

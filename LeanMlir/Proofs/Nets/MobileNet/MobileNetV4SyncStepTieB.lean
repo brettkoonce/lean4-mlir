@@ -81,11 +81,11 @@ no conv-bias gradients to exclude: the render has no `convBias` flag, binds ever
 
 The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv4Blk{k} (R*N) w X)`); that the sync forward graph computes exactly those is
-`StableHLO.mnv4FwdGraphSyncFull_shard`, the forward half — stated for the graph without masks:
-at `sd` / `cd` `some` the saved activations are the shards of the MASKED single-device forward
+`StableHLO.mnv4FwdGraphSyncFull_shard`, the forward half, for the graph without masks. At `sd` /
+`cd` `some` the saved activations are the shards of the MASKED single-device forward
 (`mnv4Blk{k} (R*N) w sd X`), and that the DP render's forward with its per-replica `%dp<k>` /
-`%do` inputs computes those is not stated here (MobileNetV2 and EfficientNet-B0 have that
-forward half; this net's typed masked forward, `mnv4FwdGraphBFullDrop`, is single-device). That
+`%do` inputs computes those is `StableHLO.mnv4FwdGraphSyncFullDrop_shard`
+(`MobileNetV4SyncBDrop`), as MobileNetV2 and EfficientNet-B0 have theirs. That
 the replicas' inputs — and their mask inputs — are the shards of one batch's is the driver's. The lowerer's `all_reduce` is trusted as every other op's
 lowering is.
 

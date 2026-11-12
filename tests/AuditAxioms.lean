@@ -107,6 +107,11 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Codegen.LambTriple
 import LeanMlir.Proofs.Foundation.BceLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
+import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBDrop
+import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncBDrop
+import LeanMlir.Proofs.Nets.ResNet.ResNetFullEval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncBDrop
+import LeanMlir.Proofs.Foundation.DropLayers
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
@@ -2782,6 +2787,69 @@ open Proofs
 #audit_axioms Proofs.StableHLO.r50DownGraphB_faithful
 #audit_axioms Proofs.StableHLO.r50StemGraphB_faithful
 #audit_axioms Proofs.StableHLO.resnet50FwdGraphBFull_faithful
+
+-- RESNET-50 WITH STOCHASTIC DEPTH -- the forward, block layers and graph at optional sites
+-- (ResNet50FullBDrop.lean, Foundation/DropLayers.lean)
+#audit_axioms Proofs.StableHLO.dropPathOptLayer
+#audit_axioms Proofs.StableHLO.dropoutOptLayer
+#audit_axioms Proofs.r50IdBD_none
+#audit_axioms Proofs.r50ProjBD_none
+#audit_axioms Proofs.r50DownBD_none
+#audit_axioms Proofs.r50IdSmoothAtD_none
+#audit_axioms Proofs.r50ProjSmoothAtD_none
+#audit_axioms Proofs.r50DownSmoothAtD_none
+#audit_axioms Proofs.r50IdDropLayer_fwd
+#audit_axioms Proofs.r50ProjDropLayer_fwd
+#audit_axioms Proofs.r50DownDropLayer_fwd
+#audit_axioms Proofs.r50IdDropLayer_ok
+#audit_axioms Proofs.r50ProjDropLayer_ok
+#audit_axioms Proofs.r50DownDropLayer_ok
+#audit_axioms Proofs.r50IdBDHasVJPAt
+#audit_axioms Proofs.r50ProjBDHasVJPAt
+#audit_axioms Proofs.r50DownBDHasVJPAt
+#audit_axioms Proofs.r50PreD16_none
+#audit_axioms Proofs.resnet50ForwardBFullDrop_none
+#audit_axioms Proofs.StableHLO.r50IdGraphBD_faithful
+#audit_axioms Proofs.StableHLO.r50ProjGraphBD_faithful
+#audit_axioms Proofs.StableHLO.r50DownGraphBD_faithful
+#audit_axioms Proofs.StableHLO.resnet50FwdGraphBFullDrop_faithful
+#audit_axioms Proofs.r50IdBD_ones
+#audit_axioms Proofs.r50ProjBD_ones
+#audit_axioms Proofs.r50DownBD_ones
+#audit_axioms Proofs.r50PreD16_ones
+#audit_axioms Proofs.resnet50ForwardBFullDrop_ones
+#audit_axioms Proofs.StableHLO.den_dropPathOptG_shard
+#audit_axioms Proofs.StableHLO.den_dropoutOptG_shard
+
+-- RESNET-50's DATA-PARALLEL FORWARD WITH STOCHASTIC DEPTH (ResNet50SyncBDrop.lean)
+#audit_axioms Proofs.StableHLO.r50IdGraphSyncD_shard
+#audit_axioms Proofs.StableHLO.r50ProjGraphSyncD_shard
+#audit_axioms Proofs.StableHLO.r50DownGraphSyncD_shard
+#audit_axioms Proofs.StableHLO.r50IdGraphSyncD_none
+#audit_axioms Proofs.StableHLO.r50ProjGraphSyncD_none
+#audit_axioms Proofs.StableHLO.r50DownGraphSyncD_none
+#audit_axioms Proofs.StableHLO.resnet50FwdGraphSyncFullDrop_shard
+#audit_axioms Proofs.StableHLO.resnet50FwdGraphSyncFullDrop_none
+
+-- MOBILENETV4's DATA-PARALLEL FORWARD WITH BOTH MASKS (MobileNetV4SyncBDrop.lean)
+#audit_axioms Proofs.StableHLO.mnv4SkipDropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4HeadGraphSyncDo_shard
+#audit_axioms Proofs.StableHLO.mnv4Res28DropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4Res14aDropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4Res14bDropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4Res7aDropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4Res7bDropGraphSync_shard
+#audit_axioms Proofs.StableHLO.mnv4FwdGraphSyncFullDrop_shard
+
+-- RESNET-34 AND RESNET-50 AT INFERENCE (ResNetFullEval.lean)
+#audit_axioms Proofs.StableHLO.r34IdGraphEval_faithful
+#audit_axioms Proofs.StableHLO.r34DownGraphEval_faithful
+#audit_axioms Proofs.StableHLO.r50IdGraphEval_faithful
+#audit_axioms Proofs.StableHLO.r50ProjGraphEval_faithful
+#audit_axioms Proofs.StableHLO.r50DownGraphEval_faithful
+#audit_axioms Proofs.StableHLO.resnetStemGraphEval_faithful
+#audit_axioms Proofs.StableHLO.resnet34FwdGraphEval_faithful
+#audit_axioms Proofs.StableHLO.resnet50FwdGraphEval_faithful
 
 -- RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50StepTieB.lean)
 #audit_axioms Proofs.ResNet50TieB.r50IdCotIn_eq_vjp

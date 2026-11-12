@@ -211,6 +211,18 @@ theorem den_dropPathOptG (mN : String) {N n : Nat} (s : Option (Vec N)) (e : SHl
     den (dropPathOptG mN s e) = dropPathOpt N n s (den e) := by
   cases s <;> rfl
 
+/-- **A drop site on a replica family is the shard of the global site.** Replica `r`'s graph
+    through the site at ITS shard of the per-example mask (`exampleShard`, the DP renders'
+    per-replica `%dp<i>`) denotes shard `r` of the global value through the global site, when the
+    replicas' graphs denote the shards of that value. `dropPathOpt_shard` on the graph; at `none`
+    no node is emitted on either side. -/
+theorem den_dropPathOptG_shard (mN : String) {R N n : Nat} (S : Option (Vec (R * N)))
+    (g : Fin R → SHlo (N * n)) (Y : Vec ((R * N) * n))
+    (hg : ∀ r, den (g r) = batchShard R N n Y r) (r : Fin R) :
+    den (dropPathOptG mN (S.map fun M => exampleShard R N M r) (g r))
+      = batchShard R N n (dropPathOpt (R * N) n S Y) r := by
+  rw [den_dropPathOptG, hg, dropPathOpt_shard]
+
 /-- A `dropoutB` node when the site is rendered, nothing otherwise. -/
 def dropoutOptG (mN : String) {N n : Nat} : Option (Vec (N * n)) → SHlo (N * n) → SHlo (N * n)
   | none, e => e
@@ -219,5 +231,14 @@ def dropoutOptG (mN : String) {N n : Nat} : Option (Vec (N * n)) → SHlo (N * n
 theorem den_dropoutOptG (mN : String) {N n : Nat} (m : Option (Vec (N * n))) (e : SHlo (N * n)) :
     den (dropoutOptG mN m e) = dropoutOpt m (den e) := by
   cases m <;> rfl
+
+/-- `den_dropPathOptG_shard`'s per-element peer, for classifier dropout: replica `r` at its
+    `batchShard` of the mask. -/
+theorem den_dropoutOptG_shard (mN : String) {R N a : Nat} (M : Option (Vec ((R * N) * a)))
+    (g : Fin R → SHlo (N * a)) (Y : Vec ((R * N) * a))
+    (hg : ∀ r, den (g r) = batchShard R N a Y r) (r : Fin R) :
+    den (dropoutOptG mN (M.map fun m => batchShard R N a m r) (g r))
+      = batchShard R N a (dropoutOpt M Y) r := by
+  rw [den_dropoutOptG, hg, dropoutOpt_shard]
 
 end Proofs.StableHLO

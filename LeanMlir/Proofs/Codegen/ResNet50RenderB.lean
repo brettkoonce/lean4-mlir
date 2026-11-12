@@ -1079,14 +1079,9 @@ def r50FwdChain (B nClasses : Nat) (epsStr : String)
     -- anything if the forward and the train step are one chain at one resolution.
     (q : Nat := 7) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let q5 := q; let q4 := 2 * q5; let q3 := 2 * q4; let q2 := 2 * q3; let q1 := 2 * q2
-  let zx   : Vec (3*(2*q1)*(2*q1)) := fun _ => 0
-  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
-  let z64  : Vec 64 := fun _ => 0
-  let z112 : Vec (64*q1*q1) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := q1) (w := q1) "%sW" (zb 64) zSk z64 (.operand "%x" zx))
-  let (cStn, nStn) ← bnEvalSite B 64 q1 q1 epsStr "%sg" "%sbt" "stn" nStc
-  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := q2) (w := q2) (.operand nStr z112))
+  -- the stem and the head are ResNet-34's eval emitters at R50's widths (`zb 64` is
+  -- `biasName false`, so `convBias := false`)
+  let (cSt, nStp) ← resnetEvalStemFwd B q2 epsStr false
   let (c1, n1)   ← bnkProjFwdV    B   64  64  256 q2 epsStr "s1b0" nStp
   let (c2, n2)   ← bnkIdFwdV      B       64  256 q2 epsStr "s1b1" n1
   let (c3, n3)   ← bnkIdFwdV      B       64  256 q2 epsStr "s1b2" n2
@@ -1103,15 +1098,10 @@ def r50FwdChain (B nClasses : Nat) (epsStr : String)
   let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  q5 epsStr "s4b0" n13
   let (c15, n15) ← bnkIdFwdV      B      512 2048  q5 epsStr "s4b1" n14
   let (c16, n16) ← bnkIdFwdV      B      512 2048  q5 epsStr "s4b2" n15
-  let zL    : Vec (2048*q5*q5) := fun _ => 0
-  let z2048 : Vec 2048 := fun _ => 0
-  let zWd   : Mat 2048 nClasses := fun _ _ => 0
-  let zNC   : Vec nClasses := fun _ => 0
-  let (cGap, nGap) ← pretty B (.gapF (c := 2048) (h := q5) (w := q5) (.operand n16 zL))
-  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z2048))
-  pure (cStc ++ cStn ++ cStr ++ cStp ++
+  let (cHd, nLog) ← resnetEvalHeadFwd B 2048 q5 nClasses n16
+  pure (cSt ++
         c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++
-        c9 ++ c10 ++ c11 ++ c12 ++ c13 ++ c14 ++ c15 ++ c16 ++ cGap ++ cLog, nLog)
+        c9 ++ c10 ++ c11 ++ c12 ++ c13 ++ c14 ++ c15 ++ c16 ++ cHd, nLog)
 
 /-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
     BN: rendered from `r50FwdChainB`, the traversal the train step differentiates, so
