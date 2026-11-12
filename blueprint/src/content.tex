@@ -9570,18 +9570,25 @@ depthwise convs on is \emph{ExtraDW}. Only the leading one is
 \emph{ConvNeXt}, this chapter's sandwich rearranged into
 Chapter~\ref{chap:layernorm}'s block shape. Neither is a plain
 \emph{FFN} of two $1\times1$s. Only the inner one is exactly
-MobileNetV2's block. The \texttt{jax/} folder ships the faithful
-Conv-Medium as a full ImageNet trainer
-(\texttt{jax/MainMobilenetV4Imagenet.lean}), transcribed block for
-block from \texttt{timm}'s \texttt{mobilenetv4\_conv\_medium} and tied to it on
-shared weights (\texttt{scripts/parity/\allowbreak mnv4\_timm\_parity.py},
-to $\sim\!10^{-5}$ in the training forward): $9{,}715{,}512$
-parameters, a fused-IB stage at high resolution, then 21 UIB blocks
-whose per-block instantiation is visible right in the
-\texttt{NetSpec}, driven by the same entry point as every other net
-in this book. What changed from 2018 to 2024 is at
-least as much recipe as architecture, and Table~\ref{tab:mnv4_vs_mnv2} is the
-diff.
+MobileNetV2's block.
+
+The net here is the faithful Conv-Medium: $9{,}715{,}512$ parameters, a
+fused-IB stage at high resolution, then 21 UIB blocks whose per-block
+instantiation is visible right in the \texttt{NetSpec}. It is transcribed
+block for block from \texttt{timm}'s \texttt{mobilenetv4\_conv\_medium} and
+tied to it on shared weights
+(\texttt{scripts/parity/\allowbreak mnv4\_timm\_parity.py}, to
+$\sim\!10^{-5}$ in the training forward). Trained for 500 epochs by the
+paper's recipe, the reference reaches \textbf{79.82\%} top-1 and the
+verified path \textbf{80.05\%}, against the paper's $79.9\%$, and the two
+cannot be told apart on the validation set (McNemar $p = 0.077$).
+
+What changed from 2018 to 2024 is at least as much recipe as architecture.
+The paper's recipe is a training config in \texttt{tensorflow/models}
+(\texttt{imagenet\_mobilenetv4\_conv\_medium\_tpu.yaml}), and the
+\texttt{full} recipe that both trainers ship is that file. The yaml says
+$500$ epochs, and the $79.9\%$ headline is that number.
+Table~\ref{tab:mnv4_vs_mnv2} is the diff against this chapter's other half.
 
 \begin{table}[H]
 \centering
@@ -9615,40 +9622,50 @@ recipe as everything else (AdamW at large effective batch,
 cosine, heavy selective decay, RandAugment) while the block
 template generalized enough to absorb its rivals.
 
-\texttt{mobilenet-v4-imagenet} ships the paper recipe as \texttt{full}.
-The paper's recipe is a training
-config in \texttt{tensorflow/models}
-(\texttt{imagenet\_mobilenetv4\_conv\_medium\_tpu.yaml}), and \texttt{full}
-is that file: $256^2$ input, weight decay $0.1$ off the norms and biases,
-classifier dropout $0.2$, RandAugment $N2$ $m15$ at $p\,0.7$ under
-TensorFlow's own mappings (nearest resampling, fill $128$, the identity op
-in the draw), drop-path $0.075$ ramped as $(i+3)/26$ over its 26-entry block
-list (the \texttt{gpooling} row counts) and applied at the 18 UIBs that carry
-a skip, BatchNorm at decay $0.997$ and $\varepsilon = 10^{-3}$, AdamW at
-Keras' $\varepsilon = 10^{-7}$, the cosine from step $0$ with the five-epoch
-warmup on top, tf-models' crop sampler with its center-crop fallback where
-the sampler returns the whole image and its bilinear resize without
-antialiasing, the head in tf-models' order (its block list pools before the
-$1280$ convolution), and no EMA, so the live weights are what gets scored,
-at the paper's $256$ with a $0.875$ center crop. Three rows of the yaml stay
-out, disclosed on both paths: the initialization (tf-models draws every
-convolution and depthwise kernel from Keras' \texttt{VarianceScaling},
-fan-in, truncated normal, and the classifier $U(\pm 0.05)$; ours is
-\texttt{timm}'s), weight decay reaching the classifier bias (the yaml exempts
-BatchNorm alone; ours exempts every bias), and the BatchNorm group (per TPU
-core there, the $512$-image micro-batch here). The yaml says $500$ epochs,
-and the $79.9\%$ headline is that number. The pair this section is built on
-is that recipe at that length, on both paths.
+\medskip\noindent\textbf{The batch of 4096 is accumulated.} A $512$-image
+micro-batch is accumulated eight times, so an epoch is $312$ optimizer
+steps. Accumulation is not exact under BatchNorm: the statistics are taken
+over the $512$-image micro-batch, on both paths.
+
+\medskip\noindent\textbf{The file is followed down to TensorFlow's own
+conventions.} The table's rows are the yaml's headline knobs. Under them
+are the settings a port from another framework would get wrong by
+default:
+\begin{itemize}
+  \item \textbf{RandAugment} runs under TensorFlow's mappings: nearest
+    resampling, fill $128$, and the identity op in the draw.
+  \item \textbf{Drop-path} ramps as $(i+3)/26$ over tf-models' 26-entry
+    block list (the \texttt{gpooling} row counts) and is applied at the 18
+    UIBs that carry a skip.
+  \item \textbf{The $\varepsilon$s} are BatchNorm's $10^{-3}$ at decay
+    $0.997$ and Keras' $10^{-7}$ for AdamW.
+  \item \textbf{The cosine} runs from step $0$ with the five-epoch warmup
+    on top.
+  \item \textbf{The crop} is tf-models' sampler, with its center-crop
+    fallback where the sampler returns the whole image and its bilinear
+    resize without antialiasing.
+  \item \textbf{The head} is in tf-models' order, whose block list pools
+    before the $1280$ convolution, with classifier dropout $0.2$.
+  \item \textbf{Scoring} is on the live weights, with no EMA, at the
+    paper's $256$ with a $0.875$ center crop.
+\end{itemize}
+
+\medskip\noindent\textbf{Three rows are disclosed and not matched,} on
+both paths. The initialization is \texttt{timm}'s, where tf-models draws
+every convolution and depthwise kernel from Keras'
+\texttt{VarianceScaling} (fan-in, truncated normal) and the classifier
+from $U(\pm 0.05)$. Weight decay skips every bias, where the yaml exempts
+BatchNorm alone and so reaches the classifier bias. And the BatchNorm
+group is the $512$-image micro-batch, where the yaml's is one TPU core's
+share.
 
 \prosesection{The reference (JAX)}
 
 The reference trainer is \texttt{jax/MainMobilenetV4Imagenet.lean},
 built in \texttt{jax/} as \texttt{lake build mobilenet-v4-imagenet}, with
-\texttt{.imagenet} streamed through tfds; its job config is
+\texttt{.imagenet} streamed through tfds and bf16 convolutions against
+fp32 master weights; its job config is
 \texttt{scripts/jobs/mnv4-full-jax-4gpu.conf}, recipe \texttt{full}.
-AdamW at peak $0.004$ for an effective batch of $4096$,
-reached as a $512$-image micro-batch accumulated eight times, so $312$
-optimizer steps an epoch; bf16 convolutions against fp32 master weights.
 The run finished at \textbf{79.82\%} top-1 and \textbf{94.84\%} top-5 in
 about $114$ hours of training on four RTX 4060 Ti.
 
@@ -9734,21 +9751,20 @@ The \texttt{mnv4in256} renders come off the same chain and the same block
 table as \texttt{mnv4in}'s, at final side $8$ instead of $7$.
 
 \textbf{The variant carries the recipe.}
-\texttt{mnv4in256\_accdp8x128wxdropdowd01bf16} is the artifact the run used:
-AdamW at $0.004$, four replicas of $128$ accumulated eight times to the
-reference's effective $4096$, drop-path and classifier dropout in the graph,
-weight decay $0.1$ with the norms and biases excluded, bf16 convolution under
-an fp32 classifier head, BatchNorm $\varepsilon\,10^{-3}$ and AdamW
-$\varepsilon\,10^{-7}$ baked. Each of the 77 BatchNorms all-reduces its mean
-and variance across the four replicas, so the statistic group is the
-$512$-image micro-batch, which is the group the reference's accumulation
-gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the data-parallel
+\texttt{mnv4in256\_accdp8x128wxdropdowd01bf16} is the artifact the run
+used, and each tag is a row of the recipe: \texttt{accdp8x128} four
+replicas of $128$ accumulated eight times, \texttt{wx} the decay
+exclusion, \texttt{drop} stochastic depth, \texttt{do} classifier
+dropout, \texttt{wd01} the weight decay and \texttt{bf16} convolution
+under an fp32 classifier head. The two $\varepsilon$s are baked without a
+tag. Each of the 77 BatchNorms all-reduces its mean and variance across
+the four replicas, so the statistic group is the $512$-image micro-batch,
+the group the reference's accumulation gives it.
+Theorem~\ref{thm:mobilenetv4_sync_tie} ties the data-parallel
 render's bf16 gradient nodes to one device's step at the global batch at every
 final feature side, so it reaches this $256^2$ render as it does the $224^2$
-ones, at its drop-path and dropout masks; accumulation sits outside the statement.
-The three rows the
-recipe paragraph discloses are out on this path as on the reference. It
-launches as:
+ones, at its drop-path and dropout masks; accumulation sits outside the
+statement. It launches as:
 
 \begin{verbatim}
 scripts/supervise.sh mnv4-full-4gpu
@@ -9762,11 +9778,13 @@ graph finishes a day ahead of the Python trainer.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:mnv4_paths} is the two paths.
+Table~\ref{tab:mnv4_paths} is the two paths,
+Table~\ref{tab:mnv4_paths_epochs} the selected epochs, and
+Figure~\ref{fig:mnv4_paths_curve} the curve at every twenty-fifth epoch.
 
 \begin{table}[H]
 \centering
-\caption{MobileNetV4-Conv-M on ImageNet-1k: the reference and the verified path. Both are the paper tier at $256^2$ and its 500 epochs: AdamW at $0.004$ for an effective batch of $4096$ as $8 \times 512$, the BatchNorm statistics over the $512$-image micro-batch, the live weights scored over the same $50{,}000$ validation images through an fp32 forward, on the same four RTX 4060~Ti cards; the rows above the rule are everything that differs.}
+\caption{MobileNetV4-Conv-M on ImageNet-1k: the reference and the verified path. Both are the paper tier at $256^2$ and its 500 epochs: AdamW at $0.004$ for an effective batch of $4096$ as $8 \times 512$, the BatchNorm statistics over the $512$-image micro-batch, the live weights scored over the same $50{,}000$ validation images through an fp32 forward, on the same four RTX 4060~Ti cards; the rows above the rule are everything that differs. One seed per arm: \texttt{runs/2026-10-26-mnv4-full500-jax} and \texttt{runs/2026-10-26-mnv4-full500-verified}.}
 \label{tab:mnv4_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -9789,31 +9807,32 @@ total               & $114$ hr                 & $91$ hr \\
 classifier head and the depthwise initialization, which starts every
 depthwise kernel $\sqrt{C}$ narrower on the verified path.
 
-\medskip\noindent\textbf{The pair ties, at the paper's number.} $+0.23$
-on top-1 ($114$ images) and $+0.11$ on top-5, the verified path ahead, with
-the paper's $79.9\%$ between the two. Paired on the same images, the two
+\medskip\noindent\textbf{The two paths tie, at the paper's number.} The
+verified path is $+0.23$ on top-1 ($114$ images) and $+0.11$ on top-5,
+inside one run's $\pm0.35$ Wilson half-width at $n = 50{,}000$, with the
+paper's $79.9\%$ between the two. Paired on the same images, the two
 checkpoints disagree on $4{,}074$ of them, $2{,}094$ the verified path's way
-and $1{,}980$ the reference's, and McNemar's exact test puts $p = 0.077$ on
-the $114$ between them: the test does not separate the two. The
-reference's half of that pairing is its epoch-500 checkpoint rescored
-through the same fp32 forward with a per-image bitmap, $39{,}909$ of
-$50{,}000$, the in-training count exactly. The two trade the lead for four
-hundred epochs, the reference ahead by five points at epoch 10 and by
+and $1{,}980$ the reference's, and McNemar's exact test gives $p = 0.077$:
+the test does not separate the two. The reference's half of that pairing
+is its epoch-500 checkpoint rescored through the same fp32 forward with a
+per-image bitmap, $39{,}909$ of $50{,}000$, the in-training count exactly.
+
+\medskip\noindent\textbf{The same holds at \texttt{timm}'s test protocol.}
+At $320$ pixels and a full crop, the verified checkpoint scores $81.05\%$
+and the reference $80.89\%$, against $80.86\%$ for \texttt{timm}'s
+published weights of the same net at the same schedule; paired,
+$p = 0.21$.
+
+\medskip\noindent\textbf{What the pair does not isolate is variance.} The
+two halves ran one after the other on the same four cards, one seed per
+arm, and the pairing is a statement about these two checkpoints: a gap of
+this size is within what a second seed can move either of them.
+
+\medskip\noindent\textbf{The curves trade the lead.} They do so for
+four hundred epochs, the reference ahead by five points at epoch 10 and by
 nearly three at epoch 200, and the verified path is ahead at eighteen of
 the last twenty scorings, by a quarter of a point on the mean of the last
-five. Table~\ref{tab:mnv4_paths_epochs} is the selected epochs and
-Figure~\ref{fig:mnv4_paths_curve} every twenty-five.
-
-\medskip\noindent At \texttt{timm}'s own test protocol, $320$ pixels at a
-full crop, the verified checkpoint scores $81.05\%$ and the reference
-$80.89\%$, against $80.86\%$ for \texttt{timm}'s published weights of the
-same net at the same schedule; paired, $p = 0.21$, a tie again.
-
-\medskip\noindent The two halves ran one after the other on the same four
-cards (\texttt{runs/2026-10-26-mnv4-full500-verified},
-\texttt{runs/2026-10-26-mnv4-full500-jax}), one seed per arm, and the
-pairing is a statement about these two checkpoints: a gap of this size is
-within what a second seed can move either of them.
+five.
 
 \begin{table}[H]
 \centering
