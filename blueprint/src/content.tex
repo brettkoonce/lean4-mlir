@@ -10642,47 +10642,34 @@ sixteen blocks.
 \label{sec:enet_imagenet}
 
 As with ResNet-34 (Chapter~\ref{chap:residual}) and MobileNetV2, the B0
-backbone scales to full 1000-class ImageNet unchanged. The MBConv stack
-stays put, the head widens to 1000, and the schedule grows. The recipe is
-not the paper's one-line description but TensorFlow's own EfficientNet
-code read row by row, \texttt{main.py}, \texttt{utils.py},
-\texttt{efficientnet\_model.py},
-\texttt{preprocessing.py} and \texttt{autoaugment.py}, and it is the 2019
-rung of the ladder that started with ResNet-34's recipe.
+backbone scales to ImageNet-1k unchanged: the MBConv stack stays put and the
+head widens to 1000. Trained for 350 epochs by TensorFlow's own EfficientNet
+recipe, the reference reaches \textbf{77.17\%} top-1 and the verified path
+\textbf{77.21\%}, against the paper's $77.1\%$, and the two cannot be told
+apart on the validation set (McNemar $p = 0.77$). It is the 2019 rung of the
+ladder that started with ResNet-34's recipe.
 
-\textbf{The recipe, on both paths.} RMSProp $\rho\,0.9$ /
-$\mu\,0.9$ / $\varepsilon\,10^{-3}$, lr $0.256$ at batch $4096$ (so $0.016$ at
-$256$), weight decay $10^{-5}$, the exponential staircase $\times 0.97$ every
-$2.4$ epochs after a five-epoch warmup, dropout $0.2$, drop-connect $0.2$
-ramped as $0.2 \cdot i/16$, AutoAugment \texttt{v0}, label smoothing $0.1$,
-EMA $0.9999$ over the weights and the BatchNorm buffers, BN momentum $0.99$
-and $\varepsilon\,10^{-3}$, 350 epochs. All of it is carried on both paths,
-including every place TensorFlow's code differs from a naive port: the
-TF-form RMSProp and the EMA over the BatchNorm buffers that the reference
-section sets out; weight decay excluded from
-BatchNorm's $\gamma$ and $\beta$ only, so the biases do decay; \texttt{SAME}
-padding on the four strided depthwise convolutions; TensorFlow's crop
-sampler with its center-crop fallback and TF~1's bicubic resize at train and
-eval; the classifier initialized $U(\pm 1/\sqrt{1000})$ with the depthwise
-and squeeze-excite fan rules; an fp32 classifier head and an fp32 evaluation
-forward; and BatchNorm synchronized over the four replicas.
-
-As there, the reference comes first, then the verified path, then the two
-side by side; what the recipe changes from ResNet-34's comes before all
-three.
+The section runs as the last two did: what the recipe changes from
+ResNet-34's, then the reference, the verified path, and the two side by
+side.
 
 \subsection*{What the EfficientNet recipe changes from the 2018 recipe}
 
-The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
-2018-era recipe: SGD with momentum plus the ``bag of tricks''
-polish (cosine schedule, warmup, label smoothing,
-random-resized-crop). The config below is the 2019
-EfficientNet recipe (Tan \& Le).
-Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
-to the 2018 baseline, and Chapter~\ref{chap:layernorm}'s recipe table is
-2022's version. Table~\ref{tab:enet_vs_2018} is the 2019 rung of the same
-ladder. The \texttt{trainAdamSched} entry point is identical in both columns,
-and every row is a one-line change to the \texttt{VerifiedNetSpec}, the
+The recipe is TensorFlow's own EfficientNet code read row by row, and not
+the paper's one-line description: \texttt{utils.build\_optimizer} for the
+optimizer's form, \texttt{main.py} for the weight decay's reach and the
+schedule's length, \texttt{efficientnet\_model.py} for the head's
+initialization, \texttt{preprocessing.py} for the crop, the resize and the
+evaluation window, and \texttt{autoaugment.py} for the policy, op for op.
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the 2018-era recipe:
+SGD with momentum plus the ``bag of tricks'' polish (cosine schedule, warmup,
+label smoothing, random-resized-crop). Table~\ref{tab:enet_vs_2018} is the
+2019 rung of the same ladder (Tan \& Le). Chapter~\ref{chap:residual}'s
+RSB-A3 side quest shows what 2021 does to the 2018 baseline, and
+Chapter~\ref{chap:layernorm}'s recipe table is 2022's version. The
+\texttt{trainAdamSched} entry point is identical in both columns, and every
+row is a one-line change to the \texttt{VerifiedNetSpec}, the
 \texttt{VerifiedConfig}, or the arguments beside them.
 
 \begin{table}[H]
@@ -10706,29 +10693,82 @@ EMA           & none                   & decay $0.9999$                & evaluat
 \end{tabular}
 \end{table}
 
-\noindent What carries over unchanged: softmax cross-entropy with
-label smoothing $0.1$, the 5-epoch warmup, random-resized-crop +
-horizontal flip as the base augmentation, batch 256, train and eval
-both at $224$, bf16 convolution (the SE $1\times1$s and the classifier
-head in fp32), and no gradient clipping, which the two later recipes in
-this ladder keep.
+\noindent What carries over unchanged: softmax cross-entropy with label
+smoothing $0.1$, the 5-epoch warmup, random-resized-crop + horizontal flip
+as the base augmentation, batch 256, train and eval both at $224$, bf16
+convolution (the SE $1\times1$s and the classifier head in fp32), and no
+gradient clipping, which the two later recipes in this ladder keep.
 
-Two of these rows are configuration rather than hyperparameters: RMSProp
-in TensorFlow's form, and an EMA that shadows the BatchNorm buffers. Both
-are set in the config this run trained on, and the reference section below
-says what each does.
+The 2018$\to$2019 shift is ``smaller, longer, more automated'': a quarter of
+the parameters trained for $4\times$ the epochs, with a learned augmentation
+policy, stochastic depth and averaged weights supplying the regularization.
 
-The common thread of the 2018$\to$2019 shift is ``smaller,
-longer, more automated'': a quarter of the parameters trained for
-$4\times$ the epochs, with a learned augmentation policy, stochastic
-depth, and averaged weights supplying the regularization. It is also a
-reminder that ``the paper recipe'' includes the optimizer's exact
-semantics, not just its hyperparameters.
+\textbf{Why 350 epochs.} The paper fixes the optimizer, the peak, the weight
+decay and the decay rate, $\times0.97$ every $2.4$ epochs, and leaves the
+length of the schedule unstated, as MobileNetV2's does. The code does not:
+\texttt{main.py}'s \texttt{train\_steps} defaults to $218{,}949$ at a batch
+of $2048$, which is $218{,}949 \times 2048 / 1{,}281{,}167 \approx 350$
+epochs of data. At that length the staircase has stepped $145$ times and the
+rate is $0.016 \times 0.97^{145} \approx 1.9 \times 10^{-4}$, which is where
+the curves below flatten.
+
+\textbf{Where the obvious implementation is wrong.} ``The paper recipe''
+includes the optimizer's exact semantics as well as its hyperparameters. In
+six details the obvious implementation is not the one B0 was trained with,
+and both paths carry TensorFlow's.
+
+\begin{itemize}
+  \item \textbf{RMSProp in TensorFlow's form.} B0's optimizer is RMSProp
+    ($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$) in TensorFlow's variant,
+    \texttt{timm}'s \texttt{RMSpropTF}: the update divides by
+    $\sqrt{\mathrm{sq}+\varepsilon}$, with $\varepsilon$ inside the square
+    root, and the mean-square accumulator starts at $1$. The textbook form
+    puts $\varepsilon$ outside and starts the accumulator at $0$, and
+    together those inflate the effective step by up to $\sim$30$\times$ while
+    the running mean-square is small. At B0's scale that erodes top-1 over
+    training without diverging, so it reads as a learning-rate sensitivity.
+    MobileNetV2 is indifferent only because its $\varepsilon=1.0$ swamps the
+    misplacement. TF~1's \texttt{ApplyRMSProp} also folds the learning rate
+    into the momentum buffer, and the trainer carries that form
+    (Theorem~\ref{thm:rmsprop_faithful}). In it B0 trains stably at the
+    paper's $0.016$ with no gradient clipping and no lowered peak.
+  \item \textbf{The EMA shadows the BatchNorm buffers as well as the
+    weights.} The weight EMA at $0.9999$ averages the parameters
+    (Theorem~\ref{thm:ema_faithful}). Evaluation has to pair them with
+    equally lagged normalization statistics, so the trainer carries a second
+    shadow over the BN running mean and variance (\texttt{ema\_bn}). Averaged
+    weights against live BN statistics put the validation loss at $10^{8}$.
+    LayerNorm has no running buffers, so ConvNeXt and ViT run the same EMA
+    without this.
+  \item \textbf{The EMA decay is warmup-corrected.} Under a flat $0.9999$
+    from step $0$ the evaluated weights are mostly the random initialization
+    for the first several thousand steps. The decay is therefore
+    $\min(0.9999,\,(1+t)/(10+t))$, which tracks the live weights early and
+    relaxes to $0.9999$. It costs nothing at convergence, and the opening
+    epochs measure the model.
+  \item \textbf{Swish throughout, stem and head included.} The two
+    \texttt{.convBn} layers that bracket the stack, the $3\times3$ stride-2
+    stem and the $1\times1$ head into the classifier, set
+    \texttt{convBnAct} to swish and do not take its \texttt{.relu} default.
+    Both sit where the entire signal passes.
+  \item \textbf{\texttt{SAME} padding on the four strided depthwise
+    convolutions.} TensorFlow's \texttt{SAME} puts the odd pixel of padding
+    on the bottom and right. A symmetric pad splits it evenly, so at stride
+    two the depthwise window sits one pixel off. Measured against
+    \texttt{tf\_efficientnet\_b0} on shared weights
+    (\texttt{scripts/parity/\allowbreak enet\_timm\_parity.py}), that one
+    pixel is $0.37$ of the logit scale at training resolution and $0.048$ at
+    evaluation.
+  \item \textbf{The SE bottleneck is sized from the block's input channels}
+    ($c/4$), and not from the $6\times$-larger expanded width the squeeze
+    sits behind. That is most of the difference between a $5.3$M-parameter
+    B0 and an $8.4$M one.
+\end{itemize}
 
 \prosesection{The reference (JAX)}
 
-The reference trainer is \texttt{jax/MainEfficientNetImagenet.lean}; its spec,
-and its recipe, as the run below trained it:
+The reference trainer is \texttt{jax/MainEfficientNetImagenet.lean}. Its
+config is the recipe row for row:
 
 \begin{verbatim}
 -- Same MBConv (SE + Swish) backbone, 1000 classes instead of 10.
@@ -10796,111 +10836,31 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   evalF32        := true     -- the logged number through an f32 forward
 \end{verbatim}
 
-\noindent Every value in that config is read off
-TensorFlow's code rather than the paper: \texttt{utils.build\_optimizer}
-for the optimizer's form, \texttt{main.py} for the weight decay's reach,
-\texttt{efficientnet\_model.py} for the head's initialization,
-\texttt{preprocessing.py} for the crop, the resize and the evaluation
-window, and \texttt{autoaugment.py} for the policy, op for op.
+\noindent \texttt{bf16Conv} casts the MBConv block's heavy convolutions (the
+$1\times1$ expand, the depthwise, the $1\times1$ project) and leaves the
+squeeze-excitation $1\times1$s in fp32. SE acts on a globally pooled
+$1\times1$ tensor where there is no throughput to gain, and its sigmoid gate
+is precision-sensitive. The result is the same $\sim2\times$ block speedup
+MobileNet sees.
 
-\textbf{Why 350 epochs.} The paper fixes the optimizer, the peak, the
-weight decay and the decay rate, $\times0.97$ every $2.4$ epochs, and
-leaves the length of the schedule unstated, as MobileNetV2's does. The
-code does not: \texttt{main.py}'s \texttt{train\_steps} defaults to
-$218{,}949$ at a batch of $2048$, which is $218{,}949 \times 2048 /
-1{,}281{,}167 \approx 350$ epochs of data, and that is the row the full
-tier trains. At that length the staircase has stepped $145$ times and the
-rate is $0.016 \times 0.97^{145} \approx 1.9 \times 10^{-4}$, which is
-where the curves below flatten.
+\textbf{Augmentation.} The base is random-resized-crop through TensorFlow's
+sampler (10--100\% of the image area at a 3/4--4/3 aspect ratio, falling
+back to the center crop), resized to $224\times224$ by TF~1's bicubic
+kernel, plus a random horizontal flip. Validation is TensorFlow's
+\texttt{\_decode\_and\_center\_crop}, $224/256$ of the shorter side and then
+the same bicubic. On top of that the recipe turns on \textbf{AutoAugment} at
+policy \texttt{v0} as \texttt{autoaugment.py} applies it: geometric
+operations included, nearest-neighbor resampling with fill $128$, and
+TranslateY in pixels. The heavier pack (Mixup, CutMix, RandAugment, Random
+Erasing) is wired into the reference trainer and left off here, because the
+2019 recipe reaches for AutoAugment.
 
-Two details are specific to EfficientNet. First, \texttt{bf16Conv}
-casts the MBConv block's heavy convolutions (the $1\times1$
-expand, the depthwise, the $1\times1$ project) but deliberately
-leaves the squeeze-excitation $1\times1$s in fp32: SE acts on a
-globally-pooled $1\times1$ tensor where there is no throughput to
-gain, and its sigmoid gate is precision-sensitive. The result is the
-same $\sim2\times$ MBConv-block speedup MobileNet sees, from exactly
-the convolutions where casting helps.
-
-Second, the SE bottleneck's size is set from the block's input
-channels ($c/4$), not the $6\times$-larger expanded width the squeeze
-sits behind. That distinction is most of the difference between a
-$5.3$M-parameter B0 and an $8.4$M one, and it is what makes the ImageNet
-spec in \S\ref{sec:enet_phase4} derive the canonical
-$\mathbf{5.29}$M.
-
-\textbf{Augmentation.} The base is Inception-style random-resized-crop
-through TensorFlow's sampler (10--100\% of the image area at a 3/4--4/3
-aspect ratio, a whole-image draw falling back to the center crop) resized
-to $224\times224$ by TF~1's bicubic kernel, plus a random horizontal flip,
-with label smoothing $0.1$ in the loss; validation is TensorFlow's
-\texttt{\_decode\_and\_center\_crop}, $224/256$ of the shorter side then the
-same bicubic. On top of that the recipe turns on \textbf{AutoAugment} at
-policy \texttt{v0} as \texttt{autoaugment.py} applies it: the table
-TensorFlow's EfficientNet trains with, geometric operations included, at
-nearest-neighbor resampling with fill $128$ and TranslateY in pixels. The
-heavier pack (Mixup, CutMix, RandAugment, Random Erasing) is
-wired into the reference trainer, emitted into the generated
-\texttt{tf.data} pipeline with each knob gated on a config flag, and left
-off here because the 2019 recipe reaches for AutoAugment instead.
-
-\textbf{The 350-epoch run.} It reached $\mathbf{77.17\%}$
-top-1 and $\mathbf{93.39\%}$ top-5 on the full 50{,}000-image validation
-split against EfficientNet-B0's paper $77.1\%\,/\,93.3\%$: equal on top-1
-and within $0.1$ on top-5. The run is from scratch at the paper's
-optimizer, learning rate, EMA and activation, with RMSProp at $0.016$,
-AutoAugment, stochastic depth and the exponential staircase, and it
-departs from TensorFlow's code in no line the listing names. It ran
-$42.5$ hours on four RTX 3060. The same checkpoint's live weights score
-$76.63\%$ top-1, so the weight average gives $+0.54$ points. The last twenty-five epochs average
-$77.18\,/\,93.41$, so the final number is the tail's mean, not the top of a
-rise. In four details of the recipe the obvious implementation is not the
-one B0 was trained with.
-
-\textbf{RMSProp in TensorFlow's form.} B0's optimizer is RMSProp
-($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$) in TensorFlow's variant of
-it, \texttt{timm}'s \texttt{RMSpropTF}: the update divides by
-$\sqrt{\mathrm{sq}+\varepsilon}$, with $\varepsilon$ inside the
-square root, and the mean-square accumulator initializes to $1$. The
-textbook form puts $\varepsilon$ outside
-($\sqrt{\mathrm{sq}}+\varepsilon$) and starts the accumulator at $0$;
-together those inflate the effective step by up to $\sim$30$\times$ while
-the running mean-square is small. At B0's scale that is enough to erode
-top-1 over training rather than diverge outright, which makes it read as
-a learning-rate sensitivity. MobileNetV2 is indifferent to the choice
-only because its $\varepsilon=1.0$ swamps the misplacement. In TF form B0
-trains stably at the paper's $\mathrm{lr}=0.016$ with no gradient
-clipping and no lowered peak. TF~1's \texttt{ApplyRMSProp} also folds the
-learning rate into the momentum buffer rather than applying it on the way
-out, and the two forms differ by a little at every step of the staircase;
-the trainer carries TF~1's (Theorem~\ref{thm:rmsprop_faithful}).
-
-\textbf{The EMA shadows the BatchNorm buffers as well as the weights.}
-The paper's weight EMA (decay $0.9999$) averages the parameters
-(Theorem~\ref{thm:ema_faithful}); evaluation then has to pair those averaged weights with equally-lagged
-normalization statistics, so the trainer carries a second shadow over the
-BN running mean and variance (\texttt{ema\_bn}) and evaluates the pair.
-Averaged weights against live BN statistics is a mismatch large enough to
-put validation loss at $10^{8}$. LayerNorm carries no running buffers, so
-ConvNeXt and ViT run the same EMA without needing this.
-
-\textbf{The EMA decay is warmup-corrected.} A flat $0.9999$ from step $0$
-moves the shadow one ten-thousandth of the way toward the live weights
-per step, so for the first several thousand steps the evaluated
-weights are mostly the random initialization while the network trains
-normally underneath. The decay is therefore
-$\min(0.9999,\,(1+t)/(10+t))$: it tracks the live weights early and
-relaxes to $0.9999$ once there is something worth averaging. It costs
-nothing at convergence, and the opening epochs measure the model rather
-than the initialization.
-
-\textbf{Swish throughout, stem and head included.} B0 is SiLU/swish
-everywhere, not only inside the MBConv blocks. The two \texttt{.convBn}
-layers that bracket the stack --- the $3\times3$ stride-2 stem and the
-$1\times1$ head into the classifier --- set \texttt{convBnAct} to swish
-rather than taking its \texttt{.relu} default. Both sit where the entire
-signal passes, so two activations decide what the whole network sees on
-the way in and on the way out.
+The run reached \textbf{77.17\%} top-1 and \textbf{93.39\%} top-5 on the
+full 50{,}000-image validation split, against the paper's
+$77.1\%\,/\,93.3\%$, in $42.5$ hours on four RTX 3060. The same checkpoint's
+live weights score $76.63\%$, so the weight average is worth $+0.54$ points.
+The last twenty-five epochs average $77.18\,/\,93.41$, so the final number
+is the tail's mean and not the top of a rise.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:enet_phase4}
@@ -10934,48 +10894,35 @@ def main (argv : List String) : IO Unit :=
 \noindent \texttt{slug} names
 \texttt{verified\_mlir/efficientnetin\_<variant>\_train\_step.mlir}, the
 rendered graph, and \texttt{shimScript} names this net's own augmentation
-shim, which matters more here than it does for MobileNetV2 because
-EfficientNet's reference config turns on the full AutoAugment policy and
-streaming another net's shim would drop it. The head is the only
-parameter shape that moves, from $1280 \times 10$ to $1280 \times 1000$,
-which takes the count from 4,020,358 to \textbf{5,288,548}. That second
-number is B0's canonical $5.29$M.
+shim. That matters more here than it does for MobileNetV2: the reference
+config turns on the full AutoAugment policy, and streaming another net's
+shim would drop it. The head is the only parameter shape that moves, from
+$1280 \times 10$ to $1280 \times 1000$, which takes the count from 4,020,358
+to \textbf{5,288,548}, B0's canonical $5.29$M.
 
-\medskip\noindent The artifact the run used is
-\texttt{emarmstfdp64dropdowneps0001bf16}, the render \texttt{lake run imagenet start enet} (the job
-\texttt{enet-default-4gpu}) trains, with BatchNorm synchronized over the four
-replicas; its recipe is the one stated at the top of this section.
+\textbf{The variant carries the recipe.}
+\texttt{emarmstfdp64dropdowneps0001bf16} is the render \texttt{lake run
+imagenet start enet} (the job \texttt{enet-default-4gpu}) trains, with
+BatchNorm synchronized over the four replicas. Three of the details above
+show in the render itself. BatchNorm's $\varepsilon$ is $10^{-3}$, the TF
+value: \texttt{bnEps} on the reference, and the \texttt{eps0001} render with
+its \texttt{efficientnetin\_fwd\_eval\_eps0001} scorer here. The four
+strided depthwise convolutions are emitted in the odd-phase form
+(\texttt{depthwiseStride2FlatXla}, the stem's convention: a symmetric
+stride-one convolution read at the odd positions), with the block, step and
+data-parallel ties stated on that form, and the parity gate pins
+\texttt{tf\_efficientnet\_b0} itself and fails on the symmetric pad. And the
+render is swish throughout, $178$ \texttt{stablehlo.logistic} and not one
+\texttt{stablehlo.maximum}.
 
-\medskip\noindent\textbf{Two of those rows are easy to get wrong, and the
-parity gate measures both.} BatchNorm's $\varepsilon$ is $10^{-3}$, the TF
-value, on both paths: \texttt{bnEps} on the reference, and the
-\texttt{eps0001} render with its \texttt{efficientnetin\_fwd\_eval\_eps0001}
-scorer on the verified path. And the four strided depthwise convolutions pad
-as TensorFlow's \texttt{SAME} does, the odd pixel of padding on the bottom
-and right; a symmetric pad splits it evenly, so at stride two the depthwise
-window sits one pixel off, and measured against \texttt{tf\_efficientnet\_b0}
-on shared weights
-(\texttt{scripts/parity/\allowbreak enet\_timm\_parity.py}) that one pixel is
-$0.37$ of the logit scale at training resolution and $0.048$ at evaluation.
-The reference's \texttt{mbconv\_block} passes \texttt{'SAME'} to its
-depthwise, and the verified render emits the odd-phase strided depthwise at
-its four sites (\texttt{depthwiseStride2FlatXla}, the stem's convention: a
-symmetric stride-one convolution read at the odd positions), with the block,
-step and data-parallel ties stated on that form; the gate pins
-\texttt{tf\_efficientnet\_b0} itself and fails on the symmetric pad.
-
-\medskip\noindent\textbf{The activation agrees on both sides.} The verified
-render is swish throughout --- $178$ \texttt{stablehlo.logistic} and not one
-\texttt{stablehlo.maximum} --- and the reference sets \texttt{convBnAct} to
-swish on the stem and the $1\times1$ head. The two paths describe the same
-network.
-
-\medskip\noindent The run finished at $\mathbf{77.21\%}$ top-1 and
-$\mathbf{93.46\%}$ top-5 in $65.1$ hours on the same four cards.
+The run finished at $\mathbf{77.21\%}$ top-1 and $\mathbf{93.46\%}$ top-5 in
+$65.1$ hours on the same four cards.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:enet_paths} is the two paths.
+Table~\ref{tab:enet_paths} is the two paths, Table~\ref{tab:enet_paths_epochs}
+is both at selected epochs, and Figure~\ref{fig:enet_paths_curve} is every
+tenth.
 
 \begin{table}[H]
 \centering
@@ -11001,28 +10948,24 @@ epoch~350 and its saved state rescored through the same fp32 forward counts
 the same $38{,}584$ images, so the two numbers are on the same footing; the
 verified run's $77.21\%$ is $38{,}604$.
 
-\medskip\noindent\textbf{The two paths tie}, $+0.04$ on top-1 (20 images)
-and $+0.07$ on top-5, a tenth of the 95\% Wilson half-width ($\pm0.37$ at
-$77\%$ on $50{,}000$ images) at one seed each, and the curves sit on each
-other the whole way: the training losses agree to within $0.007$ in every
-50-epoch window, with the verified run's a little lower in each, and the
-sampled accuracies never differ by more than $0.30$ at any epoch in the
-table. Paired on the same images, the two checkpoints disagree on $4{,}400$,
-$2{,}210$ against $2{,}190$, and McNemar's exact test gives $p = 0.77$: they
-cannot be told apart on this validation set. The live weights, scored
-beside the averaged ones, tell the same story at $p = 0.41$, and put the
-weight average at $+0.54$ on the reference and $+0.70$ on the verified path.
+\medskip\noindent\textbf{The two paths tie.} The verified path is $+0.04$ on
+top-1 (20 images) and $+0.07$ on top-5, a tenth of the 95\% Wilson
+half-width ($\pm0.37$ at $77\%$ on $50{,}000$ images) at one seed each.
+Paired on the same images, the two checkpoints disagree on $4{,}400$,
+$2{,}210$ against $2{,}190$, and McNemar's exact test gives $p = 0.77$. The
+live weights, scored beside the averaged ones, tell the same story at
+$p = 0.41$, and put the weight average at $+0.54$ on the reference and
+$+0.70$ on the verified path. The curves sit on each other the whole way:
+the training losses agree to within $0.007$ in every 50-epoch window, and
+the sampled accuracies never differ by more than $0.30$ at any epoch in the
+table.
 
-\medskip\noindent\textbf{The verified curve runs slightly ahead} for most of
-the run, by no more than a quarter of a point in any fifty-epoch window,
-and the two end together: the last twenty-five epochs average $77.23$ against
-$77.18$. None of it is outside one seed's noise. The two curves start
-together as well, with the initializations and the seeding of the
-BatchNorm running statistics held equal, and both flatten over the last
-fifty epochs as the staircase runs out of rate, $0.016$ down to
-$1.9\times10^{-4}$, not as the architecture saturates.
-Table~\ref{tab:enet_paths_epochs} is the selected epochs and
-Figure~\ref{fig:enet_paths_curve} every ten.
+The verified curve runs slightly ahead for most of the run, by no more than
+a quarter of a point in any fifty-epoch window, and the two end together:
+the last twenty-five epochs average $77.23$ against $77.18$. None of it is
+outside one seed's noise. Both flatten over the last fifty epochs as the
+staircase runs out of rate, $0.016$ down to $1.9\times10^{-4}$, and not as
+the architecture saturates.
 
 \begin{table}[H]
 \centering
