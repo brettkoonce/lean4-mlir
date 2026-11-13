@@ -828,11 +828,17 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- suffix, so `16x` meets `wx` directly: the driver's `VerifiedVariant.accK` takes the digits
     -- after `acc`/`accdp` up to the FIRST `x`, which is `16x`'s, and `wx`'s cannot reach it.
     -- `accOn` is a substring test, so the marker may follow `ema` (`tests/TestVariantPredicates`).
-    (acc : Nat := 1) : String :=
+    (acc : Nat := 1)
+    -- The per-replica batch, spelled after `<k>x` as ResNet-50 and MobileNetV4 spell it
+    -- (`accdp4x256…`, `accdp8x128…`). TRAILING and 0 at every committed spelling, where the name
+    -- carries no batch; a second layout of the same accumulated step (two cards at 128 where four
+    -- hold 64) sets it, so its artifact and checkpoint cannot be the four-card render's. `accK`
+    -- still stops at the first `x`.
+    (accBS : Nat := 0) : String :=
   (if ema then "ema" else if acc > 1 then "" else "adam")
     ++ (if acc > 1 then "acc" else "")
     ++ (if replicas ≤ 1 then "" else "dp")
-    ++ (if acc > 1 then s!"{acc}x" else "")
+    ++ (if acc > 1 then s!"{acc}x" ++ (if accBS > 0 then toString accBS else "") else "")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
     -- It needs no driver predicate: excluding a param changes no arity, type or region.
@@ -976,6 +982,8 @@ def convNextAdamTrainStepText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Stri
     -- micro-batch. The official ConvNeXt recipe does not clip (`--clip_grad` None), so the
     -- composition is refused rather than rendered wrong.
     (acc : Nat := 1)
+    -- `cnxAdamVariant`'s `accBS`: the batch in the ENTRY NAME, 0 (absent) at every committed render.
+    (accBS : Nat := 0)
     : String :=
   if clip && acc > 1 then
     panic! "convNextAdamTrainStepText: `clip` composed with `acc` would clip each micro-batch's \
@@ -1132,7 +1140,7 @@ official ConvNeXt recipe does not clip (--clip_grad None) — render with (clip 
   -- region and two scalars): a name that dropped it would put the accumulating graph behind the
   -- four-region artifact's name and checkpoint, and the driver — which reads `k` off the name —
   -- would pack four regions into a five-region signature.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16 gf acc}_train_step"
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16 gf acc accBS}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -1182,4 +1190,6 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.cnxAdamVariant 4 true true false true true .tanh 16 == "emaaccdp16xwxdropbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 1 true true false true true .erf 16 == "emaacc16xwxdroperfbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 4 false false false false false .tanh 16 == "accdp16x"
+#guard Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 16 128 == "emaaccdp16x128wxdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 1 128 == "emadpwxdroperfbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf 1 == "emadpwxclipdroperfbf16"

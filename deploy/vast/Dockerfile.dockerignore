@@ -1,0 +1,13 @@
+.git
+**/.lake
+.venv
+**/__pycache__
+data
+runs
+blueprint
+home_page
+*.log
+ffi/*.so
+ffi/*.bak
+ffi/*-bak
+ffi/test_pjrt_smoke

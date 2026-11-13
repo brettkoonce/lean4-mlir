@@ -627,7 +627,11 @@ def convNextAdamTrainStepBText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Str
     -- parameter-space, one `momVNextF` per gradient in the AdamW tail, so the batched backward is
     -- the same at any `k`. It reaches the wrapper, which spells it into the ENTRY NAME through
     -- `cnxAdamVariant` — the `#guard`s beside the accumulating `#eval`s below pin the path.
-    (acc : Nat := 1) : String :=
+    (acc : Nat := 1)
+    -- Spell `bB` into the entry name (`cnxAdamVariant`'s `accBS`). TRAILING and off at every
+    -- committed render; on for a second layout of an accumulated step, whose name would otherwise
+    -- be the first layout's.
+    (nameBS : Bool := false) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   convNextAdamTrainStepText gf alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
@@ -644,6 +648,7 @@ def convNextAdamTrainStepBText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Str
     -- in its most convincing form — the graph really would be bf16, every other check would pass,
     -- and only the artifact's declared name would be wrong.
     (sd := sd) (V := V) (bf16 := bf16) (cBS := bB) (acc := acc)
+    (accBS := if nameBS then bB else 0)
 
 /-- The drop-free forward's banner — the line `ConvNeXtRender.convNextFwdText` emits, restated
     here so the byte tie can demand **byte-identity** rather than "identical apart from a comment".
@@ -1506,6 +1511,38 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
     (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS) (acc := 16))
+
+-- ── ConvNeXt-S and -B on two large cards: 16 × (2 × 128) ──
+-- The same step as the 4 × 64 renders above — 256 rows a micro-batch, 4096 accumulated, exact under
+-- LayerNorm at either split — laid out for two cards. The name carries the batch (`16x128`) so the
+-- artifact and its checkpoint are not the four-card render's.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emaaccdp16x128wxdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "128.0" 2 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := 128) (acc := 16)
+    (nameBS := true))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emaaccdp16x128wxdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "128.0" 2 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := 128) (acc := 16)
+    (nameBS := true))
+-- their tanh twins, which the GELU-form audit pairs them with
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emaaccdp16x128wxdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "128.0" 2 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := 128) (acc := 16)
+    (nameBS := true))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emaaccdp16x128wxdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "128.0" 2 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := 128) (acc := 16)
+    (nameBS := true))
+#guard "emaaccdp16x128wxdroperfbf16" ==
+  Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 16 128
+#guard ((("emaaccdp16x128wxdroperfbf16".splitOn "acc").getD 1 "").drop 2
+          |>.takeWhile (· != 'x')) == "16"
+#guard !"emaaccdp16x128wxdroperfbf16".contains "do"
+#guard !"emaaccdp16x128wxdroperfbf16".contains "sd"
 
 -- At `acc := 1` the pair spelling of 2026-10-06 is untouched — byte-identity, stated on the name
 -- as well as on the bytes (`scripts/regen_verified_mlir.sh check`).

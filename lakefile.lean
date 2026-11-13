@@ -2853,7 +2853,9 @@ private def twoCardPairs : List (String × String × String) :=
   [ ("a2",   "r50-a2-bf16-2card",         "r50-a2accum-jax-2card"),
     ("a1",   "r50-a1-bf16-2card",         "r50-a1-jax-2card"),
     ("vits", "vits-default-emabf16-2card", "vits-accum-jax-2card"),
-    ("vitb", "vitb-default-emabf16-2card", "vitb-accum-jax-2card") ]
+    ("vitb", "vitb-default-emabf16-2card", "vitb-accum-jax-2card"),
+    ("cnxs", "cnxs-default-emabf16-2card", "cnxs-default-jax-2card"),
+    ("cnxb", "cnxb-default-emabf16-2card", "cnxb-default-jax-2card") ]
 
 /-- `lake run bench [plan] <name … | all> [--jax | --verified]` — the ImageNet tier as a benchmark:
     each named net's two jobs (the JAX reference and the verified path, `imagenetPairs`), on the

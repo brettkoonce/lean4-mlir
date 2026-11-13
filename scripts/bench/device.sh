@@ -2,10 +2,10 @@
 # device.sh — the rendered step alone on the two cards: XLA's peak per card, then a bare-device step
 # time, no trainer and no loader. Each row is a `*-2card` job's artifact.
 #
-#     lake run bench device <a2 | a1 | vits | vitb> …
+#     lake run bench device <a2 | a1 | vits | vitb | cnxs | cnxb> …
 set -u
 cd "$(dirname "$0")/../.." || exit 1
-[ $# -gt 0 ] || { echo "usage: lake run bench device <a2 | a1 | vits | vitb> …"; exit 2; }
+[ $# -gt 0 ] || { echo "usage: lake run bench device <a2 | a1 | vits | vitb | cnxs | cnxb> …"; exit 2; }
 PY="${DEVICE_PY:-.venv/bin/python}"
 OUT="${DEVICE_DIR:-runs/$(date -u +%F)-device-$(hostname -s)}"; mkdir -p "$OUT"
 MIB=$(nvidia-smi -i 0 --query-gpu=memory.total --format=csv,noheader,nounits)
@@ -17,6 +17,8 @@ for n in "$@"; do
     a1)   a=resnet50in_lambaccdp4x256wxclipdropbcewd001bf16 ;;
     vits) a=vitsin_emadp512wxdropeps0000001smxerfbf16 ;;
     vitb) a=vitbin_emaaccdp2x256wxdropeps0000001smxerfbf16 ;;
+    cnxs) a=convnextsin_emaaccdp16x128wxdroperfbf16 ;;
+    cnxb) a=convnextbin_emaaccdp16x128wxdroperfbf16 ;;
     *) echo "⛔ no device row '$n'"; exit 2 ;;
   esac
   f="verified_mlir/${a}_train_step.mlir"

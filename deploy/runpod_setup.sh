@@ -37,7 +37,7 @@ ALL="check venv jax smoke lean gen data warm"
 VOL=${VOL:-/workspace}
 export TFDS_DATA_DIR=${TFDS_DATA_DIR:-$VOL/tensorflow_datasets}
 MIN_RAM_GB=${MIN_RAM_GB:-200}       # the tfds tree (~150 GB) plus the loaders' working set
-TRAINERS="resnet50-imagenet-verified vit-s-imagenet-verified vit-b-imagenet-verified vit-ema-drop-render"
+TRAINERS="resnet50-imagenet-verified vit-s-imagenet-verified vit-b-imagenet-verified convnext-s-imagenet-verified convnext-b-imagenet-verified vit-ema-drop-render"
 
 if [ $# -eq 0 ]; then STAGES=$ALL
 elif [ $# -eq 1 ]; then
@@ -73,6 +73,13 @@ if want check; then
   [ "$ram" -ge "$MIN_RAM_GB" ] && ok "host RAM ${ram} GB" \
     || warn "host RAM ${ram} GB < ${MIN_RAM_GB}: the tfds tree will not stay in page cache — reads go to disk every epoch"
   ok "$(nproc) cores visible ($(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1))"
+  # The pod's CPU share is a cgroup quota, not what nproc reports: a 32-vCPU pod on a 128-core host
+  # sizes tf.data's pools for 128 and is throttled to a third of its loader rate (930 against
+  # 2,430 img/s, runs/2026-11-11-device-a100x2/). Pin the launching shell to the quota.
+  if read -r q per < /sys/fs/cgroup/cpu.max 2>/dev/null && [ "$q" != max ]; then
+    cpus=$((q / per))
+    [ "$cpus" -ge "$(nproc)" ] || warn "CPU quota is ${cpus} cores of $(nproc) visible — before any loader or trainer: taskset -cp 0-$((cpus - 1)) \$\$"
+  fi
   [ -d "$VOL" ] || die "no $VOL — attach a network volume (VOL=<path> to use another)"
   free_gb=$(df -BG --output=avail "$VOL" | tail -1 | tr -dc 0-9)
   if [ -d "$TFDS_DATA_DIR/imagenet2012" ]; then ok "imagenet2012 already on the volume; ${free_gb} GB free"
