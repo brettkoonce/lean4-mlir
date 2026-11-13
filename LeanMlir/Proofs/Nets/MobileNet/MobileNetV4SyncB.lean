@@ -478,11 +478,11 @@ private theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N f : Nat) (hN 
     den (mnv4Res28GraphSync R hR N f epsStr w bf16 e r)
       = batchShard R N (80 * (2 * (2 * f)) * (2 * (2 * f))) ((mnv4Res28Layer (R * N) f w).fwd X) r := by
   rw [mnv4Res28Layer_fwd_apply, CertLayer.residual_fwd]
-  have b1 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row1 f) (by simp only [mnv4Row1]; omega) w.b1 bf16 (by simp)
+  have b1 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row1 f) (by simp only; omega) w.b1 bf16 (by simp)
     e X he
   exact mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row2 f) w.b2 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row2 f) w.b2).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row2 f) (by simp only [mnv4Row2]; omega) w.b2 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row2 f) (by simp only; omega) w.b2 bf16 (by simp)
       (by simp))
     _ _ b1 r
 
@@ -503,19 +503,19 @@ private theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N f : Nat) (hN
       = batchShard R N (160 * (2 * f) * (2 * f)) ((mnv4Res14aLayer (R * N) f w).fwd X) r := by
   rw [mnv4Res14aLayer_fwd_apply]
   simp only [CertLayer.residual_fwd]
-  have b3 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row3 f) (by simp only [mnv4Row3]; omega) w.b3 bf16 (by simp)
+  have b3 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row3 f) (by simp only; omega) w.b3 bf16 (by simp)
     e X he
   have b4 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row4 f) w.b4 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row4 f) w.b4).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row4 f) (by simp only [mnv4Row4]; omega) w.b4 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row4 f) (by simp only; omega) w.b4 bf16 (by simp)
       (by simp)) _ _ b3
   have b5 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row5 f) w.b5 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row5 f) w.b5).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row5 f) (by simp only [mnv4Row5]; omega) w.b5 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row5 f) (by simp only; omega) w.b5 bf16 (by simp)
       (by simp)) _ _ b4
   exact mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row6 f) w.b6 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row6 f) w.b6).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row6 f) (by simp only [mnv4Row6]; omega) w.b6 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row6 f) (by simp only; omega) w.b6 bf16 (by simp)
       (by simp)) _ _ b5 r
 
 /-- Trunk group **Res14b** at sync-BN — rows 7–10: ExtraDW, ConvNeXt, FFN, ConvNeXt. -/
@@ -537,19 +537,19 @@ private theorem mnv4Res14bGraphSync_shard (R : Nat) (hR : 0 < R) (N f : Nat) (hN
   simp only [CertLayer.residual_fwd]
   have b7 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row7 f) w.b7 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row7 f) w.b7).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row7 f) (by simp only [mnv4Row7]; omega) w.b7 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row7 f) (by simp only; omega) w.b7 bf16 (by simp)
       (by simp)) e X he
   have b8 := mnv4SkipGraphSync_shard (mnv4ConvNeXtBodyGraphSync epsStr R hR N (mnv4Row8 f) w.b8 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row8 f) w.b8).fwd
-    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row8 f) (by simp only [mnv4Row8]; omega) w.b8 bf16 (by simp)
+    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row8 f) (by simp only; omega) w.b8 bf16 (by simp)
       (by simp)) _ _ b7
   have b9 := mnv4SkipGraphSync_shard (mnv4FfnBodyGraphSync epsStr R hR N (mnv4Row9 f) w.b9 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row9 f) w.b9).fwd
-    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row9 f) (by simp only [mnv4Row9]; omega) w.b9 bf16 (by simp)
+    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row9 f) (by simp only; omega) w.b9 bf16 (by simp)
       (by simp)) _ _ b8
   exact mnv4SkipGraphSync_shard (mnv4ConvNeXtBodyGraphSync epsStr R hR N (mnv4Row10 f) w.b10 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row10 f) w.b10).fwd
-    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row10 f) (by simp only [mnv4Row10]; omega) w.b10 bf16 (by simp)
+    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row10 f) (by simp only; omega) w.b10 bf16 (by simp)
       (by simp)) _ _ b9 r
 
 /-- Trunk group **Res7a** at sync-BN — rows 11–15. -/
@@ -570,23 +570,23 @@ private theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N f : Nat) (hN 
       = batchShard R N (256 * f * f) ((mnv4Res7aLayer (R * N) f w).fwd X) r := by
   rw [mnv4Res7aLayer_fwd_apply]
   simp only [CertLayer.residual_fwd]
-  have b11 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row11 f) (by simp only [mnv4Row11]; omega) w.b11 bf16
+  have b11 := mnv4StridedGraphSync_shard epsStr R hR N hN (mnv4Row11 f) (by simp only; omega) w.b11 bf16
     (by simp) e X he
   have b12 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row12 f) w.b12 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row12 f) w.b12).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row12 f) (by simp only [mnv4Row12]; omega) w.b12 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row12 f) (by simp only; omega) w.b12 bf16 (by simp)
       (by simp)) _ _ b11
   have b13 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row13 f) w.b13 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row13 f) w.b13).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row13 f) (by simp only [mnv4Row13]; omega) w.b13 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row13 f) (by simp only; omega) w.b13 bf16 (by simp)
       (by simp)) _ _ b12
   have b14 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row14 f) w.b14 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row14 f) w.b14).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row14 f) (by simp only [mnv4Row14]; omega) w.b14 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row14 f) (by simp only; omega) w.b14 bf16 (by simp)
       (by simp)) _ _ b13
   exact mnv4SkipGraphSync_shard (mnv4FfnBodyGraphSync epsStr R hR N (mnv4Row15 f) w.b15 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row15 f) w.b15).fwd
-    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row15 f) (by simp only [mnv4Row15]; omega) w.b15 bf16 (by simp)
+    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row15 f) (by simp only; omega) w.b15 bf16 (by simp)
       (by simp)) _ _ b14 r
 
 /-- Trunk group **Res7b** at sync-BN — rows 16–21. -/
@@ -610,27 +610,27 @@ private theorem mnv4Res7bGraphSync_shard (R : Nat) (hR : 0 < R) (N f : Nat) (hN 
   simp only [CertLayer.residual_fwd]
   have b16 := mnv4SkipGraphSync_shard (mnv4ConvNeXtBodyGraphSync epsStr R hR N (mnv4Row16 f) w.b16 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row16 f) w.b16).fwd
-    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row16 f) (by simp only [mnv4Row16]; omega) w.b16 bf16 (by simp)
+    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row16 f) (by simp only; omega) w.b16 bf16 (by simp)
       (by simp)) e X he
   have b17 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row17 f) w.b17 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row17 f) w.b17).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row17 f) (by simp only [mnv4Row17]; omega) w.b17 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row17 f) (by simp only; omega) w.b17 bf16 (by simp)
       (by simp)) _ _ b16
   have b18 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N (mnv4Row18 f) w.b18 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row18 f) w.b18).fwd
-    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row18 f) (by simp only [mnv4Row18]; omega) w.b18 bf16 (by simp)
+    (mnv4ExtraDWBodyGraphSync_shard epsStr R hR N hN (mnv4Row18 f) (by simp only; omega) w.b18 bf16 (by simp)
       (by simp)) _ _ b17
   have b19 := mnv4SkipGraphSync_shard (mnv4FfnBodyGraphSync epsStr R hR N (mnv4Row19 f) w.b19 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row19 f) w.b19).fwd
-    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row19 f) (by simp only [mnv4Row19]; omega) w.b19 bf16 (by simp)
+    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row19 f) (by simp only; omega) w.b19 bf16 (by simp)
       (by simp)) _ _ b18
   have b20 := mnv4SkipGraphSync_shard (mnv4FfnBodyGraphSync epsStr R hR N (mnv4Row20 f) w.b20 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row20 f) w.b20).fwd
-    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row20 f) (by simp only [mnv4Row20]; omega) w.b20 bf16 (by simp)
+    (mnv4FfnBodyGraphSync_shard epsStr R hR N hN (mnv4Row20 f) (by simp only; omega) w.b20 bf16 (by simp)
       (by simp)) _ _ b19
   exact mnv4SkipGraphSync_shard (mnv4ConvNeXtBodyGraphSync epsStr R hR N (mnv4Row21 f) w.b21 bf16)
     (mnv4BodyOfRow (R * N) (mnv4Row21 f) w.b21).fwd
-    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row21 f) (by simp only [mnv4Row21]; omega) w.b21 bf16 (by simp)
+    (mnv4ConvNeXtBodyGraphSync_shard epsStr R hR N hN (mnv4Row21 f) (by simp only; omega) w.b21 bf16 (by simp)
       (by simp)) _ _ b20 r
 
 /-- The fused stage's shard lemma, restated at `mnv4FusedStack (R * N) f w` — so the whole-net proof

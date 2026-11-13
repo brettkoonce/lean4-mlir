@@ -1368,81 +1368,81 @@ theorem mnv4_net_syncTiedB (R : Nat) (hR : 0 < R) (N f : Nat) (hN : 0 < N) (hf :
     w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd cd (mnv4Blk21 (R * N) f w sd X) gs G hgs
   have d21 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 17) e21 dy21 s21
   have s20 := mnv4SkipSyncCotIn_scaled _ e21 _ dy21
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row21 f) (by simp only [mnv4Row21]; omega) w.b21 (mnv4Blk20 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row21 f) (by simp only; omega) w.b21 (mnv4Blk20 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 17) e21) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 17) dy21) d21) s21
   have d20 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 16) e20 dy20 s20
   have s19 := mnv4SkipSyncCotIn_scaled _ e20 _ dy20
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row20 f) (by simp only [mnv4Row20]; omega) w.b20 (mnv4Blk19 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row20 f) (by simp only; omega) w.b20 (mnv4Blk19 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 16) e20) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 16) dy20) d20) s20
   have d19 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 15) e19 dy19 s19
   have s18 := mnv4SkipSyncCotIn_scaled _ e19 _ dy19
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row19 f) (by simp only [mnv4Row19]; omega) w.b19 (mnv4Blk18 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row19 f) (by simp only; omega) w.b19 (mnv4Blk18 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 15) e19) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 15) dy19) d19) s19
   have d18 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 14) e18 dy18 s18
   have s17 := mnv4SkipSyncCotIn_scaled _ e18 _ dy18
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row18 f) (by simp only [mnv4Row18]; omega) w.b18 (mnv4Blk17 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row18 f) (by simp only; omega) w.b18 (mnv4Blk17 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 14) e18) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 14) dy18) d18) s18
   have d17 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 13) e17 dy17 s17
   have s16 := mnv4SkipSyncCotIn_scaled _ e17 _ dy17
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row17 f) (by simp only [mnv4Row17]; omega) w.b17 (mnv4Blk16 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row17 f) (by simp only; omega) w.b17 (mnv4Blk16 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 13) e17) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 13) dy17) d17) s17
   have d16 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 12) e16 dy16 s16
   have s15 := mnv4SkipSyncCotIn_scaled _ e16 _ dy16
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row16 f) (by simp only [mnv4Row16]; omega) w.b16 (mnv4Blk15 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row16 f) (by simp only; omega) w.b16 (mnv4Blk15 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 12) e16) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 12) dy16) d16) s16
   have d15 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 11) e15 dy15 s15
   have s14 := mnv4SkipSyncCotIn_scaled _ e15 _ dy15
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row15 f) (by simp only [mnv4Row15]; omega) w.b15 (mnv4Blk14 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row15 f) (by simp only; omega) w.b15 (mnv4Blk14 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 11) e15) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 11) dy15) d15) s15
   have d14 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 10) e14 dy14 s14
   have s13 := mnv4SkipSyncCotIn_scaled _ e14 _ dy14
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row14 f) (by simp only [mnv4Row14]; omega) w.b14 (mnv4Blk13 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row14 f) (by simp only; omega) w.b14 (mnv4Blk13 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 10) e14) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 10) dy14) d14) s14
   have d13 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 9) e13 dy13 s13
   have s12 := mnv4SkipSyncCotIn_scaled _ e13 _ dy13
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row13 f) (by simp only [mnv4Row13]; omega) w.b13 (mnv4Blk12 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row13 f) (by simp only; omega) w.b13 (mnv4Blk12 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 9) e13) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 9) dy13) d13) s13
   have d12 := dropPathOptFam_scaled (n := 256 * f * f) (mnv4Sd sd 8) e12 dy12 s12
   have s11 := mnv4SkipSyncCotIn_scaled _ e12 _ dy12
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row12 f) (by simp only [mnv4Row12]; omega) w.b12 (mnv4Blk11 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row12 f) (by simp only; omega) w.b12 (mnv4Blk11 (R * N) f w sd X)
       (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 8) e12) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 8) dy12) d12) s12
-  have s10 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row11 f) (by simp only [mnv4Row11]; omega) w.b11
+  have s10 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row11 f) (by simp only; omega) w.b11
     (mnv4Blk10 (R * N) f w sd X) e11 dy11 s11
   have d10 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) e10 dy10 s10
   have s9 := mnv4SkipSyncCotIn_scaled _ e10 _ dy10
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row10 f) (by simp only [mnv4Row10]; omega) w.b10 (mnv4Blk9 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row10 f) (by simp only; omega) w.b10 (mnv4Blk9 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) e10) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) dy10) d10) s10
   have d9 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) e9 dy9 s9
   have s8 := mnv4SkipSyncCotIn_scaled _ e9 _ dy9
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row9 f) (by simp only [mnv4Row9]; omega) w.b9 (mnv4Blk8 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row9 f) (by simp only; omega) w.b9 (mnv4Blk8 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) e9) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) dy9) d9) s9
   have d8 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) e8 dy8 s8
   have s7 := mnv4SkipSyncCotIn_scaled _ e8 _ dy8
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row8 f) (by simp only [mnv4Row8]; omega) w.b8 (mnv4Blk7 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row8 f) (by simp only; omega) w.b8 (mnv4Blk7 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) e8) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) dy8) d8) s8
   have d7 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) e7 dy7 s7
   have s6 := mnv4SkipSyncCotIn_scaled _ e7 _ dy7
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row7 f) (by simp only [mnv4Row7]; omega) w.b7 (mnv4Blk6 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row7 f) (by simp only; omega) w.b7 (mnv4Blk6 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) e7) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) dy7) d7) s7
   have d6 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) e6 dy6 s6
   have s5 := mnv4SkipSyncCotIn_scaled _ e6 _ dy6
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row6 f) (by simp only [mnv4Row6]; omega) w.b6 (mnv4Blk5 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row6 f) (by simp only; omega) w.b6 (mnv4Blk5 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) e6) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) dy6) d6) s6
   have d5 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) e5 dy5 s5
   have s4 := mnv4SkipSyncCotIn_scaled _ e5 _ dy5
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row5 f) (by simp only [mnv4Row5]; omega) w.b5 (mnv4Blk4 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row5 f) (by simp only; omega) w.b5 (mnv4Blk4 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) e5) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) dy5) d5) s5
   have d4 := dropPathOptFam_scaled (n := 160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) e4 dy4 s4
   have s3 := mnv4SkipSyncCotIn_scaled _ e4 _ dy4
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row4 f) (by simp only [mnv4Row4]; omega) w.b4 (mnv4Blk3 (R * N) f w sd X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row4 f) (by simp only; omega) w.b4 (mnv4Blk3 (R * N) f w sd X)
       (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) e4) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) dy4) d4) s4
-  have s2 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row3 f) (by simp only [mnv4Row3]; omega) w.b3
+  have s2 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row3 f) (by simp only; omega) w.b3
     (mnv4Blk2 (R * N) f w sd X) e3 dy3 s3
   have d2 := dropPathOptFam_scaled (n := 80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) e2 dy2 s2
   have s1 := mnv4SkipSyncCotIn_scaled _ e2 _ dy2
-    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row2 f) (by simp only [mnv4Row2]; omega) w.b2 (mnv4Blk1 (R * N) f w X)
+    (mnv4BodySyncCotIn_scaled R hR N hN (mnv4Row2 f) (by simp only; omega) w.b2 (mnv4Blk1 (R * N) f w X)
       (dropPathOptFam R N (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) e2) (dropPathOpt (R * N) (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) dy2) d2) s2
-  have s0 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row1 f) (by simp only [mnv4Row1]; omega) w.b1
+  have s0 := mnv4SBodySyncCotIn_scaled R hR N hN (mnv4Row1 f) (by simp only; omega) w.b1
     (mnv4Blk0 (R * N) f w X) e1 dy1 s1
   have sStem := mnv4FusedSyncCotIn_scaled R hR N (2 * (2 * (2 * f))) (2 * (2 * (2 * f))) hN h56 h56 w.f0cW w.f0cb w.f0cE w.f0cg
     w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt (mnv4Pre0 (R * N) f w X) e0 dy0 s0
@@ -1450,47 +1450,47 @@ theorem mnv4_net_syncTiedB (R : Nat) (hR : 0 < R) (N f : Nat) (hN : 0 < N) (hf :
       w.sW w.sb w.sE w.sg w.sbt bf16 X eStem _ sStem,
     mnv4_fused_syncTiedB R hR N (2 * (2 * (2 * f))) (2 * (2 * (2 * f))) hN h56 h56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
       w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt xN cotN vN epsStr bf16 (mnv4Pre0 (R * N) f w X) e0 dy0 s0,
-    mnv4_strided_syncTiedB R hR N hN (mnv4Row1 f) (by simp only [mnv4Row1]; omega) xN cotN vN epsStr w.b1 bf16
+    mnv4_strided_syncTiedB R hR N hN (mnv4Row1 f) (by simp only; omega) xN cotN vN epsStr w.b1 bf16
       (mnv4Blk0 (R * N) f w X) e1 dy1 s1,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row2 f) (by simp only [mnv4Row2]; omega) xN cotN vN epsStr w.b2 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row2 f) (by simp only; omega) xN cotN vN epsStr w.b2 bf16
       (mnv4Blk1 (R * N) f w X) (dropPathOptFam R N (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) e2) (dropPathOpt (R * N) (80 * (2 * (2 * f)) * (2 * (2 * f))) (mnv4Sd sd 0) dy2) d2,
-    mnv4_strided_syncTiedB R hR N hN (mnv4Row3 f) (by simp only [mnv4Row3]; omega) xN cotN vN epsStr w.b3 bf16
+    mnv4_strided_syncTiedB R hR N hN (mnv4Row3 f) (by simp only; omega) xN cotN vN epsStr w.b3 bf16
       (mnv4Blk2 (R * N) f w sd X) e3 dy3 s3,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row4 f) (by simp only [mnv4Row4]; omega) xN cotN vN epsStr w.b4 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row4 f) (by simp only; omega) xN cotN vN epsStr w.b4 bf16
       (mnv4Blk3 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) e4) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 1) dy4) d4,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row5 f) (by simp only [mnv4Row5]; omega) xN cotN vN epsStr w.b5 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row5 f) (by simp only; omega) xN cotN vN epsStr w.b5 bf16
       (mnv4Blk4 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) e5) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 2) dy5) d5,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row6 f) (by simp only [mnv4Row6]; omega) xN cotN vN epsStr w.b6 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row6 f) (by simp only; omega) xN cotN vN epsStr w.b6 bf16
       (mnv4Blk5 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) e6) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 3) dy6) d6,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row7 f) (by simp only [mnv4Row7]; omega) xN cotN vN epsStr w.b7 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row7 f) (by simp only; omega) xN cotN vN epsStr w.b7 bf16
       (mnv4Blk6 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) e7) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 4) dy7) d7,
-    mnv4_convnext_syncTiedB R hR N hN (mnv4Row8 f) (by simp only [mnv4Row8]; omega) xN cotN vN epsStr w.b8 bf16
+    mnv4_convnext_syncTiedB R hR N hN (mnv4Row8 f) (by simp only; omega) xN cotN vN epsStr w.b8 bf16
       (mnv4Blk7 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) e8) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 5) dy8) d8,
-    mnv4_ffn_syncTiedB R hR N hN (mnv4Row9 f) (by simp only [mnv4Row9]; omega) xN cotN vN epsStr w.b9 bf16
+    mnv4_ffn_syncTiedB R hR N hN (mnv4Row9 f) (by simp only; omega) xN cotN vN epsStr w.b9 bf16
       (mnv4Blk8 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) e9) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 6) dy9) d9,
-    mnv4_convnext_syncTiedB R hR N hN (mnv4Row10 f) (by simp only [mnv4Row10]; omega) xN cotN vN epsStr w.b10 bf16
+    mnv4_convnext_syncTiedB R hR N hN (mnv4Row10 f) (by simp only; omega) xN cotN vN epsStr w.b10 bf16
       (mnv4Blk9 (R * N) f w sd X) (dropPathOptFam R N (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) e10) (dropPathOpt (R * N) (160 * (2 * f) * (2 * f)) (mnv4Sd sd 7) dy10) d10,
-    mnv4_strided_syncTiedB R hR N hN (mnv4Row11 f) (by simp only [mnv4Row11]; omega) xN cotN vN epsStr w.b11 bf16
+    mnv4_strided_syncTiedB R hR N hN (mnv4Row11 f) (by simp only; omega) xN cotN vN epsStr w.b11 bf16
       (mnv4Blk10 (R * N) f w sd X) e11 dy11 s11,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row12 f) (by simp only [mnv4Row12]; omega) xN cotN vN epsStr w.b12 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row12 f) (by simp only; omega) xN cotN vN epsStr w.b12 bf16
       (mnv4Blk11 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 8) e12) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 8) dy12) d12,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row13 f) (by simp only [mnv4Row13]; omega) xN cotN vN epsStr w.b13 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row13 f) (by simp only; omega) xN cotN vN epsStr w.b13 bf16
       (mnv4Blk12 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 9) e13) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 9) dy13) d13,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row14 f) (by simp only [mnv4Row14]; omega) xN cotN vN epsStr w.b14 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row14 f) (by simp only; omega) xN cotN vN epsStr w.b14 bf16
       (mnv4Blk13 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 10) e14) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 10) dy14) d14,
-    mnv4_ffn_syncTiedB R hR N hN (mnv4Row15 f) (by simp only [mnv4Row15]; omega) xN cotN vN epsStr w.b15 bf16
+    mnv4_ffn_syncTiedB R hR N hN (mnv4Row15 f) (by simp only; omega) xN cotN vN epsStr w.b15 bf16
       (mnv4Blk14 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 11) e15) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 11) dy15) d15,
-    mnv4_convnext_syncTiedB R hR N hN (mnv4Row16 f) (by simp only [mnv4Row16]; omega) xN cotN vN epsStr w.b16 bf16
+    mnv4_convnext_syncTiedB R hR N hN (mnv4Row16 f) (by simp only; omega) xN cotN vN epsStr w.b16 bf16
       (mnv4Blk15 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 12) e16) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 12) dy16) d16,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row17 f) (by simp only [mnv4Row17]; omega) xN cotN vN epsStr w.b17 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row17 f) (by simp only; omega) xN cotN vN epsStr w.b17 bf16
       (mnv4Blk16 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 13) e17) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 13) dy17) d17,
-    mnv4_extradw_syncTiedB R hR N hN (mnv4Row18 f) (by simp only [mnv4Row18]; omega) xN cotN vN epsStr w.b18 bf16
+    mnv4_extradw_syncTiedB R hR N hN (mnv4Row18 f) (by simp only; omega) xN cotN vN epsStr w.b18 bf16
       (mnv4Blk17 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 14) e18) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 14) dy18) d18,
-    mnv4_ffn_syncTiedB R hR N hN (mnv4Row19 f) (by simp only [mnv4Row19]; omega) xN cotN vN epsStr w.b19 bf16
+    mnv4_ffn_syncTiedB R hR N hN (mnv4Row19 f) (by simp only; omega) xN cotN vN epsStr w.b19 bf16
       (mnv4Blk18 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 15) e19) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 15) dy19) d19,
-    mnv4_ffn_syncTiedB R hR N hN (mnv4Row20 f) (by simp only [mnv4Row20]; omega) xN cotN vN epsStr w.b20 bf16
+    mnv4_ffn_syncTiedB R hR N hN (mnv4Row20 f) (by simp only; omega) xN cotN vN epsStr w.b20 bf16
       (mnv4Blk19 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 16) e20) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 16) dy20) d20,
-    mnv4_convnext_syncTiedB R hR N hN (mnv4Row21 f) (by simp only [mnv4Row21]; omega) xN cotN vN epsStr w.b21 bf16
+    mnv4_convnext_syncTiedB R hR N hN (mnv4Row21 f) (by simp only; omega) xN cotN vN epsStr w.b21 bf16
       (mnv4Blk20 (R * N) f w sd X) (dropPathOptFam R N (256 * f * f) (mnv4Sd sd 17) e21) (dropPathOpt (R * N) (256 * f * f) (mnv4Sd sd 17) dy21) d21,
     mnv4_head_syncTiedB R hR N f f hN h7 h7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg
       w.hbt w.Wd w.bd xN cotN vN epsStr bf16 cd (mnv4Blk21 (R * N) f w sd X) gs G hgs⟩
