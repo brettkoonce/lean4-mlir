@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy/vast/bench.sh — what the image runs at boot (supervisor program lean4-mlir-bench), and by
+# deploy/vast/bench.sh — what the image runs at boot (deploy/vast/onstart.sh starts it), and by
 # hand:  bash /opt/lean4-mlir/deploy/vast/bench.sh
 #
 #   1 box     cards, driver, cores, the cgroup CPU quota (the shell is pinned to it), RAM, disk

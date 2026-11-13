@@ -1,24 +1,30 @@
-# deploy/vast/Dockerfile — the bench box as an image: vast.ai's base image plus this tree BUILT
+# deploy/vast/Dockerfile — the bench box as an image: Ubuntu 24.04 plus this tree BUILT
 # (the pinned CUDA 12 venv, the PJRT shim, elan, Mathlib's cache, the verified ImageNet trainers,
-# the JAX trainers synced into .lake/build), and a supervisor program that runs
-# deploy/vast/bench.sh once when the instance boots. No ImageNet in it: the boot run is the
+# the JAX trainers synced into .lake/build). On vast, the instance's on-start command runs
+# deploy/vast/onstart.sh, which starts deploy/vast/bench.sh once. No ImageNet in it: the boot run is the
 # device-only half (stack check, peak memory and bare-card step per net); with imagenet2012 under
 # $TFDS_DATA_DIR it goes on to the loader and the fed rows.
 #
 #     deploy/vast/build.sh                       # docker build from the repo root; prints the push line
 #
 # The build needs no GPU. CUDA comes from the venv's nvidia-*-cu12 wheels (12.9), which run on any
-# newer driver, so the base tag only has to be Ubuntu 24.04 (python 3.12).
-ARG BASE=vastai/base-image:cuda-12.8.1-auto
+# newer driver, and the driver comes from the host through the NVIDIA container toolkit, so the base
+# is plain Ubuntu 24.04 (python 3.12). The two NVIDIA_* variables are what the toolkit reads to mount
+# the driver and nvidia-smi into a container whose base is not NVIDIA's.
+ARG BASE=ubuntu:24.04
 FROM ${BASE}
 
 ENV LEAN4MLIR=/opt/lean4-mlir \
     ELAN_HOME=/opt/elan \
-    PATH=/opt/elan/bin:${PATH}
+    PATH=/opt/elan/bin:${PATH} \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential git curl rsync python3.12 python3.12-venv bsdextrautils util-linux \
+      build-essential ca-certificates git curl rsync openssh-server python3 python3.12 python3.12-venv \
+      bsdextrautils util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 # ── the venv, from the lock alone, so a source edit does not reinstall 8 GB of wheels.
@@ -51,8 +57,5 @@ RUN ulimit -n 65536 && lake exe cache get \
 ARG GIT_REV=unknown
 RUN echo "${GIT_REV}" > .image_rev
 
-# ── boot: one supervisor program, run once (autorestart=false), output to the instance log
-COPY deploy/vast/supervisor.conf /etc/supervisor/conf.d/lean4-mlir-bench.conf
-RUN mkdir -p /opt/supervisor-scripts \
-    && ln -sf ${LEAN4MLIR}/deploy/vast/supervisor.sh /opt/supervisor-scripts/lean4-mlir-bench.sh \
-    && chmod +x deploy/vast/*.sh
+WORKDIR ${LEAN4MLIR}
+CMD ["bash"]

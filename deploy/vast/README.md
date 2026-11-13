@@ -1,41 +1,46 @@
 # The bench box as a vast.ai image
 
 An image that boots on a rented multi-card CUDA instance and measures it, with no setup on the
-instance: `vastai/base-image` plus this tree built (the pinned CUDA 12.9 venv, the PJRT shim, the
-Lean toolchain, Mathlib's cache, the verified ImageNet trainers, the JAX trainers), and a
-supervisor program that runs [`bench.sh`](bench.sh) once at boot.
+instance: Ubuntu 24.04 plus this tree built (the pinned CUDA 12.9 venv, the PJRT shim, the
+Lean toolchain, Mathlib's cache, the verified ImageNet trainers, the JAX trainers). The instance's
+on-start command runs [`onstart.sh`](onstart.sh), which starts [`bench.sh`](bench.sh) once. The
+image is amd64 and needs only a host driver new enough for CUDA 12.9; it carries no CUDA of its own
+outside the venv's wheels.
 
 | file | what it is |
 |---|---|
 | `Dockerfile`, `Dockerfile.dockerignore` | the image; built from the repo root |
 | `build.sh` | `docker build` with the revision as the tag; pushes nothing |
 | `bench.sh` | the boot run: box facts, JAX on every card, shim smoke, bare-card rows, fed rows if ImageNet is there |
-| `supervisor.conf`, `supervisor.sh` | the base image's hook that starts `bench.sh` |
+| `onstart.sh` | the on-start command: `bench.sh` in the background, to `/var/log/lean4-mlir-bench.log` |
 
 ## 1. Build and push (any box with docker and ~70 GB free; no GPU needed)
 
     git clone https://github.com/brettkoonce/lean4-mlir.git && cd lean4-mlir
     git checkout bench/a100-probe
-    docker login                                         # the Docker Hub account the image goes to
-    IMAGE=<hub user>/lean4-mlir deploy/vast/build.sh
-    docker push <hub user>/lean4-mlir:<rev>         # build.sh prints this line
+    gh auth token | docker login ghcr.io -u <github user> --password-stdin   # token needs write:packages
+    IMAGE=ghcr.io/<github user>/lean4-mlir deploy/vast/build.sh
+    docker push ghcr.io/<github user>/lean4-mlir:<rev>                       # build.sh prints this line
+
+The package is public on ghcr.io, so an instance pulls it with no credentials and no transfer
+charge.
 
 The Lean build is the long step (Mathlib's cache downloads; the trainers and their renders
-compile). The image is ~45 GB unpacked. A source edit rebuilds from `COPY . .` down; the venv
+compile). A source edit rebuilds from `COPY . .` down; the venv
 layer is keyed on `jax/requirements-cuda-lock.txt` alone.
 
 Try it before pushing, on a box with NVIDIA cards and the container toolkit:
 
-    docker run --rm --gpus all --entrypoint bash <hub user>/lean4-mlir:<rev> \
+    docker run --rm --gpus all --entrypoint bash ghcr.io/<github user>/lean4-mlir:<rev> \
       -c 'BENCH_OUT=/tmp/bench bash /opt/lean4-mlir/deploy/vast/bench.sh'
 
 ## 2. Rent
 
 A vast.ai template with:
 
-- **Image** `<hub user>/lean4-mlir:<rev>`
-- **Launch mode** docker ENTRYPOINT. In SSH or Jupyter mode put `entrypoint.sh` in the on-start
-  script so the base image's boot (and with it supervisor) still runs.
+- **Image** `ghcr.io/<github user>/lean4-mlir:<rev>`
+- **Launch mode** SSH
+- **On-start** `bash /opt/lean4-mlir/deploy/vast/onstart.sh`
 - **Disk** 80 GB without ImageNet, 250 GB with it
 - **Environment**, all optional:
 
@@ -53,7 +58,7 @@ The rows are the four-card jobs' own renders, so the instance wants four cards o
 
 ## 3. Read it
 
-The instance log (and `/var/log/portal/lean4-mlir-bench.log`) follows the run and ends on
+`/var/log/lean4-mlir-bench.log` follows the run and ends on
 
     ════ BENCH DONE … — results in /workspace/lean4-mlir-bench/<date>-<host>/
 

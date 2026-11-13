@@ -2,10 +2,10 @@
 # deploy/vast/build.sh — build the bench image from this tree. Pushes nothing.
 #
 #     deploy/vast/build.sh                   # → lean4-mlir:<rev>
-#     IMAGE=<hub user>/lean4-mlir deploy/vast/build.sh
+#     IMAGE=ghcr.io/<github user>/lean4-mlir deploy/vast/build.sh
 #
-# The image is ~45 GB unpacked (base ~18, venv ~8, toolchain ~2, .lake ~15+) and docker needs that
-# much free under its root while it builds; the Lean build is the long step.
+# The image is ~22 GB unpacked (venv ~9, toolchain ~3, tree + .lake ~10) and docker needs about
+# twice that free under its root while it builds; the Lean build is the long step.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 REV="$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty)"
