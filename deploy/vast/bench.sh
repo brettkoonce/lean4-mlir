@@ -1,6 +1,6 @@
 #!/bin/bash
-# deploy/vast/bench.sh — what the image runs at boot (supervisor program lean4-jax-bench), and by
-# hand:  bash /opt/lean4-jax/deploy/vast/bench.sh
+# deploy/vast/bench.sh — what the image runs at boot (supervisor program lean4-mlir-bench), and by
+# hand:  bash /opt/lean4-mlir/deploy/vast/bench.sh
 #
 #   1 box     cards, driver, cores, the cgroup CPU quota (the shell is pinned to it), RAM, disk
 #   2 jax     every card computes on the pinned stack
@@ -14,15 +14,15 @@
 #   BENCH_NETS="a1 vitb cnxs cnxb a2 vits"       device rows, in this order
 #   BENCH_FED_NETS="a1 vitb cnxs cnxb"           fed rows (stage 5)
 #   BENCH_IMAGES=150000  BENCH_PRICE=<$/hr, for the cost column>  BENCH_FORCE=1 (run again)
-#   BENCH_OUT=/workspace/lean4-jax-bench         results; one directory per run
+#   BENCH_OUT=/workspace/lean4-mlir-bench         results; one directory per run
 #
 # It runs once: a container restart finds $BENCH_OUT/.done and stops there. Nothing here ends the
 # rental — the instance bills until it is destroyed.
 set -u
-cd "${LEAN4JAX:-/opt/lean4-jax}" || exit 1
+cd "${LEAN4MLIR:-/opt/lean4-mlir}" || exit 1
 export PATH="${ELAN_HOME:-/opt/elan}/bin:$PATH"
 [ "${BENCH_AUTORUN:-1}" = 1 ] || { echo "BENCH_AUTORUN=${BENCH_AUTORUN}: not running. By hand: bash $PWD/deploy/vast/bench.sh"; exit 0; }
-ROOT=${BENCH_OUT:-/workspace/lean4-jax-bench}
+ROOT=${BENCH_OUT:-/workspace/lean4-mlir-bench}
 [ ! -e "$ROOT/.done" ] || [ -n "${BENCH_FORCE:-}" ] || { echo "already ran: $(cat "$ROOT/.done") (BENCH_FORCE=1 to run again)"; exit 0; }
 OUT=$ROOT/$(date -u +%F-%H%M)-$(hostname -s)
 mkdir -p "$OUT" || exit 1
@@ -31,7 +31,7 @@ say ()  { printf '\n━━━ %s  [%s]\n' "$*" "$(date -u +%T)"; }
 ok ()   { printf '  ✓ %s\n' "$*"; }
 warn () { printf '  ⚠ %s\n' "$*"; WARNED=1; }
 WARNED=0
-echo "════ lean4-jax bench, image $(cat .image_rev 2>/dev/null || echo '?'), $(date -u '+%F %T') UTC → $OUT"
+echo "════ lean4-mlir bench, image $(cat .image_rev 2>/dev/null || echo '?'), $(date -u '+%F %T') UTC → $OUT"
 
 # ─── 1 box ───────────────────────────────────────────────────────────────────
 say "box"
@@ -114,7 +114,7 @@ else
 fi
 
 summary () {
-  echo "lean4-jax bench — $(sed -n 's/^gpus *//p' "$OUT/box.txt"), $(sed -n 's/^cores *//p' "$OUT/box.txt")"
+  echo "lean4-mlir bench — $(sed -n 's/^gpus *//p' "$OUT/box.txt"), $(sed -n 's/^cores *//p' "$OUT/box.txt")"
   [ -s "$OUT/device.tsv" ] || { echo "(no device rows)"; return; }
   echo
   echo "Bare-card step and the verified pass it implies, loader keeping up (2× A100: a2 130.6, vits 234.2, vitb 294.2 ms on the 2-card renders):"

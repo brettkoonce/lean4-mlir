@@ -12,7 +12,7 @@
 ARG BASE=vastai/base-image:cuda-12.8.1-auto
 FROM ${BASE}
 
-ENV LEAN4JAX=/opt/lean4-jax \
+ENV LEAN4MLIR=/opt/lean4-mlir \
     ELAN_HOME=/opt/elan \
     PATH=/opt/elan/bin:${PATH}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── the venv, from the lock alone, so a source edit does not reinstall 8 GB of wheels.
 #    The iree rc in the lock is not on PyPI; iree.dev's index has it.
-WORKDIR ${LEAN4JAX}
+WORKDIR ${LEAN4MLIR}
 COPY jax/requirements-cuda-lock.txt jax/requirements-cuda-lock.txt
 RUN python3.12 -m venv .venv \
     && .venv/bin/pip install --no-cache-dir -q --upgrade pip \
@@ -44,7 +44,7 @@ COPY . .
 ARG TRAINERS="resnet50-imagenet-verified vit-s-imagenet-verified vit-b-imagenet-verified convnext-s-imagenet-verified convnext-b-imagenet-verified vit-ema-drop-render"
 RUN gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so \
     && gcc -O2 ffi/test_pjrt_smoke.c -ldl -lm -o ffi/test_pjrt_smoke
-RUN lake exe cache get \
+RUN ulimit -n 65536 && lake exe cache get \
     && for t in ${TRAINERS}; do echo "▸ lake build $t"; lake build "$t" || exit 1; done \
     && bash scripts/regen_jax_generated.sh sync
 
@@ -52,7 +52,7 @@ ARG GIT_REV=unknown
 RUN echo "${GIT_REV}" > .image_rev
 
 # ── boot: one supervisor program, run once (autorestart=false), output to the instance log
-COPY deploy/vast/supervisor.conf /etc/supervisor/conf.d/lean4-jax-bench.conf
+COPY deploy/vast/supervisor.conf /etc/supervisor/conf.d/lean4-mlir-bench.conf
 RUN mkdir -p /opt/supervisor-scripts \
-    && ln -sf ${LEAN4JAX}/deploy/vast/supervisor.sh /opt/supervisor-scripts/lean4-jax-bench.sh \
+    && ln -sf ${LEAN4MLIR}/deploy/vast/supervisor.sh /opt/supervisor-scripts/lean4-mlir-bench.sh \
     && chmod +x deploy/vast/*.sh

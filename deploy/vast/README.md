@@ -17,8 +17,8 @@ supervisor program that runs [`bench.sh`](bench.sh) once at boot.
     git clone https://github.com/brettkoonce/lean4-mlir.git && cd lean4-mlir
     git checkout bench/a100-probe
     docker login                                         # the Docker Hub account the image goes to
-    IMAGE=<hub user>/lean4-jax-bench deploy/vast/build.sh
-    docker push <hub user>/lean4-jax-bench:<rev>         # build.sh prints this line
+    IMAGE=<hub user>/lean4-mlir deploy/vast/build.sh
+    docker push <hub user>/lean4-mlir:<rev>         # build.sh prints this line
 
 The Lean build is the long step (Mathlib's cache downloads; the trainers and their renders
 compile). The image is ~45 GB unpacked. A source edit rebuilds from `COPY . .` down; the venv
@@ -26,14 +26,14 @@ layer is keyed on `jax/requirements-cuda-lock.txt` alone.
 
 Try it before pushing, on a box with NVIDIA cards and the container toolkit:
 
-    docker run --rm --gpus all --entrypoint bash <hub user>/lean4-jax-bench:<rev> \
-      -c 'BENCH_OUT=/tmp/bench bash /opt/lean4-jax/deploy/vast/bench.sh'
+    docker run --rm --gpus all --entrypoint bash <hub user>/lean4-mlir:<rev> \
+      -c 'BENCH_OUT=/tmp/bench bash /opt/lean4-mlir/deploy/vast/bench.sh'
 
 ## 2. Rent
 
 A vast.ai template with:
 
-- **Image** `<hub user>/lean4-jax-bench:<rev>`
+- **Image** `<hub user>/lean4-mlir:<rev>`
 - **Launch mode** docker ENTRYPOINT. In SSH or Jupyter mode put `entrypoint.sh` in the on-start
   script so the base image's boot (and with it supervisor) still runs.
 - **Disk** 80 GB without ImageNet, 250 GB with it
@@ -53,15 +53,15 @@ The rows are the four-card jobs' own renders, so the instance wants four cards o
 
 ## 3. Read it
 
-The instance log (and `/var/log/portal/lean4-jax-bench.log`) follows the run and ends on
+The instance log (and `/var/log/portal/lean4-mlir-bench.log`) follows the run and ends on
 
-    ════ BENCH DONE … — results in /workspace/lean4-jax-bench/<date>-<host>/
+    ════ BENCH DONE … — results in /workspace/lean4-mlir-bench/<date>-<host>/
 
 with `summary.txt` (step time, peak memory per card, and the hours a verified pass takes at that
 step), `device-<net>.txt`, `box.txt` and `bench.log` beside it. Copy that directory off, then
 **destroy the instance: nothing here stops the rental.** By hand, or again:
 
-    BENCH_FORCE=1 bash /opt/lean4-jax/deploy/vast/bench.sh
+    BENCH_FORCE=1 bash /opt/lean4-mlir/deploy/vast/bench.sh
 
 ## 4. With ImageNet
 
