@@ -1,0 +1,7 @@
+[sup] 2026-11-10 14:12:25 START job=vits-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=runs/2026-11-10-vits-verified-300ep
+[sup] 2026-11-10 14:12:25 cmd: .lake/build/bin/vit-s-imagenet-verified data
+[sup] 2026-11-10 14:12:25 eta: bf16 ~70-73 h on ares at 4 x 256 (2026-10-11 smoke, runs/2026-10-11-vits-default-emabf16-4gpu/: med 650 / min 641 / p90 668 ms per 1024-row step at w4, starvation 9 ms — compute-bound; 1,251 steps + the streamed eval an epoch, 300 ep); the 4 x 128 clip render read 339 ms a 512-row step on 2026-10-07 (~71 h); the 3060 box is unmeasured at 1024
+[sup] 2026-11-10 14:12:25 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-11-10 14:12:25   launched PID=3497379 PGID=3497379
+[sup]   last line: done (trained ViT-Small (ImageNet-1k) emadp256x4wxdropeps0000001smxerfbf16 + cosine→0.000010/warmup via packed threading).
+[sup] 2026-11-14 05:08:55 ✅ COMPLETE — 300/300 epochs
