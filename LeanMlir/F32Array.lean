@@ -138,16 +138,24 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
   -- from the global step, and advanced once per (site, example) so the draw order is fixed by
   -- the layout rather than by evaluation order.
   let mut st : UInt64 := (seed.toUInt64 * 2654435761) ||| 1
-  let mut buf : Array Float := #[]
+  let mut buf : Array Float := Array.mkEmpty n
+  -- The float literals are bound ONCE, outside the loops: a literal in the loop body compiles to a
+  -- `Float.ofScientific` call per iteration (a GMP string parse), which at 36 sites x 256 rows was
+  -- most of the driver's time between Execute calls (gdb samples, 2026-11-15). Same values.
+  let two24 : Float := 16777216.0
+  let one : Float := 1.0
+  let zero : Float := 0.0
   for si in [0:keeps.size] do
     let k := keeps[si]!
+    let always := k ≥ one
+    let scale := one / k
     for _ in [0:bs] do
       st := st ^^^ (st <<< 13); st := st ^^^ (st >>> 7); st := st ^^^ (st <<< 17)
       -- u ∈ [0,1) from the top 24 bits, which is exactly float32's mantissa width.
-      let u := (st >>> 40).toNat.toFloat / 16777216.0
+      let u := (st >>> 40).toNat.toFloat / two24
       -- keep w.p. `k`, then scale survivors by 1/k so the expectation is preserved and eval
       -- (all-ones, k = 1) is the identity. `k ≥ 1` ⇒ always keep, scale 1.0.
-      buf := buf.push (if k ≥ 1.0 then 1.0 else if u < k then 1.0 / k else 0.0)
+      buf := buf.push (if always then one else if u < k then scale else zero)
   -- `write3` is the only in-place float writer; `keeps.size * bs` is divisible by 3 whenever the
   -- site count is (9 on EfficientNet-B0), so this tiles exactly. Otherwise the tail loop rewrites
   -- the last three floats, which needs `keeps.size * bs ≥ 3`: below that (but above 0) the `Nat`
