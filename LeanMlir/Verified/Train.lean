@@ -379,6 +379,13 @@ def accK (v : String) : Nat :=
     ((after.takeWhile (· != 'x')).toNat?).getD 0
   else 1
 
+/-- One gradient exchange per accumulation CYCLE (`RenderKit.optOne`'s `cyc`): the replicas
+    accumulate their own gradients and the collective runs on the apply micro-batch only, so the
+    `G` region DIFFERS across replicas between applies. Same blob layout and scalars as the
+    per-micro-batch render; what it needs from the driver is that every replica's state stays on
+    its own device across the cycle (see the guard beside the accumulation banner). -/
+def cycOn (v : String) : Bool := accOn v && v.contains "cyc"
+
 /-- Blob regions: `[θ|m|v]`, plus `G` (gradient accumulation) and/or `E` (the EMA shadow) — so
     **3, 4 or 5**, and the two extras are INDEPENDENT.
     A 3-region file loaded by a 4-region driver (or the reverse) misaligns every parameter, so
@@ -2153,6 +2160,23 @@ EVAL AND CHECKPOINT SCORE THE SHADOW.\
 {gbs} x {accK} = EFFECTIVE BATCH {gbs * accK}. {nb} micro-batches/epoch = {nb / accK} updates/epoch; \
 the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
 micro-batches."
+    if VerifiedVariant.cycOn variant then
+      -- ⛔ THE ONE THING THIS RENDER NEEDS THAT THE PER-MICRO-BATCH ONE DOES NOT. Its accumulator
+      -- is per replica between applies. The device-resident path hands each replica its OWN
+      -- outputs back; the copying path (`PJRT_FFI_RESIDENT=0`, and IREE's only path) reads
+      -- replica 0 and pushes that to every replica, so every card would accumulate onto card 0's
+      -- total and the applied gradient would be card 0's rows fifteen times over plus one real
+      -- mean. That trains, descends and is a different recipe: measured 2026-11-15 on two cycles
+      -- of real data, `m` off by norm-rel 1.08 where the tie to the per-micro-batch render sits
+      -- at the run-to-run floor (3.8e-4). Refused rather than announced.
+      if (← IO.getEnv "PJRT_FFI_RESIDENT") == some "0" || (← LowererSession.backendName) != "xla"
+          || replicas ≤ 1 then
+        throw <| IO.userError s!"variant {variant} exchanges gradients once per accumulation \
+cycle: it needs more than one replica on the XLA backend with device-resident parameters (unset \
+PJRT_FFI_RESIDENT). On the copying path every replica would accumulate onto replica 0's total."
+      IO.println s!"  ▸ ONE EXCHANGE PER CYCLE: each of the {replicas} replicas accumulates its own \
+gradients; the all_reduce runs on the apply micro-batch only (1 in {accK}). The G region differs \
+across replicas inside a cycle and is identical again after every apply."
     -- CONDITIONAL on the loaded variant: it names only the absences that variant has.
     -- `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB renders as `OptRecipe.lambAccum 8` with
     -- `bce := true`, has neither, and an unconditional line would assert the exact opposite of the

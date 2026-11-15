@@ -834,11 +834,18 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- carries no batch; a second layout of the same accumulated step (two cards at 128 where four
     -- hold 64) sets it, so its artifact and checkpoint cannot be the four-card render's. `accK`
     -- still stops at the first `x`.
-    (accBS : Nat := 0) : String :=
+    (accBS : Nat := 0)
+    -- `cyc` = one gradient exchange per accumulation cycle (`optOne`'s `cyc`), TRAILING and off at
+    -- every committed spelling. The marker closes the accumulation group, after `<k>x[<B>]`:
+    -- `emaaccdp16xcycwxdroperfbf16`. It is a different graph over the same blob layout, so it gets
+    -- its own artifact and its own checkpoint lineage; `accK` still stops at the first `x`, and
+    -- `cyc` spells none of the driver's other markers (`tests/TestVariantPredicates.lean`).
+    (cyc : Bool := false) : String :=
   (if ema then "ema" else if acc > 1 then "" else "adam")
     ++ (if acc > 1 then "acc" else "")
     ++ (if replicas ≤ 1 then "" else "dp")
-    ++ (if acc > 1 then s!"{acc}x" ++ (if accBS > 0 then toString accBS else "") else "")
+    ++ (if acc > 1 then s!"{acc}x" ++ (if accBS > 0 then toString accBS else "")
+          ++ (if cyc then "cyc" else "") else "")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
     -- It needs no driver predicate: excluding a param changes no arity, type or region.
@@ -984,8 +991,15 @@ def convNextAdamTrainStepText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Stri
     (acc : Nat := 1)
     -- `cnxAdamVariant`'s `accBS`: the batch in the ENTRY NAME, 0 (absent) at every committed render.
     (accBS : Nat := 0)
+    -- One gradient exchange per accumulation cycle (`optOne`'s `cyc`, which says what it changes
+    -- and why). TRAILING and off at every committed render. It needs `acc > 1` and more than one
+    -- replica to mean anything, and is refused otherwise rather than silently spelled into a name.
+    (cyc : Bool := false)
     : String :=
-  if clip && acc > 1 then
+  if cyc && (acc ≤ 1 || replicas ≤ 1) then
+    panic! "convNextAdamTrainStepText: `cyc` (one exchange per accumulation cycle) needs acc > 1 \
+and replicas > 1"
+  else if clip && acc > 1 then
     panic! "convNextAdamTrainStepText: `clip` composed with `acc` would clip each micro-batch's \
 gradient where the reference clips the accumulated mean (`optAllParams`'s `accIn` route); the \
 official ConvNeXt recipe does not clip (--clip_grad None) — render with (clip := false)"
@@ -1050,7 +1064,7 @@ official ConvNeXt recipe does not clip (--clip_grad None) — render with (clip 
       -- `opt` is `.adamw` or `.adamwAccum acc`; the accumulator's output name comes back fifth
       -- (`some` only under accumulation) and rides out as the `G` region, before the shadow.
       let (c, nT, nM, nV, nA, nE) ← optOne opt cBS replicas ⟨nm, g, ds⟩ wdN (preAvg := clip)
-                                      (ema := ema)
+                                      (ema := ema) (cyc := cyc)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       match nA with | some a => aN := aN ++ [a] | none => pure ()
@@ -1102,6 +1116,15 @@ official ConvNeXt recipe does not clip (--clip_grad None) — render with (clip 
         "    // pretty(verified AST) throughout — OptRecipe.adamwAccum, as ViT-B, ResNet-50 and MobileNetV4.\n" ++
         "    // No BatchNorm, so the k micro-batches ARE one batch of k·N·b: exact, not Ghost-BN.\n"
        else "") ++
+      (if cyc then
+        "    // ── ONE EXCHANGE PER CYCLE: no gradient is all-reduced on its own. Each replica\n" ++
+        "    // accumulates its OWN gradients into %<p>a, and the `%cx*` blocks after each accumulator\n" ++
+        "    // are pretty(allReduceMeanWhenF): a stablehlo.if on %aup whose true branch all-reduces the\n" ++
+        "    // replica TOTALS (the apply micro-batch) and whose false branch keeps the replica's own.\n" ++
+        "    // The mean of the sums is the sum of the means (Proofs.cycleExchange_eq), so the applied\n" ++
+        "    // gradient is the per-micro-batch render's up to summation order; the `%arsum*` blocks the\n" ++
+        "    // banner above names are absent here. Between applies the G region differs across replicas.\n"
+       else "") ++
       body ++ convnextAdamConsts nClasses V wdExclude wdStr opt ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
@@ -1140,7 +1163,7 @@ official ConvNeXt recipe does not clip (--clip_grad None) — render with (clip 
   -- region and two scalars): a name that dropped it would put the accumulating graph behind the
   -- four-region artifact's name and checkpoint, and the driver — which reads `k` off the name —
   -- would pack four regions into a five-region signature.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16 gf acc accBS}_train_step"
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16 gf acc accBS cyc}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -1191,5 +1214,9 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.cnxAdamVariant 1 true true false true true .erf 16 == "emaacc16xwxdroperfbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 4 false false false false false .tanh 16 == "accdp16x"
 #guard Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 16 128 == "emaaccdp16x128wxdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 4 true true false true true .erf 16 0 true == "emaaccdp16xcycwxdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 16 128 true == "emaaccdp16x128cycwxdroperfbf16"
+-- `cyc` without accumulation spells nothing
+#guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf 1 0 true == "emadpwxclipdroperfbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 2 true true false true true .erf 1 128 == "emadpwxdroperfbf16"
 #guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf 1 == "emadpwxclipdroperfbf16"

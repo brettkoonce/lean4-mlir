@@ -152,6 +152,11 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- suffix, so `16x` meets `wx` directly — `accK` ends at the FIRST `x` and `wx`'s cannot reach it.
   , ("emaaccdp16xwxdroperfbf16", true, false, true)
   , ("emaaccdp16xwxdropbf16", true, false, true)
+    -- The same step with ONE gradient exchange per cycle (2026-11-15): `cyc` closes the
+    -- accumulation group, after `16x`, and spells no other marker — the blob layout, the scalars
+    -- and the masks are the per-micro-batch render's.
+  , ("emaaccdp16xcycwxdroperfbf16", true, false, true)
+  , ("emaaccdp16xcycwxdropbf16", true, false, true)
     -- ConvNeXt-T on the Orin Nano (2026-10-27): plain AdamW at 8 × 4 = 32, one device — nothing
     -- after `4x`, so k ends at the string's only `x`.
   , ("acc4x", false, false, false)
@@ -411,7 +416,8 @@ private def accumSpellings : List String :=
    -- 2026-10-12 (the partition guard below read red on the unpushed branch until then)
    "emaaccdp2x128x4wxdropbf16",
    -- ConvNeXt's official batch, 16 × (4 × 64), at both GELU forms
-   "emaaccdp16xwxdroperfbf16", "emaaccdp16xwxdropbf16",
+   "emaaccdp16xwxdroperfbf16", "emaaccdp16xwxdropbf16", "emaaccdp16xcycwxdroperfbf16",
+   "emaaccdp16xcycwxdropbf16",
    -- ConvNeXt-T on the Orin Nano, 8 × 4
    "acc4x",
    "accdp8x128wxdropdowd01bf16", "acc8x128wxdropdowd01bf16"]
@@ -426,6 +432,13 @@ private def accumSpellings : List String :=
 #guard accK "emaaccdp2x128x4wxdropbf16" == 2
 #guard accK "emaaccdp16xwxdroperfbf16" == 16
 #guard accK "emaaccdp16xwxdropbf16" == 16
+-- `cyc` after `16x`: k is still 16, the layout is the per-micro-batch render's, and the marker is
+-- read by `cycOn` alone — on an accumulating name only.
+#guard accK "emaaccdp16xcycwxdroperfbf16" == 16
+#guard nRegions "emaaccdp16xcycwxdroperfbf16" == nRegions "emaaccdp16xwxdroperfbf16"
+#guard nScalars "emaaccdp16xcycwxdroperfbf16" == nScalars "emaaccdp16xwxdroperfbf16"
+#guard cycOn "emaaccdp16xcycwxdroperfbf16"
+#guard table.all (fun (v, _, _, _) => cycOn v == (v.startsWith "emaaccdp16xcyc"))
 #guard accK "acc4x" == 4 && nRegions "acc4x" == 4
 #guard lambOn "emaaccdp8x128wxdowd005bf16" == false
 #guard bceOn "emaaccdp8x128wxdowd005bf16" == false
@@ -672,7 +685,7 @@ private def erfSpellings : List String :=
    "adam128wxcliperf", "adamdp128x4wxcliperf", "adamdp128x4wxclipdroperf",
    "adamdp128x2wxclipdroperf", "adamdp256x2wxclipdroperf", "adam128wxclipdroperf",
    "adam128wxclipdroperfbf16", "adamdp128x4wxclipdroperfbf16", "emadp128x4wxclipdroperfbf16",
-   "emaaccdp16xwxdroperfbf16"]
+   "emaaccdp16xwxdroperfbf16", "emaaccdp16xcycwxdroperfbf16"]
 #guard table.all (fun (v, _, _, _) => erfOn v == erfSpellings.contains v)
 #guard erfSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- The form adds no region, scalar or mask: an exact spelling packs as its tanh partner does.

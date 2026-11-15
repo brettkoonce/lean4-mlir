@@ -391,6 +391,7 @@ inductive Raw where
   -- 4d piece 2: the cross-replica mean over `R` replicas, at the parameter shape `ds`, with the
   -- SSA tag `t` the emit names its lines by. Replica 0's skeleton is the operand.
   | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Raw → Raw
+  | allReduceMeanWhen (R : Nat) (t upN : String) (ds : List Nat) : Raw → Raw
 deriving Repr, Inhabited
 
 /-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
@@ -835,6 +836,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .shiftB (N := N) (n := n) sS _ e    => .batched "shift" [sS] [N, n] (skel e)
   | _, .divConstB (N := N) (n := n) sS _ e => .batched "divConst" [sS] [N, n] (skel e)
   | _, .allReduceMeanF R hR t ds g => .allReduceMean R t ds (skel (g ⟨0, hR⟩))
+  | _, .allReduceMeanWhenF R hR t upN ds _ g => .allReduceMeanWhen R t upN ds (skel (g ⟨0, hR⟩))
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
       .batched "rowDenseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .rowDenseBiasSgd (N := N) (c := c) bN lrS _ _ e =>
@@ -1013,6 +1015,7 @@ inductive Tok where
   | batched    (tag : String) (names : List String) (info : List Nat) : Tok
   | batched2   (tag : String) (names : List String) (info : List Nat) : Tok
   | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Tok
+  | allReduceMeanWhen (R : Nat) (t upN : String) (ds : List Nat) : Tok
 deriving Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -1123,6 +1126,7 @@ def toToks : Raw → List Tok
   | .batched tag names info e   => toToks e ++ [.batched tag names info]
   | .batched2 tag names info a b => toToks a ++ toToks b ++ [.batched2 tag names info]
   | .allReduceMean R t ds e => toToks e ++ [.allReduceMean R t ds]
+  | .allReduceMeanWhen R t upN ds e => toToks e ++ [.allReduceMeanWhen R t upN ds]
 
 /-- **Stride-2 weight-gradient window geometry — odd AND even kernels.** Returns
     `(up, ext, lo, hi)` for one spatial axis: `up` is the trailing zero row of the
@@ -1602,6 +1606,36 @@ def allReduceMeanText (g : String) (ds : List Nat) (t : String) (R : Nat) : Stri
     s!"    %arn{t} = stablehlo.constant dense<{R}.0> : {T}\n" ++
     s!"    %armean{t} = stablehlo.divide %arsum{t}, %arn{t} : {T}\n"
   (s, s!"%armean{t}")
+
+/-- **The text of the conditional cross-replica mean** (`allReduceMeanWhenF`): one `stablehlo.if`
+    on `{upN} > 0.5` whose true branch is `allReduceMeanText`'s exchange, indented one level, and
+    whose false branch returns the operand. A collective inside a conditional runs only when the
+    branch is taken, which is the whole point: on an accumulate micro-batch no gradient bytes cross
+    the cards. Every replica is handed the same `{upN}`, so they take the same branch. The names
+    are `%cx…{t}`, disjoint from `%ar…{t}`. At `R ≤ 1` there is no text and the operand's name is
+    the result, as `allReduceMeanText`. -/
+def allReduceMeanWhenText (g : String) (ds : List Nat) (t upN : String) (R : Nat) : String × String :=
+  if R ≤ 1 then ("", g) else
+  let T := ty ds
+  let grp := String.intercalate ", " ((List.range R).map toString)
+  let lbrace := "{"
+  let rbrace := "}"
+  let s :=
+    s!"    %cxh{t} = stablehlo.constant dense<0.5> : tensor<f32>\n" ++
+    s!"    %cxp{t} = stablehlo.compare GT, {upN}, %cxh{t}, FLOAT : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    s!"    %cxn{t} = stablehlo.constant dense<{R}.0> : {T}\n" ++
+    s!"    %cxmean{t} = \"stablehlo.if\"(%cxp{t}) ({lbrace}\n" ++
+    s!"      %cxsum{t} = \"stablehlo.all_reduce\"({g}) ({lbrace}\n" ++
+    s!"      ^bb0(%cxa{t}: tensor<f32>, %cxb{t}: tensor<f32>):\n" ++
+    s!"        %cxadd{t} = stablehlo.add %cxa{t}, %cxb{t} : tensor<f32>\n" ++
+    s!"        stablehlo.return %cxadd{t} : tensor<f32>\n" ++
+    s!"      {rbrace}) {lbrace} replica_groups = dense<[[{grp}]]> : tensor<1x{R}xi64> {rbrace} : ({T}) -> {T}\n" ++
+    s!"      %cxdiv{t} = stablehlo.divide %cxsum{t}, %cxn{t} : {T}\n" ++
+    s!"      stablehlo.return %cxdiv{t} : {T}\n" ++
+    s!"    {rbrace}, {lbrace}\n" ++
+    s!"      stablehlo.return {g} : {T}\n" ++
+    s!"    {rbrace}) : (tensor<i1>) -> {T}\n"
+  (s, s!"%cxmean{t}")
 
 /-- The compute precision a contraction tag asks for: `…Bf16` bf16, `…F8` fp8 (E4M3), otherwise f32
     (`none`) — as the type printer of the low-precision operands. -/
@@ -4656,6 +4690,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .allReduceMean R t ds, r :: st =>
       let (txt, o) := allReduceMeanText r ds t R
       pure (txt, o :: st)
+  | .allReduceMeanWhen R t upN ds, r :: st =>
+      let (txt, o) := allReduceMeanWhenText r ds t upN R
+      pure (txt, o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Why `t`'s emitted pad would not compute its `den`, or `none`. Two families are faithful only
@@ -4877,6 +4914,15 @@ def prettyAllReduceMean (grad : String) (ds : List Nat) (t : String) (replicas :
   if h : replicas ≤ 1 then pure ("", grad)
   else pretty 1 (.allReduceMeanF (n := ds.foldl (· * ·) 1) replicas (by omega) t ds
         (fun _ => .operand grad (fun _ => 0)))
+
+/-- **The once-per-cycle exchange as `pretty` of the `allReduceMeanWhenF` node**: `prettyAllReduceMean`
+    behind `upN > 0.5`, applied by the accumulating renders to the per-replica running total
+    rather than to each micro-batch's gradient. At `replicas ≤ 1` it emits nothing. -/
+def prettyAllReduceMeanWhen (total : String) (ds : List Nat) (t upN : String) (replicas : Nat) :
+    StateM EmitS (String × String) :=
+  if h : replicas ≤ 1 then pure ("", total)
+  else pretty 1 (.allReduceMeanWhenF (n := ds.foldl (· * ·) 1) replicas (by omega) t upN ds 0
+        (fun _ => .operand total (fun _ => 0)))
 
 /-- **One parameter's AdamW update, as `pretty` of the proven triple** — `adamMNextF`, `adamVNextF`
     and the decoupled-decay `adamWParamF` on the gradient `grad`, reading the graph constants

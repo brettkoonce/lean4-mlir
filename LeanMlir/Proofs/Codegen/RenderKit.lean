@@ -495,11 +495,27 @@ def optOne (opt : OptRecipe) (B : Nat) (replicas : Nat) (g : PGrad)
     -- parse with *"redefinition of SSA value '%sge'"*. It renders, passes byte-identity and render
     -- coverage, and its arity checks — only a parse catches it
     -- (`scripts/gates/parse_verified_mlir.py`). The nets with no maxpool have no `%s*` block-locals.
-    (emaSuf : String := "e") :
+    (emaSuf : String := "e")
+    -- **`cyc` — ONE gradient exchange per accumulation CYCLE**, TRAILING and off at every
+    -- committed render. Read only by `.adamwAccum` without `accIn`. The per-micro-batch render
+    -- all-reduces every gradient and accumulates the mean (`Gt = akeep·G + mean_r g_r`), which
+    -- moves the whole gradient across the cards k times a cycle; the exchange costs by the BYTE
+    -- (measured 2026-11-15, `scripts/probes/allreduce_bytes_probe.sh`: 344 all_reduces or one, the
+    -- same step time; half the bytes, half the penalty). Here each replica accumulates its OWN
+    -- gradient (`Gt_r = akeep·G_r + g_r`, the same `momVNextF`, no collective before it) and the
+    -- collective comes after, as `allReduceMeanWhenF` on `%aup`: the replica mean of the totals
+    -- on the apply micro-batch, the replica's own total otherwise. The mean of the sums is the sum
+    -- of the means (`Proofs.cycleExchange_eq`), so the optimizer consumes the same `Gt` up to
+    -- float summation order. Between applies the `G` region DIFFERS across replicas; the apply
+    -- leaves it identical again, and `%akeep = 0` discards it at the next cycle's first
+    -- micro-batch, so a checkpoint at a cycle boundary reads replica 0 as before.
+    (cyc : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × Option String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let replicas := if preAvg then 1 else replicas
+  let cycOn := cyc && accIn.isNone && !preAvg && (match opt with | .adamwAccum _ => true | _ => false)
+  let dpReplicas := replicas
+  let replicas := if preAvg || cycOn then 1 else replicas
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
   -- Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
@@ -590,7 +606,13 @@ def optOne (opt : OptRecipe) (B : Nat) (replicas : Nat) (g : PGrad)
       | some a => pure ("", a, gAvg)
       | none   => do
           let (c, nm') ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
-          pure (c, nm', nm')
+          if cycOn then
+            -- `cyc`: `gr` above is the replica's OWN gradient (no collective ran), `nm'` its own
+            -- running total, and the exchange happens here, on the apply micro-batch only. Both
+            -- the optimizer tail and the `G` region read its result.
+            let (cX, nX) ← Proofs.StableHLO.prettyAllReduceMeanWhen nm' g.ds g.nm "%aup" dpReplicas
+            pure (c ++ cX, nX, nX)
+          else pure (c, nm', nm')
     -- ② the moments and the parameter, **byte-identical to `.adamw`'s** except that they consume
     -- `Gt` rather than `g`. The `1/k` that turns a SUM into a MEAN is not applied here: it is folded
     -- into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` by `optConstsB`, because `v` is QUADRATIC in the

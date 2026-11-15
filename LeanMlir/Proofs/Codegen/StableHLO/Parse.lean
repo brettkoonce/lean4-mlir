@@ -39,6 +39,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | [], st                       => some st
   | .operand nm n :: ts, st      => parseStack ts (.operand nm n :: st)
   | .allReduceMean R t ds :: ts, e :: st => parseStack ts (.allReduceMean R t ds e :: st)
+  | .allReduceMeanWhen R t upN ds :: ts, e :: st =>
+      parseStack ts (.allReduceMeanWhen R t upN ds e :: st)
   | .dotIn w m n :: ts, e :: st  => parseStack ts (.dotIn w m n e :: st)
   | .dotInBf16 w m n :: ts, e :: st => parseStack ts (.dotInBf16 w m n e :: st)
   | .convertF n :: ts, e :: st   => parseStack ts (.convertF n e :: st)

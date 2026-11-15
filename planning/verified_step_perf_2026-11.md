@@ -118,6 +118,32 @@ from source at every launch, so a probe that needs a patched driver is built in 
 (`rsync` without `runs/` and `.venv`, `.venv` symlinked; `lake build` there is a no-op until the
 source changes), not in the tree a paused run will resume from.
 
+## Built: one exchange per cycle (2026-11-15, mars)
+
+The `cyc` renders: `convnextsin_` / `convnextbin_emaaccdp16xcycwxdroperfbf16` (and their tanh twins).
+Same recipe, operands and blob layout as `emaaccdp16xwxdroperfbf16`; each replica accumulates its own
+gradients and the all_reduce sits inside a `stablehlo.if` on `%aup`, one per parameter. The driver is
+unchanged except for a guard.
+
+| 4× RTX 3060, synthetic | per micro-batch | `cyc` |
+|---|---|---|
+| ConvNeXt-S | 354 ms | 319 ms |
+| ConvNeXt-B | 535 ms | 472 ms |
+
+- **Tie.** Two cycles of real data (`SHIM_DETERMINISM=1`), checkpoints compared by region against the
+  per-micro-batch render: `m` norm-rel 3.80e-4, against 3.85e-4 for that render run twice. With
+  `PJRT_FFI_RESIDENT=0` (the control) `m` is off by 1.08; the driver now refuses that combination.
+- **Proof side.** New node `allReduceMeanWhenF` (denotation, printer, parser roundtrip);
+  `Proofs.cycleExchange_eq`: the replica mean of the per-replica totals is the total of the replica
+  means. Three-axiom clean, in the axiom audit.
+- **One conditional for all 344 tensors** instead of one each measured 313 ms against 319 on S
+  (hand-rewritten render). Not built: it needs a multi-operand node.
+- **Confs.** `cnxs-` and `cnxb-default-emabf16-4gpu` now name the `cyc` variant; one line each to revert.
+  On 12 GB cards launch with `LEAN_MLIR_MEM_FRACTION=0.95` in the environment.
+- Not done: ResNet-50, ViT-B and MobileNetV4 (`optOne`'s `cyc` reaches only ConvNeXt's writer; the
+  clip and LAMB routes hoist the accumulator and need their own wiring), the two-card renders, and a
+  5080 measurement of the built render.
+
 ## What to try
 
 1. **One gradient exchange per accumulation cycle** (above). Coalescing the all_reduces without

@@ -1248,6 +1248,18 @@ inductive SHlo : Nat → Type where
   --    through.
   | allReduceMeanF {n : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
       (g : Fin R → SHlo n) : SHlo n
+  -- **The cross-replica mean taken only when a runtime scalar says so** — the collective of the
+  --    once-per-cycle accumulation renders (`OptRecipe.adamwAccum` at `cyc := true`). Each replica
+  --    accumulates its OWN gradients (`momVNextF` on the replica's gradient, no exchange), and this
+  --    node sits after the accumulator: on the cycle's apply micro-batch (`up > 1/2`, the `%aup`
+  --    operand named `upN`) it is `allReduceMeanF` of the per-replica totals; on an accumulate
+  --    micro-batch it threads replica 0's own total — `skel`'s replica, as `allReduceMeanF` reads
+  --    it. The text is one `stablehlo.if` whose true branch holds the `all_reduce`, so the bytes
+  --    cross the cards once per cycle instead of once per micro-batch (measured 2026-11-15: the
+  --    exchange costs by the byte, not by the op). `Proofs.cycleExchange_eq` (Optim/Accum) is the
+  --    statement that the cycle's result is the per-micro-batch render's.
+  | allReduceMeanWhenF {n : Nat} (R : Nat) (hR : 0 < R) (t upN : String) (ds : List Nat) (up : ℝ)
+      (g : Fin R → SHlo n) : SHlo n
   -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
   -- `denseWeightSgdB`/`denseBiasSgdB` (Σ over the N rows), but a 3D `[B,N,·]` token-matrix EMIT
   -- (the weight grad contracts batch×tokens `[0,1]x[0,1]`; the bias reduces `[0,1]`), vs the enet
@@ -2059,6 +2071,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .shiftB _ s e    => fun i => den e i + s
   | _, .divConstB _ s e => fun i => den e i / s
   | _, .allReduceMeanF R _ _ _ g => fun i => (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i
+  | _, .allReduceMeanWhenF R hR _ _ _ up g => fun i =>
+      if 1 / 2 < up then (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i else den (g ⟨0, hR⟩) i
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
@@ -2540,6 +2554,25 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
 @[simp] theorem den_allReduceMeanF {n : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
     (g : Fin R → SHlo n) :
     den (.allReduceMeanF R hR t ds g) = fun i => (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i := rfl
+
+/-- **The conditional all-reduce**: the replica mean when the scalar is up, replica 0's own operand
+    otherwise. -/
+@[simp] theorem den_allReduceMeanWhenF {n : Nat} (R : Nat) (hR : 0 < R) (t upN : String)
+    (ds : List Nat) (up : ℝ) (g : Fin R → SHlo n) :
+    den (.allReduceMeanWhenF R hR t upN ds up g) = fun i =>
+      if 1 / 2 < up then (1 / (R : ℝ)) * ∑ r : Fin R, den (g r) i else den (g ⟨0, hR⟩) i := rfl
+
+/-- On the apply micro-batch (`%aup = 1`) the conditional collective IS `allReduceMeanF`. -/
+theorem den_allReduceMeanWhenF_up {n : Nat} (R : Nat) (hR : 0 < R) (t upN : String)
+    (ds : List Nat) (g : Fin R → SHlo n) :
+    den (.allReduceMeanWhenF R hR t upN ds 1 g) = den (.allReduceMeanF R hR t ds g) := by
+  funext i; simp only [den_allReduceMeanWhenF, den_allReduceMeanF]; norm_num
+
+/-- On an accumulate micro-batch (`%aup = 0`) nothing crosses: replica 0 keeps its own total. -/
+theorem den_allReduceMeanWhenF_keep {n : Nat} (R : Nat) (hR : 0 < R) (t upN : String)
+    (ds : List Nat) (g : Fin R → SHlo n) :
+    den (.allReduceMeanWhenF R hR t upN ds 0 g) = den (g ⟨0, hR⟩) := by
+  funext i; simp only [den_allReduceMeanWhenF]; norm_num
 @[simp] theorem den_bnBatchMeanB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
     den (.bnBatchMeanB e)
       = fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl

@@ -631,7 +631,11 @@ def convNextAdamTrainStepBText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Str
     -- Spell `bB` into the entry name (`cnxAdamVariant`'s `accBS`). TRAILING and off at every
     -- committed render; on for a second layout of an accumulated step, whose name would otherwise
     -- be the first layout's.
-    (nameBS : Bool := false) : String :=
+    (nameBS : Bool := false)
+    -- One gradient exchange per accumulation cycle (`RenderKit.optOne`'s `cyc`). TRAILING and off
+    -- at every committed render; the traversal does not see it, the wrapper spells it into the
+    -- entry name.
+    (cyc : Bool := false) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   convNextAdamTrainStepText gf alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
@@ -648,7 +652,7 @@ def convNextAdamTrainStepBText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Str
     -- in its most convincing form — the graph really would be bf16, every other check would pass,
     -- and only the artifact's declared name would be wrong.
     (sd := sd) (V := V) (bf16 := bf16) (cBS := bB) (acc := acc)
-    (accBS := if nameBS then bB else 0)
+    (accBS := if nameBS then bB else 0) (cyc := cyc)
 
 /-- The drop-free forward's banner — the line `ConvNeXtRender.convNextFwdText` emits, restated
     here so the byte tie can demand **byte-identity** rather than "identical apart from a comment".
@@ -1543,6 +1547,46 @@ end Proofs.StableHLO
           |>.takeWhile (· != 'x')) == "16"
 #guard !"emaaccdp16x128wxdroperfbf16".contains "do"
 #guard !"emaaccdp16x128wxdroperfbf16".contains "sd"
+
+-- ── ONE EXCHANGE PER CYCLE (2026-11-15): ConvNeXt-S and -B at 16 × (4 × 64) ──
+-- The accumulated step above moves every gradient across the cards on each of its 16 micro-batches
+-- and that exchange costs by the byte, not by the op (`scripts/probes/allreduce_bytes_probe.sh`;
+-- the rows for both boxes are in `planning/verified_step_perf_2026-11.md`).
+-- These renders (`cyc := true`) accumulate per replica and exchange the totals once,
+-- on the apply micro-batch, behind `allReduceMeanWhenF` on `%aup`. Same operands, same blob
+-- layout, same recipe; the applied gradient is the same sum in a different order
+-- (`Proofs.cycleExchange_eq`), so losses agree to rounding, not to the bit. A different graph, so
+-- its own name and checkpoint lineage: `…accdp16xcyc…`.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emaaccdp16xcycwxdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS) (acc := 16)
+    (cyc := true))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emaaccdp16xcycwxdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS) (acc := 16)
+    (cyc := true))
+-- their tanh twins, which the GELU-form audit pairs them with; not run
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emaaccdp16xcycwxdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS) (acc := 16)
+    (cyc := true))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emaaccdp16xcycwxdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := false)
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS) (acc := 16)
+    (cyc := true))
+#guard "emaaccdp16xcycwxdroperfbf16" ==
+  Proofs.StableHLO.cnxAdamVariant 4 true true false true true .erf 16 0 true
+#guard "emaaccdp16xcycwxdroperfbf16".startsWith "ema"
+#guard ((("emaaccdp16xcycwxdroperfbf16".splitOn "acc").getD 1 "").drop 2
+          |>.takeWhile (· != 'x')) == "16"
+#guard !"emaaccdp16xcycwxdroperfbf16".contains "do"
+#guard !"emaaccdp16xcycwxdroperfbf16".contains "sd"
+#guard ("emaaccdp16xcycwxdroperfbf16".splitOn "drop").length == 2
+#guard ("emaaccdp16xcycwxdroperfbf16".splitOn "erf").length == 2
 
 -- At `acc := 1` the pair spelling of 2026-10-06 is untouched — byte-identity, stated on the name
 -- as well as on the bytes (`scripts/regen_verified_mlir.sh check`).

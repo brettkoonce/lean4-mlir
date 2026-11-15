@@ -62,6 +62,40 @@ theorem accumCycle_sum (G₀ g : Vec n) (gs : List (Vec n)) (i : Fin n) :
   simp [accumCycle, foldl_momVNext_one]
 
 -- ════════════════════════════════════════════════════════════════
+-- § One exchange per cycle: the replica mean of the totals is the total of the replica means
+-- ════════════════════════════════════════════════════════════════
+
+/-- The replica mean, pointwise — `allReduceMeanF`'s denotation on `R` per-replica vectors. -/
+noncomputable def replicaMean {R : Nat} (g : Fin R → Vec n) : Vec n :=
+  fun i => (1 / (R : ℝ)) * ∑ r : Fin R, g r i
+
+theorem sum_replicas_list_sum {R : Nat} (gs : List (Fin R → Vec n)) (i : Fin n) :
+    ∑ r : Fin R, (gs.map (fun gk => gk r i)).sum = (gs.map (fun gk => ∑ r : Fin R, gk r i)).sum := by
+  induction gs with
+  | nil => simp
+  | cons h t ih => simp only [List.map_cons, List.sum_cons, Finset.sum_add_distrib, ih]
+
+/-- **The `cyc` renders apply the same gradient as the per-micro-batch renders.**
+
+    Left: each replica `r` runs its OWN cycle — `Gt_r = akeep·G_r + g_r` on its own gradients
+    `g r :: gs.map (· r)`, from whatever total `G₀ r` it was left with — and the collective takes
+    the replica mean of the totals once, on the apply micro-batch (`allReduceMeanWhenF` at
+    `%aup = 1`, `den_allReduceMeanWhenF_up`). Right: the per-micro-batch render, which all-reduces
+    every micro-batch's gradient and accumulates the means, from any `G₀'`. Both are the sum over
+    the cycle of the replica-mean gradients. An identity over ℝ; in floats the two differ by the
+    order of the additions, which is why the two renders tie to rounding and not to the bit. -/
+theorem cycleExchange_eq {R : Nat} (G₀ : Fin R → Vec n) (G₀' : Vec n) (g : Fin R → Vec n)
+    (gs : List (Fin R → Vec n)) (i : Fin n) :
+    replicaMean (fun r => accumCycle (G₀ r) (g r) (gs.map (fun gk => gk r))) i
+      = accumCycle G₀' (replicaMean g) (gs.map replicaMean) i := by
+  simp only [replicaMean, accumCycle_sum, List.map_cons, List.sum_cons, List.map_map,
+    Function.comp_def, Finset.sum_add_distrib, sum_replicas_list_sum, mul_add]
+  congr 1
+  induction gs with
+  | nil => simp
+  | cons h t ih => simp only [List.map_cons, List.sum_cons, mul_add, ih]
+
+-- ════════════════════════════════════════════════════════════════
 -- § The apply phase: the hand-written pair at the sum is the step at the mean
 -- ════════════════════════════════════════════════════════════════
 

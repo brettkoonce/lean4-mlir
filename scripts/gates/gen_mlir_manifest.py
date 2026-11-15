@@ -190,6 +190,9 @@ def decode(variant: str) -> str:
     k = acc_k(variant)
     if k:
         bits.append(f"grad-accum ×{k}")
+        # `VerifiedVariant.cycOn`: `cyc` after `<k>x[<B>]`, on an accumulating name only
+        if "cyc" in variant:
+            bits.append("one gradient exchange per cycle")
     if sd_on(variant):
         bits.append("stochastic depth")
     if cd_on(variant):

@@ -2505,6 +2505,11 @@ open Proofs
 #audit_axioms Proofs.den_allReduceMeanF_eq_lossGrad_meanLoss
 #audit_axioms Proofs.den_allReduceMeanF_convWeightGradB
 #audit_axioms Proofs.adamW_at_allReduceMeanF
+-- ONE EXCHANGE PER CYCLE (StableHLO.allReduceMeanWhenF, the `cyc` renders)
+#audit_axioms Proofs.StableHLO.den_allReduceMeanWhenF
+#audit_axioms Proofs.StableHLO.den_allReduceMeanWhenF_up
+#audit_axioms Proofs.StableHLO.den_allReduceMeanWhenF_keep
+#audit_axioms Proofs.cycleExchange_eq
 
 -- SYNCHRONISED BATCHNORM -- THE DP STEP IS THE GLOBAL-BATCH STEP
 -- (DataParallel/Basic.lean §sync + DataParallel/Sync.lean)

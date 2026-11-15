@@ -421,6 +421,10 @@ jobs:
               verified_mlir/convnextsin_emaaccdp16xwxdropbf16_train_step.mlir \
               verified_mlir/convnextbin_emaaccdp16xwxdroperfbf16_train_step.mlir \
               verified_mlir/convnextbin_emaaccdp16xwxdropbf16_train_step.mlir \
+              verified_mlir/convnextsin_emaaccdp16xcycwxdroperfbf16_train_step.mlir \
+              verified_mlir/convnextsin_emaaccdp16xcycwxdropbf16_train_step.mlir \
+              verified_mlir/convnextbin_emaaccdp16xcycwxdroperfbf16_train_step.mlir \
+              verified_mlir/convnextbin_emaaccdp16xcycwxdropbf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # ⭐ EVERY ViT artifact but one, from ViTRenderB — the batched chain. 4c leg 4 moved the
           # nineteen drop-free renders here (2026-09-07) after measuring all nineteen
