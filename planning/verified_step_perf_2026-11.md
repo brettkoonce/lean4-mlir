@@ -53,11 +53,75 @@ Not measured: a stack profile of the time between calls (a debugger cannot attac
 container; it can on a home box), and a 2-card point (the 2-card ConvNeXt-S render failed at start
 on 16 GB cards).
 
+## ViT, same box (synthetic unless noted)
+
+| render | cards × rows | probe median | launch | device |
+|---|---|---|---|---|
+| ViT-B `emaaccdp2x128x4wxdropeps0000001smxerfbf16` (production), real data | 4 × 128 | 379 ms | 28 | 312 |
+| ViT-B production | 4 × 128 | 371 ms | 29 | 308 |
+| ViT-B `emadp128x4wxclipdroperfbf16` (no accumulation) | 4 × 128 | 352 ms | 27 | 288 |
+| ViT-B `adam128wxclipdroperfbf16` (single device) | 1 × 128 | 248 ms | 20 | 211 |
+| ViT-S `emadp128x4wxclipdroperfbf16` | 4 × 128 | 148 ms | 22 | 87 |
+
+ViT-B is compute-bound: the cards run at 80 % and 200 W, cross-card synchronization (201 all-reduces)
+adds about 77 ms of device time, and launch plus the time between calls is about 13 % of the step.
+ViT-S is small enough that the fixed costs are again roughly 40 % of the step. There is no
+single-device ViT-S point.
+
+Did not run on 16 GB cards: the ViT-S production render (4 × 256; out of memory on one 10.85 GB
+allocation at the conf's default arena) and the JAX ViT-B trainer (one 12.89 GB allocation, at
+memory fraction 0.93). The JAX ViT-S trainer read about 412 ms per 1,024-row optimizer step with the
+8-process feed, from step-log differences over 100 steps.
+
+## The all_reduce bytes probe on the 5080s (2026-11-15)
+
+`scripts/probes/allreduce_bytes_probe.sh`, ConvNeXt-S production step, 4× RTX 5080, synthetic. The
+3060 box read 354 / 354 / 331 / 314 ms for the last four rows.
+
+| row | probe median | launch | device | loss at step 200 |
+|---|---|---|---|---|
+| as rendered, binary before the `dropScales` fix | 186 ms | 48.0 | 88.3 | 7.022544 |
+| as rendered (344 all_reduces, 200 MB) | 178 ms | 47.8 | 92.4 | 7.022544 |
+| one concatenated all_reduce | 176 ms | 44.5 | 91.7 | 7.022544 |
+| half the gradient exchanged (timing only) | 152 ms | 37.9 | 68.3 | — |
+| almost none exchanged (timing only) | 127 ms | 38.2 | 44.7 | — |
+
+- The `dropScales` fix is worth 8 ms here, all outside compute; losses match at steps 0, 1, 2, 100, 200.
+- The number of all_reduces is free on this box too. The bytes cost about 0.25 ms per MB: device
+  92 → 68 → 45 ms, launch about 10 ms. The last row's device time is the 1-card figure (43 ms).
+- ViT-B exchanges about 344 MB, which predicts 86 ms; the 1-card against 4-card probe above read 77.
+
+So the lever is not coalescing but **exchanging once per accumulation cycle**: each card accumulates
+its own gradients over the cycle's micro-batches and the apply step does one exchange. The sum is the
+same; the order of additions is not, so losses will not be bit-identical to the current step. It
+needs a new render (accumulation step without all_reduces, apply step with one exchange), per-card
+accumulators in the driver (today they are identical across cards after every exchange), and the
+data-parallel statements and render gates extended to it. It should land before a verified
+ConvNeXt run starts, or that run stays on the current step.
+
+Estimated 300-epoch verified runs on the 5080 box. Only ConvNeXt-S is measured; the others scale its
+saving by bytes exchanged and by (cycle − 1) / cycle:
+
+| net (cycle) | now | `dropScales` fix | plus one exchange per cycle | JAX |
+|---|---|---|---|---|
+| ConvNeXt-S (16) | 184 ms, ~80 h | 176 ms, ~77 h | ~130 ms, ~57 h | 46 h |
+| ConvNeXt-B (16) | 253 ms, ~109 h | ~105 h | ~160 ms, ~69 h | 62 h |
+| ResNet-50 A1 (4), 600 epochs | 202 ms, ~89 h | ~88 h | ~81 h | 74 h |
+| ResNet-50 A2 (4) | 206 ms, ~47 h | ~46 h | ~43 h | 38 h |
+| ViT-B (2) | 379 ms, ~82 h | ~82 h | ~74 h | — |
+
+On the 3060s the same change is about 11 % for ConvNeXt-S (354 → about 316 ms). ViT-S does not
+accumulate and gains nothing.
+
+A rented box built from the image is not a git checkout and `supervise.sh` rebuilds the executable
+from source at every launch, so a probe that needs a patched driver is built in a copy of the tree
+(`rsync` without `runs/` and `.venv`, `.venv` symlinked; `lake build` there is a no-op until the
+source changes), not in the tree a paused run will resume from.
+
 ## What to try
 
-1. **Fewer, larger all-reduces.** One exchange for all gradients (or a few), not one per tensor.
-   Targets about 55 ms of 184. This changes the rendered step, so the whole-net data-parallel
-   statements and the arity / render gates are in scope.
+1. **One gradient exchange per accumulation cycle** (above). Coalescing the all_reduces without
+   cutting the bytes gains nothing.
 2. **One call per accumulation cycle.** The JAX trainer runs its `GRAD_ACCUM` micro-batches inside
    one compiled call; the verified driver calls the step 16 times. Folding the cycle into the step
    amortizes the 32 ms launch.
