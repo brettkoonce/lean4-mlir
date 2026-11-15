@@ -221,6 +221,13 @@ jobs:
             lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
             lake-jax-
 
+      - name: Python 3.12
+        # The lockfile's TensorFlow 2.21.0 ships wheels for cp310–cp313 only; the runner image's
+        # python3 moved past that (2026-11-14: pip saw only 2.22.0rc0), so pin the interpreter.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Python (jax CPU + TensorFlow at the lockfile's versions, IREE)
         # IREE 3.12.0 is the row's pin (the 4060 Ti box runs the same release since 2026-11-05); both
         # ties passed on 3.11.0 and a 3.12 nightly alike (checked 2026-09-25: MNv4 4.1e-5, MNv2
