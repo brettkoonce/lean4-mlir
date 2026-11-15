@@ -84,7 +84,8 @@ lemma binomTail_le_of_lt_cpLower {α p : ℝ} (hp : p ∈ Set.Icc (0:ℝ) 1) {N 
   by_contra hgt
   have hmem : p ∈ {q | q ∈ Set.Icc (0:ℝ) 1 ∧ α < binomTail N k q} :=
     ⟨hp, not_le.mp hgt⟩
-  exact absurd (csInf_le ⟨0, fun q hq => hq.1.1⟩ hmem) (not_le.mpr h)
+  exact absurd (csInf_le (s := {q | q ∈ Set.Icc (0:ℝ) 1 ∧ α < binomTail N k q})
+    ⟨0, fun q hq => hq.1.1⟩ hmem) (not_le.mpr h)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The count of successes over the product measure is binomial

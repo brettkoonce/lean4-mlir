@@ -1078,7 +1078,7 @@ def r50FwdChain (B nClasses : Nat) (epsStr : String)
     -- to be the same derivation, not merely the same numbers: the prefix check only means
     -- anything if the forward and the train step are one chain at one resolution.
     (q : Nat := 7) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  let q5 := q; let q4 := 2 * q5; let q3 := 2 * q4; let q2 := 2 * q3; let q1 := 2 * q2
+  let q5 := q; let q4 := 2 * q5; let q3 := 2 * q4; let q2 := 2 * q3
   -- the stem and the head are ResNet-34's eval emitters at R50's widths (`zb 64` is
   -- `biasName false`, so `convBias := false`)
   let (cSt, nStp) ← resnetEvalStemFwd B q2 epsStr false
