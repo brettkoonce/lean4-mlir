@@ -1697,10 +1697,74 @@ if __name__ == "__main__":
         }
         _trace_f.write(json.dumps(_hdr) + '\n')
 
+    def _mp_train_iter(micro, accum, k, seed):
+        import sys, subprocess, threading, queue, atexit, concurrent.futures as cf
+        shim = os.path.splitext(os.path.abspath(__file__))[0] + '_shim.py'
+        py = os.environ.get('SHIM_PYTHON') or sys.executable
+        procs = []
+        for i in range(k):
+            env = dict(os.environ, SHIM_BATCH=str(micro), SHIM_SPLIT='train', SHIM_SEED=str(seed + i),
+                       SHIM_SHARD='%d/%d' % (i, k), SHIM_MIX='off', CUDA_VISIBLE_DEVICES='',
+                       TF_CPP_MIN_LOG_LEVEL='2')
+            for v in ('SHIM_NCLASSES', 'SHIM_HASH', 'SHIM_U8', 'SHIM_EVAL_SIZE'):
+                env.pop(v, None)
+            procs.append(subprocess.Popen([py, shim], stdout=subprocess.PIPE, env=env, bufsize=0))
+        atexit.register(lambda: [p.kill() for p in procs])
+        def read_exact(f, mv):
+            got = 0
+            while got < len(mv):
+                n = f.readinto(mv[got:])
+                if not n:
+                    raise EOFError('LEAN_MLIR_FEED_WORKERS: a shim producer closed its pipe')
+                got += n
+        flat = None
+        for p in procs:
+            pre = bytearray(16)
+            read_exact(p.stdout, memoryview(pre))
+            ver, b, flat = (int.from_bytes(pre[o:o + 4], 'little') for o in (4, 8, 12))
+            if pre[:4] != b'LMSH' or ver != 3 or b != micro:
+                raise SystemExit('LEAN_MLIR_FEED_WORKERS: unexpected shim preamble %r (wire v%d, batch %d; want v3, %d)'
+                                 % (bytes(pre[:4]), ver, b, micro))
+        # one reader thread per producer: two reads must never interleave on one pipe (accum can exceed k)
+        pools = [cf.ThreadPoolExecutor(max_workers=1) for _ in range(k)]
+        def read_into(p, xs, ys):
+            hdr = bytearray(4)
+            read_exact(p.stdout, memoryview(hdr))
+            if int.from_bytes(hdr, 'little') != micro:
+                raise EOFError('LEAN_MLIR_FEED_WORKERS: short shim record')
+            read_exact(p.stdout, memoryview(ys).cast('B'))
+            read_exact(p.stdout, memoryview(xs).cast('B'))
+        out = queue.Queue(maxsize=2)
+        def assemble():
+            b = 0
+            try:
+                while True:
+                    x = np.empty((micro * accum, flat), np.float32)
+                    y = np.empty((micro * accum,), np.int32)
+                    futs = [pools[(b * accum + j) % k].submit(read_into, procs[(b * accum + j) % k],
+                                                              x[j * micro:(j + 1) * micro], y[j * micro:(j + 1) * micro])
+                            for j in range(accum)]
+                    for f in futs:
+                        f.result()
+                    out.put((x, y.astype(np.int64)))
+                    b += 1
+            except BaseException as e:
+                out.put(e)
+        threading.Thread(target=assemble, daemon=True).start()
+        while True:
+            item = out.get()
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+
+    _feed_k = int(os.environ.get('LEAN_MLIR_FEED_WORKERS', '0'))
+    if _feed_k > 0:
+        print('feed: ' + str(_feed_k) + ' shim producer processes (LEAN_MLIR_FEED_WORKERS), ' + str(MICRO_BATCH) + ' rows a record')
     train_iter = prefetch_to_device(
-        iter(build_imagenet_iter('train', BATCH_SIZE,
-                                 training=True,
-                                 augment=True)),
+        (_mp_train_iter(MICRO_BATCH, GRAD_ACCUM, _feed_k, 314159 + _SEED_OFF) if _feed_k > 0 else
+         iter(build_imagenet_iter('train', BATCH_SIZE,
+                                  training=True,
+                                  augment=True))),
         data_sharding)
     # LEAN_MLIR_START_STEP lets a resumed run continue the cosine LR schedule
     # from where it left off (instead of restarting from warmup which would

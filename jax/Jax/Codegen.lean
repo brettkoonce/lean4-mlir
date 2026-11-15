@@ -3400,6 +3400,86 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
     "    train_examples = 1281167\n" ++
     "    val_examples   = 50000\n\n"
 
+/-- `LEAN_MLIR_FEED_WORKERS=k`: the ImageNet train split from `k` producer PROCESSES instead of the
+    one in-process tf.data pipeline. Each producer is this net's own generated shim (the same
+    decode / augment code, emitted a second time by `generateShim`) on shard `i` of `k`, unmixed, with
+    integer labels; the trainer still mixes inside its step. Optimizer batch `b` is `accum` records
+    of `micro` rows read straight into one array, record `j` from producer `(b·accum + j) mod k`, in
+    order: the verified trainer's round-robin over its `SHIM_WORKERS`, so with it on the two paths
+    assemble their batches the same way.
+
+    Why: one tf.data process tops out near 1,500 img/s whatever its core count (the parallel
+    decode/augment map does not scale past a few dozen threads, and several pipelines in ONE process
+    are worse), which starves any box whose cards outrun a 4060 Ti. Measured 2026-11-15 on
+    4× RTX 5080: R50 A2 1,489 → 678 ms a step, ConvNeXt-S 3,375 → 1,627, ConvNeXt-B 3,210 → 2,212
+    (`runs/2026-11-15-vast-5080-california/prof/`).
+
+    Unset or 0 leaves the shipped single pipeline, byte for byte the stream it always was.
+    `SHIM_PYTHON` picks the producers' interpreter (default: the trainer's own), which is also where
+    a `taskset` wrapper pins each producer to its own cores; on a many-core box that pinning is
+    most of the gain. Indented four spaces: it is emitted inside `_main()`. -/
+private def mpFeedPy : String := r#"    def _mp_train_iter(micro, accum, k, seed):
+        import sys, subprocess, threading, queue, atexit, concurrent.futures as cf
+        shim = os.path.splitext(os.path.abspath(__file__))[0] + '_shim.py'
+        py = os.environ.get('SHIM_PYTHON') or sys.executable
+        procs = []
+        for i in range(k):
+            env = dict(os.environ, SHIM_BATCH=str(micro), SHIM_SPLIT='train', SHIM_SEED=str(seed + i),
+                       SHIM_SHARD='%d/%d' % (i, k), SHIM_MIX='off', CUDA_VISIBLE_DEVICES='',
+                       TF_CPP_MIN_LOG_LEVEL='2')
+            for v in ('SHIM_NCLASSES', 'SHIM_HASH', 'SHIM_U8', 'SHIM_EVAL_SIZE'):
+                env.pop(v, None)
+            procs.append(subprocess.Popen([py, shim], stdout=subprocess.PIPE, env=env, bufsize=0))
+        atexit.register(lambda: [p.kill() for p in procs])
+        def read_exact(f, mv):
+            got = 0
+            while got < len(mv):
+                n = f.readinto(mv[got:])
+                if not n:
+                    raise EOFError('LEAN_MLIR_FEED_WORKERS: a shim producer closed its pipe')
+                got += n
+        flat = None
+        for p in procs:
+            pre = bytearray(16)
+            read_exact(p.stdout, memoryview(pre))
+            ver, b, flat = (int.from_bytes(pre[o:o + 4], 'little') for o in (4, 8, 12))
+            if pre[:4] != b'LMSH' or ver != 3 or b != micro:
+                raise SystemExit('LEAN_MLIR_FEED_WORKERS: unexpected shim preamble %r (wire v%d, batch %d; want v3, %d)'
+                                 % (bytes(pre[:4]), ver, b, micro))
+        # one reader thread per producer: two reads must never interleave on one pipe (accum can exceed k)
+        pools = [cf.ThreadPoolExecutor(max_workers=1) for _ in range(k)]
+        def read_into(p, xs, ys):
+            hdr = bytearray(4)
+            read_exact(p.stdout, memoryview(hdr))
+            if int.from_bytes(hdr, 'little') != micro:
+                raise EOFError('LEAN_MLIR_FEED_WORKERS: short shim record')
+            read_exact(p.stdout, memoryview(ys).cast('B'))
+            read_exact(p.stdout, memoryview(xs).cast('B'))
+        out = queue.Queue(maxsize=2)
+        def assemble():
+            b = 0
+            try:
+                while True:
+                    x = np.empty((micro * accum, flat), np.float32)
+                    y = np.empty((micro * accum,), np.int32)
+                    futs = [pools[(b * accum + j) % k].submit(read_into, procs[(b * accum + j) % k],
+                                                              x[j * micro:(j + 1) * micro], y[j * micro:(j + 1) * micro])
+                            for j in range(accum)]
+                    for f in futs:
+                        f.result()
+                    out.put((x, y.astype(np.int64)))
+                    b += 1
+            except BaseException as e:
+                out.put(e)
+        threading.Thread(target=assemble, daemon=True).start()
+        while True:
+            item = out.get()
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+
+"#
+
 /-- Streaming-tfds main for `.imagenet`. Parallel to `emitMain`'s in-RAM
     path but iterates `build_imagenet_iter` instead of indexing into a
     pre-loaded numpy array. Shares the trace-emission format, init-load
@@ -3410,6 +3490,10 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   -- validation must use the MICRO batch (eval_batch does one forward, can't fit
   -- the effective batch in activations).
   let valBatch := if cfg.gradAccumSteps > 1 then "MICRO_BATCH" else "BATCH_SIZE"
+  -- `LEAN_MLIR_FEED_WORKERS` (see `mpFeedPy`): a producer record is one micro-batch, and an optimizer
+  -- batch is `GRAD_ACCUM` of them; without accumulation it is the whole batch in one record.
+  let feedMicro := if cfg.gradAccumSteps > 1 then "str(MICRO_BATCH)" else "str(BATCH_SIZE)"
+  let feedArgs := if cfg.gradAccumSteps > 1 then "MICRO_BATCH, GRAD_ACCUM" else "BATCH_SIZE, 1"
   let ep := toString cfg.epochs
   let lr := toString cfg.learningRate
   let nParams := toString spec.totalParams
@@ -3562,10 +3646,15 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n\n" ++
+  mpFeedPy ++
+  "    _feed_k = int(os.environ.get('LEAN_MLIR_FEED_WORKERS', '0'))\n" ++
+  "    if _feed_k > 0:\n" ++
+  "        print('feed: ' + str(_feed_k) + ' shim producer processes (LEAN_MLIR_FEED_WORKERS), ' + " ++ feedMicro ++ " + ' rows a record')\n" ++
   "    train_iter = prefetch_to_device(\n" ++
-  "        iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
-  "                                 training=True,\n" ++
-  "                                 augment=" ++ (if cfg.augment then "True" else "False") ++ ")),\n" ++
+  "        (_mp_train_iter(" ++ feedArgs ++ ", _feed_k, " ++ seed ++ ") if _feed_k > 0 else\n" ++
+  "         iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
+  "                                  training=True,\n" ++
+  "                                  augment=" ++ (if cfg.augment then "True" else "False") ++ "))),\n" ++
   "        data_sharding)\n" ++
   "    # LEAN_MLIR_START_STEP lets a resumed run continue the cosine LR schedule\n" ++
   "    # from where it left off (instead of restarting from warmup which would\n" ++
