@@ -514,10 +514,12 @@ jobs:
       # repository VARIABLES, not secrets (none is sensitive): PDF_BUCKET (bucket name),
       # GCP_WIF_PROVIDER (projects/N/locations/global/workloadIdentityPools/P/providers/Q) and
       # GCP_PDF_SA (the service account's email); unset, the step is skipped and the job summary
-      # says so. Two objects a run: blueprint/<sha>.pdf and blueprint/latest.pdf.
+      # says so. Two objects a run: blueprint/<sha>.pdf and blueprint/latest.pdf. Only main is
+      # admitted, so a run dispatched on another branch skips the upload (it got a 403 on
+      # lean-4.36, 2026-11-17).
       - name: Authenticate to GCP for the PDF bucket
         id: pdf_bucket
-        if: ${{ github.event_name != 'pull_request' && vars.PDF_BUCKET != '' && vars.GCP_WIF_PROVIDER != '' && vars.GCP_PDF_SA != '' }}
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PDF_BUCKET != '' && vars.GCP_WIF_PROVIDER != '' && vars.GCP_PDF_SA != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
@@ -681,7 +683,7 @@ jobs:
           if [ -f blueprint/print/print.pdf ]; then
             # LaTeX wraps its log at 79 columns (the path splits mid-line), so join first.
             pages="$(cat blueprint/print/*.log 2>/dev/null | tr -d '\n' | grep -oE 'Output written on [^(]*\([0-9]+ pages' | grep -oE '[0-9]+ pages' | tail -1)"
-            pdf="✅ ${pages:-built} ($(du -h blueprint/print/print.pdf | cut -f1)); not on the site — ${{ steps.pdf_bucket.outcome == 'success' && 'in the private bucket' || steps.pdf_bucket.outcome == 'skipped' && 'bucket upload skipped (PDF_BUCKET / GCP_WIF_PROVIDER / GCP_PDF_SA variables unset)' || 'bucket upload FAILED' }}"
+            pdf="✅ ${pages:-built} ($(du -h blueprint/print/print.pdf | cut -f1)); not on the site — ${{ steps.pdf_bucket.outcome == 'success' && 'in the private bucket' || steps.pdf_bucket.outcome == 'skipped' && 'bucket upload skipped (not main, or PDF_BUCKET / GCP_WIF_PROVIDER / GCP_PDF_SA unset)' || 'bucket upload FAILED' }}"
           elif [ "${{ job.status }}" != "success" ]; then
             # An earlier step failed, so the PDF step never ran AND nothing deploys: `Upload Pages
             # artifact` has no always(), and `deploy_pages` needs this job. Saying "the web version
