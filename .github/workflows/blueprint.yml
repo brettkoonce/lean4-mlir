@@ -84,6 +84,19 @@ jobs:
           docker-images: false
           swap-storage: false
 
+      - name: Add swap for the doc-gen4 step
+        # ⚠ 2026-11-17, Lean 4.36: a toolchain bump re-runs doc-gen4's `coreDocs` (Lean core, ~9 min
+        # here, ~2.5 GB) alongside the per-module doc jobs, and the 16 GB runner ran out: Lake's
+        # `srcUri.github` facets could not spawn `git` ("resource exhausted (error code: 12, not
+        # enough memory)"). Measured on the build box, no doc-gen4 process passes ~3.4 GB; the extra
+        # swap covers the overlap. `free -h` is logged around the doc step to keep the margin visible.
+        run: |
+          sudo fallocate -l 16G /swapfile-docs
+          sudo chmod 600 /swapfile-docs
+          sudo mkswap /swapfile-docs >/dev/null
+          sudo swapon /swapfile-docs
+          free -h
+
       - name: Checkout project
         uses: actions/checkout@v5
         with:
@@ -385,7 +398,9 @@ jobs:
           echo "dropping $(ls .lake/build/doc-data/declaration-data-LeanMlir*.bmp 2>/dev/null | wc -l) cached LeanMlir search-data files"
           rm -f .lake/build/doc-data/declaration-data-LeanMlir*.bmp .lake/build/doc-data/backrefs-LeanMlir*.json
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
+          free -h
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs
+          free -h
 
       - name: Build blueprint web version
         run: |
