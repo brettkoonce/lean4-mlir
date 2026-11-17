@@ -752,6 +752,9 @@ jobs:
 
   deploy_pages:
     needs: build_blueprint
+    # The github-pages environment admits main only; a run dispatched on another branch (to test
+    # the build) would be rejected by its protection rules, so it stops after the build job.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
