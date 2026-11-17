@@ -385,13 +385,18 @@ theorem cnxDownCotInChAt_eq_vjp {ci co h w : Nat} (ε : ℝ) (hε : 0 < ε)
 noncomputable def cnxHeadHasVJP (h w : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng hnbt : Vec 768)
     (Wfc : Mat 768 nC) (bfc : Vec nC) :
     HasVJP (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w) :=
-  vjpComp (globalAvgPoolFlat 768 h w) (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt)
-    (globalAvgPoolFlat_differentiable 768 h w)
-    ((dense_differentiable Wfc bfc).comp (rowLNVecFlat_differentiable 1 768 ε hng hnbt hε))
-    (globalAvgPoolFlatHasVJP 768 h w)
-    (vjpComp (rowLNVecFlat 1 768 ε hng hnbt) (dense Wfc bfc)
-      (rowLNVecFlat_differentiable 1 768 ε hng hnbt hε) (dense_differentiable Wfc bfc)
-      (rowLNVecFlatHasVJP 1 768 ε hng hnbt hε) (denseHasVJP Wfc bfc))
+  -- Associated as the type is (`dense ∘ (LN ∘ GAP)`). Built the other way round,
+  -- `(dense ∘ LN) ∘ GAP`, the kernel still accepts it, but con-ron (Lean 4.36.0) unfolds
+  -- `dense` / `rowLNVecFlat` before `Function.comp` and spent 136 s and 20 GB on the
+  -- reassociation alone, which killed the comparator's 16 GB runner.
+  vjpComp (rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w) (dense Wfc bfc)
+    ((rowLNVecFlat_differentiable 1 768 ε hng hnbt hε).comp
+      (globalAvgPoolFlat_differentiable 768 h w))
+    (dense_differentiable Wfc bfc)
+    (vjpComp (globalAvgPoolFlat 768 h w) (rowLNVecFlat 1 768 ε hng hnbt)
+      (globalAvgPoolFlat_differentiable 768 h w) (rowLNVecFlat_differentiable 1 768 ε hng hnbt hε)
+      (globalAvgPoolFlatHasVJP 768 h w) (rowLNVecFlatHasVJP 1 768 ε hng hnbt hε))
+    (denseHasVJP Wfc bfc)
 
 /-- **The head's input cotangent — the last block's `dyOut` — is its certified VJP's backward**, at
     any loss cotangent `g`. -/
@@ -399,7 +404,7 @@ theorem cnxHeadDyXheadChN_eq_vjp {h w nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng h
     (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (768*h*w)) (g : Vec nC) :
     cnxHeadDyXheadChN ε hng hnbt Wfc bfc xhead g
       = (cnxHeadHasVJP h w ε hε hng hnbt Wfc bfc).backward xhead g := by
-  simp only [cnxHeadDyXheadChN, cnxHeadHasVJP, vjpComp_backward]
+  simp only [cnxHeadDyXheadChN, cnxHeadHasVJP, vjpComp_backward, Function.comp_apply]
   rw [rowLNVecFlatHasVJP_backward_eq_fun (β := hnbt) ε hε hng]
 
 /-- **Batched: a block's cotangent at its drop site is the lifted block VJP's backward.** Example
