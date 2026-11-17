@@ -812,9 +812,10 @@ theorem pc0 (nCls : Nat) (t : ℝ) : mnv4Pre0 2 7 (sealW nCls) (sealX t) = As t 
   mnv4StemB_eq (ctK 32 3 3 3 1) (kv 32 0) (by norm_num) (sealX t)
 
 theorem pc1 (nCls : Nat) (t : ℝ) : mnv4Pre1 2 7 (sealW nCls) (sealX t) = A1p t := by
-  show (mnv4FusedStack 2 7 (sealW nCls)).fwd (mnv4Pre0 2 7 (sealW nCls) (sealX t)) = _
-  rw [pc0]
-  simp only [mnv4FusedStack, mnv4FusedStage, CertLayer.comp_fwd_apply]
+  -- `comp_fwd_apply` by `rw`, NOT inside `simp only`: simp's proof of that `rfl` lemma at these
+  -- literal widths sends the kernel into deep recursion when the step is checked on its own, and
+  -- leanchecker-paranoid, lean4lean and nanoda time out on the whole theorem (Mathlib v4.36.0).
+  rw [mnv4Pre1, pc0, mnv4FusedStack, mnv4FusedStage, CertLayer.comp_fwd_apply]
   show projB 2 (h := 56) (w := 56) (ctK 48 128 1 1 1) (kv 48 0) 1 (kv 48 1) (kv 48 0)
       (StableHLO.cbReluStridedB 2 (h := 56) (w := 56) (ctK 128 32 3 3 1) (kv 128 0) 1
         (kv 128 1) (kv 128 160) (As t)) = _

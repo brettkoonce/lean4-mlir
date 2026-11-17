@@ -986,10 +986,16 @@ theorem head_eq_dense (nCls : Nat) (t : ℝ) :
         (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb (mnv2PreB17 2 (sealW nCls) (sealX t))
       = StableHLO.batchMap 2 (dense (sealW nCls).fcW (sealW nCls).fcb)
           (StableHLO.batchMap 2 (globalAvgPoolFlat 1280 7 7) (Ah nCls t)) := by
-  show StableHLO.batchMap 2 (dense _ _) (StableHLO.batchMap 2 (globalAvgPoolFlat 1280 7 7)
-      (StableHLO.cbrB 2 (h := 7) (w := 7) (ctK 1280 320 1 1 1) (kv 1280 0) 1 (kv 1280 (1 / 64))
-        (kv 1280 3) (mnv2PreB17 2 (sealW nCls) (sealX t)))) = _
-  rw [cbrB_eq _ _ (margin192 _ (by norm_num))]
+  -- The head's `sealW` fields are rewritten one by one, NOT restated with `show`: that `show`
+  -- is a defeq Lean's kernel takes in this context but leanchecker-paranoid, lean4lean and
+  -- nanoda time out on (Mathlib v4.36.0; as a standalone `rfl` Lean's kernel times out too).
+  have hW : (sealW nCls).hW = ctK 1280 320 1 1 1 := rfl
+  have hb : (sealW nCls).hb = kv 1280 0 := rfl
+  have hε : (sealW nCls).hε = 1 := rfl
+  have hγ : (sealW nCls).hγ = kv 1280 (1 / 64) := rfl
+  have hβ : (sealW nCls).hβ = kv 1280 3 := rfl
+  rw [mnv2HeadB, Function.comp_apply, Function.comp_apply, hW, hb, hε, hγ, hβ,
+    cbrB_eq _ _ (margin192 _ (by norm_num))]
   rfl
 
 theorem head_diff (nCls : Nat) (hn : 0 < nCls) (v : Vec (2 * (1280 * 7 * 7)))
