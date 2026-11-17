@@ -1,7 +1,6 @@
 module
 
 public import Mathlib.Analysis.InnerProductSpace.PiL2
-import Mathlib.Algebra.Group.Pi.Units
 import Mathlib.Algebra.Order.Star.Real
 import Mathlib.Analysis.Matrix.PosDef
 import Mathlib.Analysis.SpecialFunctions.Bernstein
