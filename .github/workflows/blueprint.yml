@@ -353,6 +353,10 @@ jobs:
         run: |
           # Materialise the `env=dev` dependencies without building (a cold run has no
           # .lake/packages/UnicodeBasic yet), then pin the archive's member order — see above.
+          # ⚠ Undo LAST run's patch first (2026-11-17, Lean 4.36): the cache restores the checkout
+          # with the sed below applied, and when the manifest moves the UnicodeBasic pin Lake's
+          # `git checkout` refuses to overwrite the modified lakefile.lean and the step dies.
+          git -C .lake/packages/UnicodeBasic checkout -- lakefile.lean 2>/dev/null || true
           lake -R -Kenv=dev env true
           ub=.lake/packages/UnicodeBasic/lakefile.lean
           sed -i 's|(← (pkg.dir / "UnicodeCLib").readDir) do|(← (pkg.dir / "UnicodeCLib").readDir).qsort (·.fileName < ·.fileName) do|' "$ub"
