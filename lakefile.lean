@@ -20,10 +20,10 @@ package «lean4-mlir» where
 -- Mathlib archives and the build fails.
 meta if get_config? env = some "dev" then
 require «doc-gen4» from git
-  "https://github.com/leanprover/doc-gen4" @ "v4.36.0-rc2"
+  "https://github.com/leanprover/doc-gen4" @ "v4.36.0"
 
 require mathlib from git
-  "https://github.com/leanprover-community/mathlib4" @ "v4.36.0-rc2"
+  "https://github.com/leanprover-community/mathlib4" @ "v4.36.0"
 
 -- The umbrella root: codegen + runtime FFI + trainers' shared modules + the part of the
 -- proof suite `LeanMlir.lean` imports (the per-chapter headline modules, a minority of

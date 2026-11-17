@@ -1652,7 +1652,7 @@ theorem cnn_conv2_exact_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (WindowMarginUpTo.mono winRowInv winColInv haSR hmq)
     (fun l => lt_of_le_of_lt (by gcongr) (hm3 l)) (fun q => lt_of_le_of_lt (by gcongr) (hm4 q))
     (lt_of_le_of_lt (by gcongr) hsmall)
-    (by simp only [mul_zero, zero_mul]; try positivity) ?_
+    (by simp only [mul_zero, zero_mul]; positivity) ?_
   -- the curvature condition: `C(SR)·SR² ≤ C(lr·G)·lr²·(c·c·kH·kW)·Σg² ≤ lr·Σg²/4`
   exact curvature_exact_le (fun r => w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (K * (a * r)))))))
     (by positivity) hlr (Finset.sum_nonneg fun _ _ => sq_nonneg _) (by gcongr)
@@ -2543,7 +2543,7 @@ theorem cnn_conv1_exact_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (WindowMarginUpTo.mono winRowInv winColInv (by gcongr) hmq)
     (fun l => lt_of_le_of_lt (by gcongr) (hm3 l)) (fun q => lt_of_le_of_lt (by gcongr) (hm4 q))
     (lt_of_le_of_lt (by gcongr) hsmall)
-    (by simp only [mul_zero, zero_mul]; try positivity) ?_
+    (by simp only [mul_zero, zero_mul]; positivity) ?_
   exact curvature_exact_le (fun r => w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (M * (w₂ *
     (K * (a * r)))))))))
     (by positivity) hlr (Finset.sum_nonneg fun _ _ => sq_nonneg _) (by gcongr) hsmall hSR2 hC
@@ -2824,7 +2824,7 @@ theorem cnn_conv2_bias_exact_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (WindowMarginUpTo.mono winRowInv winColInv hSR hmq)
     (fun l => lt_of_le_of_lt (by gcongr) (hm3 l)) (fun q => lt_of_le_of_lt (by gcongr) (hm4 q))
     (lt_of_le_of_lt (by gcongr) hsmall)
-    (by simp only [mul_zero, zero_mul]; try positivity) ?_
+    (by simp only [mul_zero, zero_mul]; positivity) ?_
   exact curvature_exact_le (fun r => w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (K * r))))))
     (by positivity) hlr (Finset.sum_nonneg fun _ _ => sq_nonneg _) (by gcongr) hsmall hSR2 hC
 
@@ -3220,7 +3220,7 @@ theorem cnn_conv1_bias_exact_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (WindowMarginUpTo.mono winRowInv winColInv (by gcongr) hmq)
     (fun l => lt_of_le_of_lt (by gcongr) (hm3 l)) (fun q => lt_of_le_of_lt (by gcongr) (hm4 q))
     (lt_of_le_of_lt (by gcongr) hsmall)
-    (by simp only [mul_zero, zero_mul]; try positivity) ?_
+    (by simp only [mul_zero, zero_mul]; positivity) ?_
   exact curvature_exact_le (fun r => w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (M * (w₂ *
     (K * r))))))))
     (by positivity) hlr (Finset.sum_nonneg fun _ _ => sq_nonneg _) (by gcongr) hsmall hSR2 hC
