@@ -398,9 +398,22 @@ jobs:
           echo "dropping $(ls .lake/build/doc-data/declaration-data-LeanMlir*.bmp 2>/dev/null | wc -l) cached LeanMlir search-data files"
           rm -f .lake/build/doc-data/declaration-data-LeanMlir*.bmp .lake/build/doc-data/backrefs-LeanMlir*.json
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
+          # ⚠ 2026-11-17, Lean 4.36: with 18 GB of swap free, Lake still failed to exec doc-gen4
+          # (error 12) at ~7.7k/11.3k jobs, so swap alone is not the fix. Lake's build jobs share
+          # Lean's thread pool, so LEAN_NUM_THREADS caps concurrent doc jobs; the sampler logs
+          # MemAvailable / Committed_AS against CommitLimit (and the overcommit mode) so the next
+          # failure says which limit it hit.
+          echo "overcommit_memory=$(cat /proc/sys/vm/overcommit_memory) ratio=$(cat /proc/sys/vm/overcommit_ratio) nproc=$(nproc)"
+          ( while sleep 20; do
+              echo "$(date +%T) $(awk '/^(MemAvailable|SwapFree|Committed_AS|CommitLimit):/{printf "%s%dM ", $1, $2/1024}' /proc/meminfo)top: $(ps -eo rss,comm --sort=-rss --no-headers | head -4 | awk '{printf "%s=%dM ", $2, $1/1024}')"
+            done ) > "$RUNNER_TEMP/docmem.log" 2>&1 &
+          sampler=$!
+          rc=0
+          LEAN_NUM_THREADS=2 lake -R -Kenv=dev build LeanMlir:docs Certs:docs || rc=$?
+          kill "$sampler" || true
+          echo "::group::memory samples (every 20 s)"; cat "$RUNNER_TEMP/docmem.log"; echo "::endgroup::"
           free -h
-          lake -R -Kenv=dev build LeanMlir:docs Certs:docs
-          free -h
+          exit "$rc"
 
       - name: Build blueprint web version
         run: |
