@@ -387,8 +387,8 @@ noncomputable def cnxHeadHasVJP (h w : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε)
     HasVJP (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w) :=
   -- Associated as the type is (`dense ∘ (LN ∘ GAP)`). Built the other way round,
   -- `(dense ∘ LN) ∘ GAP`, the kernel still accepts it, but con-ron (Lean 4.36.0) unfolds
-  -- `dense` / `rowLNVecFlat` before `Function.comp` and spent 136 s and 20 GB on the
-  -- reassociation alone, which killed the comparator's 16 GB runner.
+  -- `dense` / `rowLNVecFlat` before `Function.comp`, and that reassociation alone ran the
+  -- comparator's nanoda + con-leche + con-ron leg out of memory on its GitHub runner.
   vjpComp (rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w) (dense Wfc bfc)
     ((rowLNVecFlat_differentiable 1 768 ε hng hnbt hε).comp
       (globalAvgPoolFlat_differentiable 768 h w))

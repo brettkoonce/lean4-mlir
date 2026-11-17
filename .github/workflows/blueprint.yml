@@ -84,16 +84,18 @@ jobs:
           docker-images: false
           swap-storage: false
 
-      - name: Raise vm.max_map_count for the doc-gen4 step
-        # ⚠ 2026-11-17, Lean 4.36: a toolchain bump rebuilds every package's docs (~11.3k Lake jobs)
-        # and three runs died at the same place, ~7.8k jobs in: Lake could not spawn `git` (the
-        # `srcUri.github` facets) or doc-gen4 — "resource exhausted (error code: 12, not enough
-        # memory)" — with 13 GB of RAM available, 18 GB of swap untouched and Committed_AS under
-        # CommitLimit (run 44144269528's samples). Memory was not it; an idle Lake already holds
-        # ~6.2k mappings, and the build box (where the same build passes) runs at 1048576.
+      - name: Always overcommit for the doc-gen4 step
+        # ⚠ 2026-11-17, Lean 4.36: a toolchain bump rebuilds every package's docs and four runs died
+        # the moment `coreDocs` finished: Lake could not spawn `git` (the `srcUri.github` facets) or
+        # doc-gen4 — "resource exhausted (error code: 12, not enough memory)" — with most of the
+        # runner's RAM available, swap untouched (run 44144269528), and Lake's mapping count flat
+        # far below vm.max_map_count (run 44151908470). Lean spawns with a plain `fork()`, which
+        # under the runner's heuristic overcommit (mode 0) is refused on address-space accounting
+        # alone; an idle Lake already reserves several GB in 1-2 GB thread-stack mappings. Mode 1
+        # takes that check away; the sampler in the doc step logs Lake's VmSize and largest mapping.
         run: |
-          echo "vm.max_map_count was $(cat /proc/sys/vm/max_map_count)"
-          sudo sysctl -w vm.max_map_count=1048576
+          echo "vm.overcommit_memory was $(cat /proc/sys/vm/overcommit_memory)"
+          sudo sysctl -w vm.overcommit_memory=1
 
       - name: Checkout project
         uses: actions/checkout@v5
@@ -396,19 +398,25 @@ jobs:
           echo "dropping $(ls .lake/build/doc-data/declaration-data-LeanMlir*.bmp 2>/dev/null | wc -l) cached LeanMlir search-data files"
           rm -f .lake/build/doc-data/declaration-data-LeanMlir*.bmp .lake/build/doc-data/backrefs-LeanMlir*.json
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
-          # The sampler logs each Lake process's mapping and thread counts against vm.max_map_count
-          # (raised above) with MemAvailable, so a rerun of the 2026-11-17 error-12 failure names
-          # the limit it hit.
-          echo "max_map_count=$(cat /proc/sys/vm/max_map_count) overcommit_memory=$(cat /proc/sys/vm/overcommit_memory) nproc=$(nproc)"
-          ( while sleep 20; do
-              lk=$(for p in $(pgrep -x lake); do printf "lake[%s]:maps=%s,thr=%s " "$p" "$(wc -l < /proc/$p/maps 2>/dev/null)" "$(ls /proc/$p/task 2>/dev/null | wc -l)"; done)
-              echo "$(date +%T) $(awk '/^MemAvailable:/{printf "MemAvailable:%dM ", $2/1024}' /proc/meminfo)$lk"
+          # The sampler logs each Lake process's VmSize, largest writable mapping, mapping and
+          # thread counts with MemAvailable / Committed_AS, so a rerun of the 2026-11-17 error-12
+          # failure shows what Lake looked like when `fork()` was refused.
+          echo "overcommit_memory=$(cat /proc/sys/vm/overcommit_memory) max_map_count=$(cat /proc/sys/vm/max_map_count) nproc=$(nproc)"
+          ( while sleep 5; do
+              lk=$(for p in $(pgrep -x lake); do
+                big=$(awk '$2 ~ /^rw.p/ {split($1,a,"-"); s=(strtonum("0x" a[2])-strtonum("0x" a[1]))/1048576; if (s>m) m=s} END {printf "%d", m}' /proc/$p/maps 2>/dev/null)
+                printf "lake[%s]:vsz=%sM,rss=%sM,maxmap=%sM,maps=%s,thr=%s " "$p" \
+                  "$(awk '/^VmSize:/{printf "%d", $2/1024}' /proc/$p/status 2>/dev/null)" \
+                  "$(awk '/^VmRSS:/{printf "%d", $2/1024}' /proc/$p/status 2>/dev/null)" "$big" \
+                  "$(wc -l < /proc/$p/maps 2>/dev/null)" "$(ls /proc/$p/task 2>/dev/null | wc -l)"
+              done)
+              echo "$(date +%T) $(awk '/^(MemAvailable|Committed_AS):/{printf "%s%dM ", $1, $2/1024}' /proc/meminfo)$lk"
             done ) > "$RUNNER_TEMP/docmem.log" 2>&1 &
           sampler=$!
           rc=0
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs || rc=$?
           kill "$sampler" || true
-          echo "::group::Lake mapping samples (every 20 s)"; cat "$RUNNER_TEMP/docmem.log"; echo "::endgroup::"
+          echo "::group::Lake samples (every 5 s)"; cat "$RUNNER_TEMP/docmem.log"; echo "::endgroup::"
           exit "$rc"
 
       - name: Build blueprint web version
