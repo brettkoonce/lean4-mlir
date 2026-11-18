@@ -56,13 +56,13 @@ theorem vP01C_eq : ∀ t, vP01C t = W2s 0 t - W2s 1 t := by
   intro t
   fin_cases t <;>
     · simp [vP01C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP01C_nonneg : ∀ k, 0 ≤ tP01C k := by
   intro k
   fin_cases k <;>
     · simp [tP01C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS01C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP01C k * z k) ^ 2
@@ -94,13 +94,13 @@ theorem vP02C_eq : ∀ t, vP02C t = W2s 0 t - W2s 2 t := by
   intro t
   fin_cases t <;>
     · simp [vP02C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP02C_nonneg : ∀ k, 0 ≤ tP02C k := by
   intro k
   fin_cases k <;>
     · simp [tP02C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS02C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP02C k * z k) ^ 2
@@ -132,13 +132,13 @@ theorem vP03C_eq : ∀ t, vP03C t = W2s 0 t - W2s 3 t := by
   intro t
   fin_cases t <;>
     · simp [vP03C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP03C_nonneg : ∀ k, 0 ≤ tP03C k := by
   intro k
   fin_cases k <;>
     · simp [tP03C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS03C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP03C k * z k) ^ 2
@@ -170,13 +170,13 @@ theorem vP04C_eq : ∀ t, vP04C t = W2s 0 t - W2s 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP04C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP04C_nonneg : ∀ k, 0 ≤ tP04C k := by
   intro k
   fin_cases k <;>
     · simp [tP04C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS04C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP04C k * z k) ^ 2
@@ -208,13 +208,13 @@ theorem vP05C_eq : ∀ t, vP05C t = W2s 0 t - W2s 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP05C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP05C_nonneg : ∀ k, 0 ≤ tP05C k := by
   intro k
   fin_cases k <;>
     · simp [tP05C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS05C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP05C k * z k) ^ 2
@@ -246,13 +246,13 @@ theorem vP06C_eq : ∀ t, vP06C t = W2s 0 t - W2s 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP06C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP06C_nonneg : ∀ k, 0 ≤ tP06C k := by
   intro k
   fin_cases k <;>
     · simp [tP06C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS06C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP06C k * z k) ^ 2
@@ -284,13 +284,13 @@ theorem vP07C_eq : ∀ t, vP07C t = W2s 0 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP07C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP07C_nonneg : ∀ k, 0 ≤ tP07C k := by
   intro k
   fin_cases k <;>
     · simp [tP07C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS07C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP07C k * z k) ^ 2
@@ -322,13 +322,13 @@ theorem vP08C_eq : ∀ t, vP08C t = W2s 0 t - W2s 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP08C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP08C_nonneg : ∀ k, 0 ≤ tP08C k := by
   intro k
   fin_cases k <;>
     · simp [tP08C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS08C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP08C k * z k) ^ 2
@@ -360,13 +360,13 @@ theorem vP09C_eq : ∀ t, vP09C t = W2s 0 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP09C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP09C_nonneg : ∀ k, 0 ≤ tP09C k := by
   intro k
   fin_cases k <;>
     · simp [tP09C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS09C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP09C k * z k) ^ 2
@@ -398,13 +398,13 @@ theorem vP12C_eq : ∀ t, vP12C t = W2s 1 t - W2s 2 t := by
   intro t
   fin_cases t <;>
     · simp [vP12C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP12C_nonneg : ∀ k, 0 ≤ tP12C k := by
   intro k
   fin_cases k <;>
     · simp [tP12C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS12C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP12C k * z k) ^ 2
@@ -436,13 +436,13 @@ theorem vP13C_eq : ∀ t, vP13C t = W2s 1 t - W2s 3 t := by
   intro t
   fin_cases t <;>
     · simp [vP13C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP13C_nonneg : ∀ k, 0 ≤ tP13C k := by
   intro k
   fin_cases k <;>
     · simp [tP13C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS13C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP13C k * z k) ^ 2
@@ -474,13 +474,13 @@ theorem vP14C_eq : ∀ t, vP14C t = W2s 1 t - W2s 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP14C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP14C_nonneg : ∀ k, 0 ≤ tP14C k := by
   intro k
   fin_cases k <;>
     · simp [tP14C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS14C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP14C k * z k) ^ 2
@@ -512,13 +512,13 @@ theorem vP15C_eq : ∀ t, vP15C t = W2s 1 t - W2s 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP15C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP15C_nonneg : ∀ k, 0 ≤ tP15C k := by
   intro k
   fin_cases k <;>
     · simp [tP15C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS15C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP15C k * z k) ^ 2
@@ -550,13 +550,13 @@ theorem vP16C_eq : ∀ t, vP16C t = W2s 1 t - W2s 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP16C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP16C_nonneg : ∀ k, 0 ≤ tP16C k := by
   intro k
   fin_cases k <;>
     · simp [tP16C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS16C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP16C k * z k) ^ 2
@@ -588,13 +588,13 @@ theorem vP17C_eq : ∀ t, vP17C t = W2s 1 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP17C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP17C_nonneg : ∀ k, 0 ≤ tP17C k := by
   intro k
   fin_cases k <;>
     · simp [tP17C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS17C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP17C k * z k) ^ 2
@@ -626,13 +626,13 @@ theorem vP18C_eq : ∀ t, vP18C t = W2s 1 t - W2s 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP18C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP18C_nonneg : ∀ k, 0 ≤ tP18C k := by
   intro k
   fin_cases k <;>
     · simp [tP18C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS18C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP18C k * z k) ^ 2
@@ -664,13 +664,13 @@ theorem vP19C_eq : ∀ t, vP19C t = W2s 1 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP19C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP19C_nonneg : ∀ k, 0 ≤ tP19C k := by
   intro k
   fin_cases k <;>
     · simp [tP19C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS19C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP19C k * z k) ^ 2
@@ -702,13 +702,13 @@ theorem vP24C_eq : ∀ t, vP24C t = W2s 2 t - W2s 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP24C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP24C_nonneg : ∀ k, 0 ≤ tP24C k := by
   intro k
   fin_cases k <;>
     · simp [tP24C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS24C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP24C k * z k) ^ 2
@@ -740,13 +740,13 @@ theorem vP27C_eq : ∀ t, vP27C t = W2s 2 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP27C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP27C_nonneg : ∀ k, 0 ≤ tP27C k := by
   intro k
   fin_cases k <;>
     · simp [tP27C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS27C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP27C k * z k) ^ 2
@@ -778,13 +778,13 @@ theorem vP29C_eq : ∀ t, vP29C t = W2s 2 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP29C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP29C_nonneg : ∀ k, 0 ≤ tP29C k := by
   intro k
   fin_cases k <;>
     · simp [tP29C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS29C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP29C k * z k) ^ 2
@@ -816,13 +816,13 @@ theorem vP34C_eq : ∀ t, vP34C t = W2s 3 t - W2s 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP34C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP34C_nonneg : ∀ k, 0 ≤ tP34C k := by
   intro k
   fin_cases k <;>
     · simp [tP34C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS34C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP34C k * z k) ^ 2
@@ -854,13 +854,13 @@ theorem vP37C_eq : ∀ t, vP37C t = W2s 3 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP37C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP37C_nonneg : ∀ k, 0 ≤ tP37C k := by
   intro k
   fin_cases k <;>
     · simp [tP37C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS37C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP37C k * z k) ^ 2
@@ -892,13 +892,13 @@ theorem vP39C_eq : ∀ t, vP39C t = W2s 3 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP39C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP39C_nonneg : ∀ k, 0 ≤ tP39C k := by
   intro k
   fin_cases k <;>
     · simp [tP39C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS39C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP39C k * z k) ^ 2
@@ -930,13 +930,13 @@ theorem vP45C_eq : ∀ t, vP45C t = W2s 4 t - W2s 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP45C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP45C_nonneg : ∀ k, 0 ≤ tP45C k := by
   intro k
   fin_cases k <;>
     · simp [tP45C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS45C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP45C k * z k) ^ 2
@@ -968,13 +968,13 @@ theorem vP46C_eq : ∀ t, vP46C t = W2s 4 t - W2s 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP46C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP46C_nonneg : ∀ k, 0 ≤ tP46C k := by
   intro k
   fin_cases k <;>
     · simp [tP46C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS46C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP46C k * z k) ^ 2
@@ -1006,13 +1006,13 @@ theorem vP47C_eq : ∀ t, vP47C t = W2s 4 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP47C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP47C_nonneg : ∀ k, 0 ≤ tP47C k := by
   intro k
   fin_cases k <;>
     · simp [tP47C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS47C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP47C k * z k) ^ 2
@@ -1044,13 +1044,13 @@ theorem vP48C_eq : ∀ t, vP48C t = W2s 4 t - W2s 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP48C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP48C_nonneg : ∀ k, 0 ≤ tP48C k := by
   intro k
   fin_cases k <;>
     · simp [tP48C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS48C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP48C k * z k) ^ 2
@@ -1082,13 +1082,13 @@ theorem vP49C_eq : ∀ t, vP49C t = W2s 4 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP49C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP49C_nonneg : ∀ k, 0 ≤ tP49C k := by
   intro k
   fin_cases k <;>
     · simp [tP49C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS49C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP49C k * z k) ^ 2
@@ -1120,13 +1120,13 @@ theorem vP57C_eq : ∀ t, vP57C t = W2s 5 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP57C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP57C_nonneg : ∀ k, 0 ≤ tP57C k := by
   intro k
   fin_cases k <;>
     · simp [tP57C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS57C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP57C k * z k) ^ 2
@@ -1158,13 +1158,13 @@ theorem vP59C_eq : ∀ t, vP59C t = W2s 5 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP59C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP59C_nonneg : ∀ k, 0 ≤ tP59C k := by
   intro k
   fin_cases k <;>
     · simp [tP59C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS59C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP59C k * z k) ^ 2
@@ -1196,13 +1196,13 @@ theorem vP67C_eq : ∀ t, vP67C t = W2s 6 t - W2s 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP67C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP67C_nonneg : ∀ k, 0 ≤ tP67C k := by
   intro k
   fin_cases k <;>
     · simp [tP67C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS67C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP67C k * z k) ^ 2
@@ -1234,13 +1234,13 @@ theorem vP69C_eq : ∀ t, vP69C t = W2s 6 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP69C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP69C_nonneg : ∀ k, 0 ≤ tP69C k := by
   intro k
   fin_cases k <;>
     · simp [tP69C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS69C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP69C k * z k) ^ 2
@@ -1272,13 +1272,13 @@ theorem vP78C_eq : ∀ t, vP78C t = W2s 7 t - W2s 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP78C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP78C_nonneg : ∀ k, 0 ≤ tP78C k := by
   intro k
   fin_cases k <;>
     · simp [tP78C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS78C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP78C k * z k) ^ 2
@@ -1310,13 +1310,13 @@ theorem vP79C_eq : ∀ t, vP79C t = W2s 7 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP79C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP79C_nonneg : ∀ k, 0 ≤ tP79C k := by
   intro k
   fin_cases k <;>
     · simp [tP79C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS79C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP79C k * z k) ^ 2
@@ -1348,13 +1348,13 @@ theorem vP89C_eq : ∀ t, vP89C t = W2s 8 t - W2s 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP89C, W2s, W2sQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP89C_nonneg : ∀ k, 0 ≤ tP89C k := by
   intro k
   fin_cases k <;>
     · simp [tP89C]
-      try norm_num
+      first | done | norm_num
 
 theorem hS89C : ∀ z : Fin 8 → ℝ,
     (∑ k, vP89C k * z k) ^ 2
@@ -1496,7 +1496,7 @@ theorem logitC0_eval : ∀ jj : Fin 10, mlpS img0 jj = logitC0 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreC0, logitC0, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #0 (digit 7): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1508,48 +1508,48 @@ theorem certifiedSC0 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82571 : ℝ)/5000)) pairSqC_7_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((75751 : ℝ)/5000)) pairSqC_7_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((113393 : ℝ)/10000)) pairSqC_7_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((153861 : ℝ)/10000)) pairSqC_7_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((136759 : ℝ)/10000)) pairSqC_7_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((195043 : ℝ)/10000)) pairSqC_7_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((126267 : ℝ)/10000)) pairSqC_7_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((97261 : ℝ)/10000)) pairSqC_7_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC0_eval, logitC0_eval]
     simp [logitC0]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #2 (digit 1), exact pixel sums /4080. -/
 noncomputable def img2 : EuclideanSpace ℝ (Fin 49) :=
@@ -1574,7 +1574,7 @@ theorem logitC2_eval : ∀ jj : Fin 10, mlpS img2 jj = logitC2 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreSC2, logitC2, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #2 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1586,48 +1586,48 @@ theorem certifiedSC2 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((11851 : ℝ)/1000)) pairSqC_1_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((129757 : ℝ)/10000)) pairSqC_1_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((157399 : ℝ)/10000)) pairSqC_1_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((67369 : ℝ)/5000)) pairSqC_1_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((141033 : ℝ)/10000)) pairSqC_1_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82571 : ℝ)/5000)) pairSqC_1_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((53403 : ℝ)/5000)) pairSqC_1_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((78741 : ℝ)/5000)) pairSqC_1_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC2_eval, logitC2_eval]
     simp [logitC2]
-    try norm_num
+    norm_num
 
 noncomputable def logitC3 : Fin 10 → ℝ :=
   ![((1868270775 : ℝ)/267386880), ((-2811425873 : ℝ)/267386880), ((454449275 : ℝ)/267386880), ((163737469 : ℝ)/267386880), ((-859401099 : ℝ)/267386880), ((804520715 : ℝ)/267386880), ((211831491 : ℝ)/267386880), ((161664949 : ℝ)/267386880), ((340713541 : ℝ)/267386880), ((-331829797 : ℝ)/267386880)]
@@ -1639,7 +1639,7 @@ theorem logitC3_eval : ∀ jj : Fin 10, mlpS img3 jj = logitC3 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreC3, logitC3, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #3 (digit 0): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1652,47 +1652,47 @@ theorem certifiedSC3 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((57183 : ℝ)/5000)) pairSqC_0_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((22291 : ℝ)/2000)) pairSqC_0_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((9728 : ℝ)/625)) pairSqC_0_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((46461 : ℝ)/5000)) pairSqC_0_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((29019 : ℝ)/2000)) pairSqC_0_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((65699 : ℝ)/5000)) pairSqC_0_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((27627 : ℝ)/2500)) pairSqC_0_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((144013 : ℝ)/10000)) pairSqC_0_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC3_eval, logitC3_eval]
     simp [logitC3]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #4 (digit 4), exact pixel sums /4080. -/
 noncomputable def img4 : EuclideanSpace ℝ (Fin 49) :=
@@ -1717,7 +1717,7 @@ theorem logitC4_eval : ∀ jj : Fin 10, mlpS img4 jj = logitC4 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreSC4, logitC4, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #4 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1729,48 +1729,48 @@ theorem certifiedSC4 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((157399 : ℝ)/10000)) pairSqC_4_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((153779 : ℝ)/10000)) pairSqC_4_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((16487 : ℝ)/1000)) pairSqC_4_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((1662 : ℝ)/125)) pairSqC_4_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((58981 : ℝ)/5000)) pairSqC_4_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((153861 : ℝ)/10000)) pairSqC_4_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((30919 : ℝ)/2500)) pairSqC_4_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((6491 : ℝ)/625)) pairSqC_4_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC4_eval, logitC4_eval]
     simp [logitC4]
-    try norm_num
+    norm_num
 
 noncomputable def logitC5 : Fin 10 → ℝ :=
   ![((-1304906217 : ℝ)/267386880), ((1250156909 : ℝ)/267386880), ((175767403 : ℝ)/267386880), ((16692352 : ℝ)/267386880), ((-220551978 : ℝ)/267386880), ((-100243508 : ℝ)/267386880), ((-264852503 : ℝ)/267386880), ((51957156 : ℝ)/267386880), ((479559305 : ℝ)/267386880), ((-83578919 : ℝ)/267386880)]
@@ -1782,7 +1782,7 @@ theorem logitC5_eval : ∀ jj : Fin 10, mlpS img5 jj = logitC5 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreC5, logitC5, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #5 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1794,48 +1794,48 @@ theorem certifiedSC5 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((11851 : ℝ)/1000)) pairSqC_1_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((129757 : ℝ)/10000)) pairSqC_1_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((157399 : ℝ)/10000)) pairSqC_1_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((67369 : ℝ)/5000)) pairSqC_1_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((141033 : ℝ)/10000)) pairSqC_1_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82571 : ℝ)/5000)) pairSqC_1_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((53403 : ℝ)/5000)) pairSqC_1_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((78741 : ℝ)/5000)) pairSqC_1_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC5_eval, logitC5_eval]
     simp [logitC5]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #6 (digit 4), exact pixel sums /4080. -/
 noncomputable def img6 : EuclideanSpace ℝ (Fin 49) :=
@@ -1860,7 +1860,7 @@ theorem logitC6_eval : ∀ jj : Fin 10, mlpS img6 jj = logitC6 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreSC6, logitC6, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #6 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1872,48 +1872,48 @@ theorem certifiedSC6 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((157399 : ℝ)/10000)) pairSqC_4_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((153779 : ℝ)/10000)) pairSqC_4_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((16487 : ℝ)/1000)) pairSqC_4_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((1662 : ℝ)/125)) pairSqC_4_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((58981 : ℝ)/5000)) pairSqC_4_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((153861 : ℝ)/10000)) pairSqC_4_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((30919 : ℝ)/2500)) pairSqC_4_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((6491 : ℝ)/625)) pairSqC_4_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC6_eval, logitC6_eval]
     simp [logitC6]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #7 (digit 9), exact pixel sums /4080. -/
 noncomputable def img7 : EuclideanSpace ℝ (Fin 49) :=
@@ -1938,7 +1938,7 @@ theorem logitC7_eval : ∀ jj : Fin 10, mlpS img7 jj = logitC7 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreSC7, logitC7, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #7 (digit 9): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1950,47 +1950,47 @@ theorem certifiedSC7 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((78741 : ℝ)/5000)) pairSqC_9_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((16133 : ℝ)/1000)) pairSqC_9_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((133299 : ℝ)/10000)) pairSqC_9_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((6491 : ℝ)/625)) pairSqC_9_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((128799 : ℝ)/10000)) pairSqC_9_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82687 : ℝ)/5000)) pairSqC_9_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((97261 : ℝ)/10000)) pairSqC_9_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((19797 : ℝ)/2000)) pairSqC_9_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC7_eval, logitC7_eval]
     simp [logitC7]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
 
 /-- MNIST test image #9 (digit 9), exact pixel sums /4080. -/
@@ -2016,7 +2016,7 @@ theorem logitC9_eval : ∀ jj : Fin 10, mlpS img9 jj = logitC9 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2s, W2sQ, castM, hpreSC9, logitC9, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #9 (digit 9): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -2028,47 +2028,47 @@ theorem certifiedSC9 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((78741 : ℝ)/5000)) pairSqC_9_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((16133 : ℝ)/1000)) pairSqC_9_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((133299 : ℝ)/10000)) pairSqC_9_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((6491 : ℝ)/625)) pairSqC_9_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((128799 : ℝ)/10000)) pairSqC_9_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82687 : ℝ)/5000)) pairSqC_9_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((97261 : ℝ)/10000)) pairSqC_9_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((19797 : ℝ)/2000)) pairSqC_9_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitC9_eval, logitC9_eval]
     simp [logitC9]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
 
 -- ════════════════════════════════════════════════════════════

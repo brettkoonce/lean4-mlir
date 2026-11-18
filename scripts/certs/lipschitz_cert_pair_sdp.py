@@ -281,13 +281,18 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
         A("  intro t")
         A("  fin_cases t <;>")
         A(f"    · simp [vP{nm}, {w2name}, {w2name}Q, castM]")
-        A("      try norm_num")
+        A("      norm_num")
         A("")
         A(f"theorem tP{nm}_nonneg : ∀ k, 0 ≤ tP{nm} k := by")
         A("  intro k")
         A("  fin_cases k <;>")
+        # `first | done | norm_num`, not `norm_num`: on some pairs `simp` closes a few of the
+        # eight branches alone (`tP` entries it can sign by itself) and leaves the rest for
+        # `norm_num`, so a plain `norm_num` fails on the closed ones, and `try norm_num` trips
+        # Mathlib's unused-tactic linter (Lean 4.36), which flags a `try` that is dead in ANY
+        # branch. The linter still flags `first | done | norm_num` where every branch closes.
         A(f"    · simp [tP{nm}]")
-        A("      try norm_num")
+        A("      first | done | norm_num")
         A("")
         # the PSD slack: expand the sums once, then linarith with the 8 LDLᵀ
         # column squares as hints (it finds the d ≥ 0 combination itself)
@@ -364,7 +369,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
         A("  rw [hout jj]")
         A("  fin_cases jj <;>")
         A(f"    · simp [{w2name}, {w2name}Q, castM, {hpre}, {lg}, Fin.sum_univ_succ, max_def]")
-        A("      try norm_num")
+        A("      norm_num")
         A("")
         A(f"/-- Test #{i} (digit {y}): LipSDP-per-pair certified at ε = {EPS} — each")
         A(f"    of the 9 margins clears its own `Lp·ε`. -/")
@@ -381,7 +386,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
                 A("      (by norm_num) (by norm_num) ?_ δ hδ")
                 A(f"    rw [{lg}_eval, {lg}_eval]")
                 A(f"    simp [{lg}]")
-                A("    try norm_num")
+                A("    norm_num")
         A("")
     A("-- ════════════════════════════════════════════════════════════")
     A("-- § Aggregate — mechanized (peer of `scorecard`)")

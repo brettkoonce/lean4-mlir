@@ -286,7 +286,7 @@ def emit_net(tag, r, out_path):
             A("    first")
             A("    | exact absurd rfl hj")
             A(f"    | · simp [W2{tag}, W2{tag}Q, castM, {hpre}, absr{tag}, Fin.sum_univ_succ, max_def]")
-            A("        try norm_num")
+            A("        norm_num")
             A("")
             A(f"/-- Test #{i} (digit {y}): IBP-certified at pixel-L∞ ε = {num}/255. -/")
             A(f"theorem certIBP{tag}{en}_{i} (δ : EuclideanSpace ℝ (Fin {DIM}))")

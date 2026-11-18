@@ -177,7 +177,7 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
 
 theorem img0_abs_le : ∀ c : Fin 49, |img0 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img0]; try norm_num)
+  fin_cases c <;> (simp [img0]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #0): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -191,7 +191,7 @@ theorem certifiedC0_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img3_abs_le : ∀ c : Fin 49, |img3 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img3]; try norm_num)
+  fin_cases c <;> (simp [img3]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #3): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -205,7 +205,7 @@ theorem certifiedC3_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img5_abs_le : ∀ c : Fin 49, |img5 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img5]; try norm_num)
+  fin_cases c <;> (simp [img5]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #5): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -219,7 +219,7 @@ theorem certifiedC5_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img10_abs_le : ∀ c : Fin 49, |img10 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img10]; try norm_num)
+  fin_cases c <;> (simp [img10]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #10): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -233,7 +233,7 @@ theorem certifiedC10_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img13_abs_le : ∀ c : Fin 49, |img13 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img13]; try norm_num)
+  fin_cases c <;> (simp [img13]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #13): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -247,7 +247,7 @@ theorem certifiedC13_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img14_abs_le : ∀ c : Fin 49, |img14 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img14]; try norm_num)
+  fin_cases c <;> (simp [img14]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #14): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -261,7 +261,7 @@ theorem certifiedC14_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img17_abs_le : ∀ c : Fin 49, |img17 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img17]; try norm_num)
+  fin_cases c <;> (simp [img17]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #17): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
@@ -275,7 +275,7 @@ theorem certifiedC17_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 theorem img25_abs_le : ∀ c : Fin 49, |img25 c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img25]; try norm_num)
+  fin_cases c <;> (simp [img25]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #25): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class

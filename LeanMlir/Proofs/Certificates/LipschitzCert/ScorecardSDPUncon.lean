@@ -56,13 +56,13 @@ theorem vP01U_eq : ∀ t, vP01U t = W2t 0 t - W2t 1 t := by
   intro t
   fin_cases t <;>
     · simp [vP01U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP01U_nonneg : ∀ k, 0 ≤ tP01U k := by
   intro k
   fin_cases k <;>
     · simp [tP01U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS01U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP01U k * z k) ^ 2
@@ -94,13 +94,13 @@ theorem vP02U_eq : ∀ t, vP02U t = W2t 0 t - W2t 2 t := by
   intro t
   fin_cases t <;>
     · simp [vP02U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP02U_nonneg : ∀ k, 0 ≤ tP02U k := by
   intro k
   fin_cases k <;>
     · simp [tP02U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS02U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP02U k * z k) ^ 2
@@ -132,13 +132,13 @@ theorem vP03U_eq : ∀ t, vP03U t = W2t 0 t - W2t 3 t := by
   intro t
   fin_cases t <;>
     · simp [vP03U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP03U_nonneg : ∀ k, 0 ≤ tP03U k := by
   intro k
   fin_cases k <;>
     · simp [tP03U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS03U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP03U k * z k) ^ 2
@@ -170,13 +170,13 @@ theorem vP04U_eq : ∀ t, vP04U t = W2t 0 t - W2t 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP04U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP04U_nonneg : ∀ k, 0 ≤ tP04U k := by
   intro k
   fin_cases k <;>
     · simp [tP04U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS04U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP04U k * z k) ^ 2
@@ -208,13 +208,13 @@ theorem vP05U_eq : ∀ t, vP05U t = W2t 0 t - W2t 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP05U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP05U_nonneg : ∀ k, 0 ≤ tP05U k := by
   intro k
   fin_cases k <;>
     · simp [tP05U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS05U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP05U k * z k) ^ 2
@@ -246,13 +246,13 @@ theorem vP06U_eq : ∀ t, vP06U t = W2t 0 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP06U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP06U_nonneg : ∀ k, 0 ≤ tP06U k := by
   intro k
   fin_cases k <;>
     · simp [tP06U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS06U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP06U k * z k) ^ 2
@@ -284,13 +284,13 @@ theorem vP07U_eq : ∀ t, vP07U t = W2t 0 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP07U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP07U_nonneg : ∀ k, 0 ≤ tP07U k := by
   intro k
   fin_cases k <;>
     · simp [tP07U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS07U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP07U k * z k) ^ 2
@@ -322,13 +322,13 @@ theorem vP08U_eq : ∀ t, vP08U t = W2t 0 t - W2t 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP08U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP08U_nonneg : ∀ k, 0 ≤ tP08U k := by
   intro k
   fin_cases k <;>
     · simp [tP08U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS08U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP08U k * z k) ^ 2
@@ -360,13 +360,13 @@ theorem vP09U_eq : ∀ t, vP09U t = W2t 0 t - W2t 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP09U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP09U_nonneg : ∀ k, 0 ≤ tP09U k := by
   intro k
   fin_cases k <;>
     · simp [tP09U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS09U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP09U k * z k) ^ 2
@@ -398,13 +398,13 @@ theorem vP12U_eq : ∀ t, vP12U t = W2t 1 t - W2t 2 t := by
   intro t
   fin_cases t <;>
     · simp [vP12U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP12U_nonneg : ∀ k, 0 ≤ tP12U k := by
   intro k
   fin_cases k <;>
     · simp [tP12U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS12U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP12U k * z k) ^ 2
@@ -436,13 +436,13 @@ theorem vP13U_eq : ∀ t, vP13U t = W2t 1 t - W2t 3 t := by
   intro t
   fin_cases t <;>
     · simp [vP13U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP13U_nonneg : ∀ k, 0 ≤ tP13U k := by
   intro k
   fin_cases k <;>
     · simp [tP13U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS13U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP13U k * z k) ^ 2
@@ -474,13 +474,13 @@ theorem vP14U_eq : ∀ t, vP14U t = W2t 1 t - W2t 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP14U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP14U_nonneg : ∀ k, 0 ≤ tP14U k := by
   intro k
   fin_cases k <;>
     · simp [tP14U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS14U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP14U k * z k) ^ 2
@@ -512,13 +512,13 @@ theorem vP15U_eq : ∀ t, vP15U t = W2t 1 t - W2t 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP15U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP15U_nonneg : ∀ k, 0 ≤ tP15U k := by
   intro k
   fin_cases k <;>
     · simp [tP15U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS15U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP15U k * z k) ^ 2
@@ -550,13 +550,13 @@ theorem vP16U_eq : ∀ t, vP16U t = W2t 1 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP16U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP16U_nonneg : ∀ k, 0 ≤ tP16U k := by
   intro k
   fin_cases k <;>
     · simp [tP16U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS16U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP16U k * z k) ^ 2
@@ -588,13 +588,13 @@ theorem vP17U_eq : ∀ t, vP17U t = W2t 1 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP17U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP17U_nonneg : ∀ k, 0 ≤ tP17U k := by
   intro k
   fin_cases k <;>
     · simp [tP17U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS17U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP17U k * z k) ^ 2
@@ -626,13 +626,13 @@ theorem vP18U_eq : ∀ t, vP18U t = W2t 1 t - W2t 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP18U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP18U_nonneg : ∀ k, 0 ≤ tP18U k := by
   intro k
   fin_cases k <;>
     · simp [tP18U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS18U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP18U k * z k) ^ 2
@@ -664,13 +664,13 @@ theorem vP19U_eq : ∀ t, vP19U t = W2t 1 t - W2t 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP19U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP19U_nonneg : ∀ k, 0 ≤ tP19U k := by
   intro k
   fin_cases k <;>
     · simp [tP19U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS19U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP19U k * z k) ^ 2
@@ -702,13 +702,13 @@ theorem vP24U_eq : ∀ t, vP24U t = W2t 2 t - W2t 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP24U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP24U_nonneg : ∀ k, 0 ≤ tP24U k := by
   intro k
   fin_cases k <;>
     · simp [tP24U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS24U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP24U k * z k) ^ 2
@@ -740,13 +740,13 @@ theorem vP26U_eq : ∀ t, vP26U t = W2t 2 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP26U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP26U_nonneg : ∀ k, 0 ≤ tP26U k := by
   intro k
   fin_cases k <;>
     · simp [tP26U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS26U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP26U k * z k) ^ 2
@@ -778,13 +778,13 @@ theorem vP27U_eq : ∀ t, vP27U t = W2t 2 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP27U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP27U_nonneg : ∀ k, 0 ≤ tP27U k := by
   intro k
   fin_cases k <;>
     · simp [tP27U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS27U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP27U k * z k) ^ 2
@@ -816,13 +816,13 @@ theorem vP34U_eq : ∀ t, vP34U t = W2t 3 t - W2t 4 t := by
   intro t
   fin_cases t <;>
     · simp [vP34U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP34U_nonneg : ∀ k, 0 ≤ tP34U k := by
   intro k
   fin_cases k <;>
     · simp [tP34U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS34U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP34U k * z k) ^ 2
@@ -854,13 +854,13 @@ theorem vP36U_eq : ∀ t, vP36U t = W2t 3 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP36U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP36U_nonneg : ∀ k, 0 ≤ tP36U k := by
   intro k
   fin_cases k <;>
     · simp [tP36U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS36U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP36U k * z k) ^ 2
@@ -892,13 +892,13 @@ theorem vP37U_eq : ∀ t, vP37U t = W2t 3 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP37U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP37U_nonneg : ∀ k, 0 ≤ tP37U k := by
   intro k
   fin_cases k <;>
     · simp [tP37U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS37U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP37U k * z k) ^ 2
@@ -930,13 +930,13 @@ theorem vP45U_eq : ∀ t, vP45U t = W2t 4 t - W2t 5 t := by
   intro t
   fin_cases t <;>
     · simp [vP45U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP45U_nonneg : ∀ k, 0 ≤ tP45U k := by
   intro k
   fin_cases k <;>
     · simp [tP45U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS45U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP45U k * z k) ^ 2
@@ -968,13 +968,13 @@ theorem vP46U_eq : ∀ t, vP46U t = W2t 4 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP46U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP46U_nonneg : ∀ k, 0 ≤ tP46U k := by
   intro k
   fin_cases k <;>
     · simp [tP46U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS46U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP46U k * z k) ^ 2
@@ -1006,13 +1006,13 @@ theorem vP47U_eq : ∀ t, vP47U t = W2t 4 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP47U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP47U_nonneg : ∀ k, 0 ≤ tP47U k := by
   intro k
   fin_cases k <;>
     · simp [tP47U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS47U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP47U k * z k) ^ 2
@@ -1044,13 +1044,13 @@ theorem vP48U_eq : ∀ t, vP48U t = W2t 4 t - W2t 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP48U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP48U_nonneg : ∀ k, 0 ≤ tP48U k := by
   intro k
   fin_cases k <;>
     · simp [tP48U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS48U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP48U k * z k) ^ 2
@@ -1082,13 +1082,13 @@ theorem vP49U_eq : ∀ t, vP49U t = W2t 4 t - W2t 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP49U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP49U_nonneg : ∀ k, 0 ≤ tP49U k := by
   intro k
   fin_cases k <;>
     · simp [tP49U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS49U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP49U k * z k) ^ 2
@@ -1120,13 +1120,13 @@ theorem vP56U_eq : ∀ t, vP56U t = W2t 5 t - W2t 6 t := by
   intro t
   fin_cases t <;>
     · simp [vP56U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP56U_nonneg : ∀ k, 0 ≤ tP56U k := by
   intro k
   fin_cases k <;>
     · simp [tP56U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS56U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP56U k * z k) ^ 2
@@ -1158,13 +1158,13 @@ theorem vP57U_eq : ∀ t, vP57U t = W2t 5 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP57U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP57U_nonneg : ∀ k, 0 ≤ tP57U k := by
   intro k
   fin_cases k <;>
     · simp [tP57U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS57U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP57U k * z k) ^ 2
@@ -1196,13 +1196,13 @@ theorem vP67U_eq : ∀ t, vP67U t = W2t 6 t - W2t 7 t := by
   intro t
   fin_cases t <;>
     · simp [vP67U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP67U_nonneg : ∀ k, 0 ≤ tP67U k := by
   intro k
   fin_cases k <;>
     · simp [tP67U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS67U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP67U k * z k) ^ 2
@@ -1234,13 +1234,13 @@ theorem vP68U_eq : ∀ t, vP68U t = W2t 6 t - W2t 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP68U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP68U_nonneg : ∀ k, 0 ≤ tP68U k := by
   intro k
   fin_cases k <;>
     · simp [tP68U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS68U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP68U k * z k) ^ 2
@@ -1272,13 +1272,13 @@ theorem vP69U_eq : ∀ t, vP69U t = W2t 6 t - W2t 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP69U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP69U_nonneg : ∀ k, 0 ≤ tP69U k := by
   intro k
   fin_cases k <;>
     · simp [tP69U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS69U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP69U k * z k) ^ 2
@@ -1310,13 +1310,13 @@ theorem vP78U_eq : ∀ t, vP78U t = W2t 7 t - W2t 8 t := by
   intro t
   fin_cases t <;>
     · simp [vP78U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP78U_nonneg : ∀ k, 0 ≤ tP78U k := by
   intro k
   fin_cases k <;>
     · simp [tP78U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS78U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP78U k * z k) ^ 2
@@ -1348,13 +1348,13 @@ theorem vP79U_eq : ∀ t, vP79U t = W2t 7 t - W2t 9 t := by
   intro t
   fin_cases t <;>
     · simp [vP79U, W2t, W2tQ, castM]
-      try norm_num
+      norm_num
 
 theorem tP79U_nonneg : ∀ k, 0 ≤ tP79U k := by
   intro k
   fin_cases k <;>
     · simp [tP79U]
-      try norm_num
+      first | done | norm_num
 
 theorem hS79U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP79U k * z k) ^ 2
@@ -1490,7 +1490,7 @@ theorem logitU0_eval : ∀ jj : Fin 10, mlpT img0 jj = logitU0 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU0, logitU0, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #0 (digit 7): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1502,48 +1502,48 @@ theorem certifiedSU0 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((216163 : ℝ)/5000)) pairSqU_7_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((89183 : ℝ)/2000)) pairSqU_7_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((334771 : ℝ)/10000)) pairSqU_7_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((423721 : ℝ)/10000)) pairSqU_7_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((373429 : ℝ)/10000)) pairSqU_7_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((514853 : ℝ)/10000)) pairSqU_7_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((4262 : ℝ)/125)) pairSqU_7_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((236281 : ℝ)/10000)) pairSqU_7_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU0_eval, logitU0_eval]
     simp [logitU0]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #2 (digit 1), exact pixel sums /4080. -/
 noncomputable def imgU2 : EuclideanSpace ℝ (Fin 49) :=
@@ -1568,7 +1568,7 @@ theorem logitU2_eval : ∀ jj : Fin 10, mlpT imgU2 jj = logitU2 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU2, logitU2, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #2 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1580,48 +1580,48 @@ theorem certifiedSU2 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((63651 : ℝ)/2000)) pairSqU_1_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82371 : ℝ)/2500)) pairSqU_1_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((203329 : ℝ)/5000)) pairSqU_1_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((13091 : ℝ)/400)) pairSqU_1_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((344199 : ℝ)/10000)) pairSqU_1_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((216163 : ℝ)/5000)) pairSqU_1_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((72903 : ℝ)/2500)) pairSqU_1_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((109379 : ℝ)/2500)) pairSqU_1_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU2_eval, logitU2_eval]
     simp [logitU2]
-    try norm_num
+    norm_num
 
 noncomputable def hpreSU3 : Fin 8 → ℝ :=
   ![((1725235 : ℝ)/522240), ((301896 : ℝ)/522240), ((1956814 : ℝ)/522240), ((1339878 : ℝ)/522240), ((2483278 : ℝ)/522240), ((-600294 : ℝ)/522240), ((35259 : ℝ)/522240), ((1146612 : ℝ)/522240)]
@@ -1642,7 +1642,7 @@ theorem logitU3_eval : ∀ jj : Fin 10, mlpT img3 jj = logitU3 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU3, logitU3, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #3 (digit 0): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1655,47 +1655,47 @@ theorem certifiedSU3 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((269611 : ℝ)/10000)) pairSqU_0_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((222337 : ℝ)/10000)) pairSqU_0_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((211249 : ℝ)/5000)) pairSqU_0_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((211333 : ℝ)/10000)) pairSqU_0_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((23049 : ℝ)/625)) pairSqU_0_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((348703 : ℝ)/10000)) pairSqU_0_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((234633 : ℝ)/10000)) pairSqU_0_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((369787 : ℝ)/10000)) pairSqU_0_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU3_eval, logitU3_eval]
     simp [logitU3]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #4 (digit 4), exact pixel sums /4080. -/
 noncomputable def imgU4 : EuclideanSpace ℝ (Fin 49) :=
@@ -1720,7 +1720,7 @@ theorem logitU4_eval : ∀ jj : Fin 10, mlpT imgU4 jj = logitU4 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU4, logitU4, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #4 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1732,48 +1732,48 @@ theorem certifiedSU4 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((203329 : ℝ)/5000)) pairSqU_4_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((453237 : ℝ)/10000)) pairSqU_4_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((87009 : ℝ)/2000)) pairSqU_4_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((410067 : ℝ)/10000)) pairSqU_4_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((70173 : ℝ)/2000)) pairSqU_4_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((423721 : ℝ)/10000)) pairSqU_4_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((350307 : ℝ)/10000)) pairSqU_4_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((314701 : ℝ)/10000)) pairSqU_4_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU4_eval, logitU4_eval]
     simp [logitU4]
-    try norm_num
+    norm_num
 
 noncomputable def hpreSU5 : Fin 8 → ℝ :=
   ![((455007 : ℝ)/522240), ((1230058 : ℝ)/522240), ((-120354 : ℝ)/522240), ((578233 : ℝ)/522240), ((95504 : ℝ)/522240), ((399121 : ℝ)/522240), ((165390 : ℝ)/522240), ((560349 : ℝ)/522240)]
@@ -1794,7 +1794,7 @@ theorem logitU5_eval : ∀ jj : Fin 10, mlpT img5 jj = logitU5 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU5, logitU5, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #5 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1806,48 +1806,48 @@ theorem certifiedSU5 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((63651 : ℝ)/2000)) pairSqU_1_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((82371 : ℝ)/2500)) pairSqU_1_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((203329 : ℝ)/5000)) pairSqU_1_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((13091 : ℝ)/400)) pairSqU_1_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((344199 : ℝ)/10000)) pairSqU_1_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((216163 : ℝ)/5000)) pairSqU_1_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((72903 : ℝ)/2500)) pairSqU_1_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((109379 : ℝ)/2500)) pairSqU_1_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU5_eval, logitU5_eval]
     simp [logitU5]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #6 (digit 4), exact pixel sums /4080. -/
 noncomputable def imgU6 : EuclideanSpace ℝ (Fin 49) :=
@@ -1872,7 +1872,7 @@ theorem logitU6_eval : ∀ jj : Fin 10, mlpT imgU6 jj = logitU6 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU6, logitU6, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #6 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1884,48 +1884,48 @@ theorem certifiedSU6 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((203329 : ℝ)/5000)) pairSqU_4_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((453237 : ℝ)/10000)) pairSqU_4_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((87009 : ℝ)/2000)) pairSqU_4_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((410067 : ℝ)/10000)) pairSqU_4_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((70173 : ℝ)/2000)) pairSqU_4_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((423721 : ℝ)/10000)) pairSqU_4_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((350307 : ℝ)/10000)) pairSqU_4_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((314701 : ℝ)/10000)) pairSqU_4_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU6_eval, logitU6_eval]
     simp [logitU6]
-    try norm_num
+    norm_num
 
 noncomputable def hpreSU10 : Fin 8 → ℝ :=
   ![((1145613 : ℝ)/522240), ((144716 : ℝ)/522240), ((2302560 : ℝ)/522240), ((1637067 : ℝ)/522240), ((1687162 : ℝ)/522240), ((-658913 : ℝ)/522240), ((-158302 : ℝ)/522240), ((1636469 : ℝ)/522240)]
@@ -1946,7 +1946,7 @@ theorem logitU10_eval : ∀ jj : Fin 10, mlpT img10 jj = logitU10 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU10, logitU10, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #10 (digit 0): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -1959,47 +1959,47 @@ theorem certifiedSU10 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 :
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((269611 : ℝ)/10000)) pairSqU_0_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((222337 : ℝ)/10000)) pairSqU_0_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((211249 : ℝ)/5000)) pairSqU_0_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((211333 : ℝ)/10000)) pairSqU_0_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((23049 : ℝ)/625)) pairSqU_0_6
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((348703 : ℝ)/10000)) pairSqU_0_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((234633 : ℝ)/10000)) pairSqU_0_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((369787 : ℝ)/10000)) pairSqU_0_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU10_eval, logitU10_eval]
     simp [logitU10]
-    try norm_num
+    norm_num
 
 /-- MNIST test image #11 (digit 6), exact pixel sums /4080. -/
 noncomputable def imgU11 : EuclideanSpace ℝ (Fin 49) :=
@@ -2024,7 +2024,7 @@ theorem logitU11_eval : ∀ jj : Fin 10, mlpT imgU11 jj = logitU11 jj := by
   rw [hout jj]
   fin_cases jj <;>
     · simp [W2t, W2tQ, castM, hpreSU11, logitU11, Fin.sum_univ_succ, max_def]
-      try norm_num
+      norm_num
 
 /-- Test #11 (digit 6): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
@@ -2036,48 +2036,48 @@ theorem certifiedSU11 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 :
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((344199 : ℝ)/10000)) pairSqU_6_1
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((83913 : ℝ)/2500)) pairSqU_6_2
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((222043 : ℝ)/5000)) pairSqU_6_3
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((70173 : ℝ)/2000)) pairSqU_6_4
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((24432 : ℝ)/625)) pairSqU_6_5
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · exact absurd rfl hj
   · refine certified_at_eps_pair (Lp := ((514853 : ℝ)/10000)) pairSqU_6_7
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((391437 : ℝ)/10000)) pairSqU_6_8
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
   · refine certified_at_eps_pair (Lp := ((51307 : ℝ)/1000)) pairSqU_6_9
       (by norm_num) (by norm_num) ?_ δ hδ
     rw [logitU11_eval, logitU11_eval]
     simp [logitU11]
-    try norm_num
+    norm_num
 
 -- ════════════════════════════════════════════════════════════
 -- § Aggregate — mechanized (peer of `scorecard`)

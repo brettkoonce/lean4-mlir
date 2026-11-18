@@ -370,7 +370,7 @@ def conv_rows(name, Wn, bn, xn, tab):
     conv2d {Wn} {bn} {xn} {fm(o,2)} {fm(hi,6)} wi
       = {tab} {fm(o,2)} {fm(hi,6)} wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, {Wn}, {bn}, {xn}, {tab}, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, {Wn}, {bn}, {xn}, {tab}, Fin.sum_univ_succ]; first | done | norm_num)
 """)
     bullets = "\n".join(f"  · exact {name}_r{o}{hi} wi" for o in range(2) for hi in range(6))
     out.append(f"""theorem {name} : ∀ (o : Fin 2) (hi wi : Fin 6),
@@ -382,6 +382,8 @@ def conv_rows(name, Wn, bn, xn, tab):
     return "\n".join(out)
 
 def smooth_rows():
+    # `first | done | norm_num` (also in conv_rows): `simp` closes some branches alone, so neither
+    # `norm_num` nor `try norm_num` fits (see lipschitz_cert_pair_sdp.py's `tP*_nonneg`).
     out = []
     for ci in range(2):
         for ho in range(3):
@@ -392,7 +394,7 @@ def smooth_rows():
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 """)
     bullets = "\n".join(f"  · exact r2sm_c{ci}h{ho} wo ab ab' hne" for ci in range(2) for ho in range(3))
     out.append(f"""/-- **Every 2×2 window of relu(conv2) has pairwise-distinct values**, so its max is attained
@@ -410,7 +412,7 @@ pool_bullets = "\n".join(
     f"""  · show maxPool2 (c := 2) (h := 3) (w := 3) r2V {fm(k//9,2)} {fm((k%9)//3,3)} {fm(k%3,3)}
         = {lit(fF[k])}
     simp [maxPool2, r2V, max_def]
-    try norm_num"""
+    norm_num"""
     for k in range(18))
 
 hdr = f'''import LeanMlir.Proofs.Nets.Small.MnistCNN
@@ -604,7 +606,7 @@ noncomputable def d3V : Fin 8 → ℝ := {vec_lit(d3F)}
 
 theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
   intro k
-  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; norm_num)
 
 theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
   intro k
@@ -625,7 +627,7 @@ noncomputable def d4V : Fin 8 → ℝ := {vec_lit(d4F)}
 
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
-  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; norm_num)
 
 theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
   intro k

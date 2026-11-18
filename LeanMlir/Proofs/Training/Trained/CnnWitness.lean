@@ -149,73 +149,73 @@ theorem conv1_eq_r00 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r01 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r02 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r03 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r04 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r05 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r10 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r11 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r12 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r13 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r14 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq_r15 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv1_eq : ∀ (o : Fin 2) (hi wi : Fin 6),
     conv2d W1 b1 T0 o hi wi = c1V o hi wi := by
@@ -293,73 +293,73 @@ theorem conv2_eq_r00 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r01 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r02 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r03 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r04 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r05 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r10 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r11 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r12 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r13 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r14 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq_r15 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
-  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; first | done | norm_num)
 
 theorem conv2_eq : ∀ (o : Fin 2) (hi wi : Fin 6),
     conv2d W2 b2 z1V o hi wi = c2V o hi wi := by
@@ -427,7 +427,7 @@ theorem r2sm_c0h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 theorem r2sm_c0h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
@@ -436,7 +436,7 @@ theorem r2sm_c0h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 theorem r2sm_c0h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
@@ -445,7 +445,7 @@ theorem r2sm_c0h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 theorem r2sm_c1h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
@@ -454,7 +454,7 @@ theorem r2sm_c1h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 theorem r2sm_c1h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
@@ -463,7 +463,7 @@ theorem r2sm_c1h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 theorem r2sm_c1h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
@@ -472,7 +472,7 @@ theorem r2sm_c1h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
   fin_cases wo <;> fin_cases a <;> fin_cases b <;> fin_cases a' <;> fin_cases b' <;>
     first
       | exact absurd rfl hne
-      | (simp [r2V, winRowInv, winColInv]; try norm_num)
+      | (simp [r2V, winRowInv, winColInv]; first | done | norm_num)
 
 /-- **Every 2×2 window of relu(conv2) has pairwise-distinct values**, so its max is attained
     once — the `MaxPool2Smooth` hypothesis, discharged from the trained tables. -/
@@ -503,82 +503,82 @@ theorem pooled_eq :
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((2222167 : ℝ)/983040)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((9760537 : ℝ)/3932160)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((1722301 : ℝ)/1114112)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((1163037 : ℝ)/696320)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((55308603 : ℝ)/22282240)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((551529 : ℝ)/278528)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((44026307 : ℝ)/33423360)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((75372937 : ℝ)/33423360)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((2971943 : ℝ)/1966080)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((8334589 : ℝ)/3342336)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((109095671 : ℝ)/33423360)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((130716427 : ℝ)/66846720)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((194146829 : ℝ)/66846720)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((37172403 : ℝ)/11141120)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((101267417 : ℝ)/66846720)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨0, by norm_num⟩ : Fin 3)
         = ((8868649 : ℝ)/11141120)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨1, by norm_num⟩ : Fin 3)
         = ((104909539 : ℝ)/66846720)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
   · show maxPool2 (c := 2) (h := 3) (w := 3) r2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 3) (⟨2, by norm_num⟩ : Fin 3)
         = ((649945 : ℝ)/835584)
     simp [maxPool2, r2V, max_def]
-    try norm_num
+    norm_num
 
 /-- dense3 pre-activations at the witness, exact. -/
 noncomputable def d3V : Fin 8 → ℝ := ![((-2206362251 : ℝ)/4278190080), ((3315505013 : ℝ)/570425344), ((663167541 : ℝ)/570425344), ((86836255423 : ℝ)/8556380160), ((-2660411417 : ℝ)/713031680), ((12288523033 : ℝ)/4278190080), ((4316132003 : ℝ)/1069547520), ((-13402606799 : ℝ)/8556380160)]
 
 theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
   intro k
-  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; norm_num)
 
 theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
   intro k
@@ -599,7 +599,7 @@ noncomputable def d4V : Fin 8 → ℝ := ![((-1120311628553 : ℝ)/273804165120)
 
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
-  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; norm_num)
 
 theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
   intro k

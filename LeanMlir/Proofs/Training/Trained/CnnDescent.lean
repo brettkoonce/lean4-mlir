@@ -448,7 +448,7 @@ noncomputable def d4V : Fin 8 → ℝ := ![((79633270233 : ℝ)/22817013760), ((
 
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
-  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; norm_num)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Weight bounds

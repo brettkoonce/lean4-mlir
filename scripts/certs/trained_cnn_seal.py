@@ -122,6 +122,8 @@ def t3lit(t):
     return t3_lit(t)
 
 # per-case S2 lemmas (pool stage)
+# The window-argmax side goals end in `first | done | norm_num`: `simp` closes some of the
+# 4×4 (a, b) branches alone (see lipschitz_cert_pair_sdp.py's `tP*_nonneg` for why not `try`).
 s2_cases = []
 for k2 in range(72):
     ci, hi, wi = k2 // 36, (k2 % 36) // 6, k2 % 6
@@ -131,7 +133,7 @@ for k2 in range(72):
         branch = f"""  rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V {fm2(win_flat, '2*3*3')} = t2V {fm2(k2, '2*(2*3)*(2*3)')}
   norm_num [t3V, t2V]"""
     else:
@@ -186,7 +188,7 @@ for k1 in range(72):
       {fm2(ci, 2)} {fm2(hi, 6)} {fm2(wi, 6)} = t1V {fm2(k1, '2*(2*3)*(2*3)')}
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 """)
 
 s1_agg_bullets = "\n".join(f"  · exact S1_c{k}" for k in range(72))
@@ -372,7 +374,7 @@ theorem S4 : ∀ k : Fin 8,
   intro k
   rw [pdiv_comp _ _ _ diffL4_r3V ((dense_differentiable W5 b5) _)]
   simp only [d4inner, pdiv_dense]
-  fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; norm_num)
 
 theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
     pdiv (relu 8 ∘ dense W3 b3) p2f k m
@@ -403,7 +405,7 @@ theorem S3 : ∀ k : Fin (2*3*3),
   rw [pdiv_comp _ _ _ diffL3_p2f hout]
   simp only [r3_pt]
   simp only [d3inner, S4]
-  fin_cases k <;> (simp [W3, d3V, t3V, t4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [W3, d3V, t3V, t4V, Fin.sum_univ_succ]; norm_num)
 
 -- ════════════════════════════════════════════════════════════════
 -- § S2: the max-pool stage (argmax routing), per position
@@ -504,7 +506,7 @@ theorem pdiv_fwd_entry :
       (⟨0, by norm_num⟩ : Fin 1) {fm2(HI, 6)} {fm2(WI, 6)} = {lit(PD)}
   rw [show (Tensor3.unflatten m1V : Tensor3 2 6 6) = M1T from Tensor3.unflatten_flatten M1T]
   simp [conv2dInputGradFormula, W1, M1T, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 
 theorem pdiv_fwd_entry_ne :
     pdiv (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X

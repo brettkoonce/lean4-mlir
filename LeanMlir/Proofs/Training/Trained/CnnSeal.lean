@@ -190,7 +190,7 @@ theorem S4 : ∀ k : Fin 8,
   intro k
   rw [pdiv_comp _ _ _ diffL4_r3V ((dense_differentiable W5 b5) _)]
   simp only [d4inner, pdiv_dense]
-  fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; norm_num)
 
 theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
     pdiv (relu 8 ∘ dense W3 b3) p2f k m
@@ -221,7 +221,7 @@ theorem S3 : ∀ k : Fin (2*3*3),
   rw [pdiv_comp _ _ _ diffL3_p2f hout]
   simp only [r3_pt]
   simp only [d3inner, S4]
-  fin_cases k <;> (simp [W3, d3V, t3V, t4V, Fin.sum_univ_succ]; try norm_num)
+  fin_cases k <;> (simp [W3, d3V, t3V, t4V, Fin.sum_univ_succ]; norm_num)
 
 -- ════════════════════════════════════════════════════════════════
 -- § S2: the max-pool stage (argmax routing), per position
@@ -399,7 +399,7 @@ theorem S2_c7 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨0, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c8 :
@@ -420,7 +420,7 @@ theorem S2_c8 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨1, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c9 :
@@ -463,7 +463,7 @@ theorem S2_c10 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨2, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c11 :
@@ -528,7 +528,7 @@ theorem S2_c13 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨3, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c14 :
@@ -593,7 +593,7 @@ theorem S2_c16 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨5, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c17 :
@@ -702,7 +702,7 @@ theorem S2_c21 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨4, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c22 :
@@ -789,7 +789,7 @@ theorem S2_c25 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨6, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c26 :
@@ -832,7 +832,7 @@ theorem S2_c27 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨7, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c28 :
@@ -985,7 +985,7 @@ theorem S2_c34 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨8, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c35 :
@@ -1182,7 +1182,7 @@ theorem S2_c43 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨9, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c44 :
@@ -1203,7 +1203,7 @@ theorem S2_c44 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨10, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c45 :
@@ -1246,7 +1246,7 @@ theorem S2_c46 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨11, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c47 :
@@ -1311,7 +1311,7 @@ theorem S2_c49 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨12, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c50 :
@@ -1332,7 +1332,7 @@ theorem S2_c50 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨13, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c51 :
@@ -1375,7 +1375,7 @@ theorem S2_c52 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨14, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c53 :
@@ -1704,7 +1704,7 @@ theorem S2_c67 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨15, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c68 :
@@ -1747,7 +1747,7 @@ theorem S2_c69 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨16, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c70 :
@@ -1768,7 +1768,7 @@ theorem S2_c70 :
   rw [ite_eq_left (by
     intro a b
     fin_cases a <;> fin_cases b <;>
-      (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
+      (simp [winRow, winCol, winRowInv, winColInv, r2V]; first | done | norm_num))]
   show t3V (⟨17, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
 theorem S2_c71 :
@@ -2130,7 +2130,7 @@ theorem S1_c0 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c1 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2146,7 +2146,7 @@ theorem S1_c1 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c2 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2162,7 +2162,7 @@ theorem S1_c2 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c3 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2178,7 +2178,7 @@ theorem S1_c3 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c4 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2194,7 +2194,7 @@ theorem S1_c4 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c5 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2210,7 +2210,7 @@ theorem S1_c5 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c6 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2226,7 +2226,7 @@ theorem S1_c6 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c7 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2242,7 +2242,7 @@ theorem S1_c7 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c8 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2258,7 +2258,7 @@ theorem S1_c8 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c9 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2274,7 +2274,7 @@ theorem S1_c9 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c10 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2290,7 +2290,7 @@ theorem S1_c10 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c11 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2306,7 +2306,7 @@ theorem S1_c11 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c12 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2322,7 +2322,7 @@ theorem S1_c12 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c13 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2338,7 +2338,7 @@ theorem S1_c13 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c14 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2354,7 +2354,7 @@ theorem S1_c14 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c15 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2370,7 +2370,7 @@ theorem S1_c15 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c16 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2386,7 +2386,7 @@ theorem S1_c16 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c17 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2402,7 +2402,7 @@ theorem S1_c17 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c18 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2418,7 +2418,7 @@ theorem S1_c18 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c19 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2434,7 +2434,7 @@ theorem S1_c19 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c20 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2450,7 +2450,7 @@ theorem S1_c20 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c21 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2466,7 +2466,7 @@ theorem S1_c21 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c22 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2482,7 +2482,7 @@ theorem S1_c22 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c23 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2498,7 +2498,7 @@ theorem S1_c23 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c24 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2514,7 +2514,7 @@ theorem S1_c24 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c25 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2530,7 +2530,7 @@ theorem S1_c25 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c26 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2546,7 +2546,7 @@ theorem S1_c26 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c27 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2562,7 +2562,7 @@ theorem S1_c27 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c28 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2578,7 +2578,7 @@ theorem S1_c28 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c29 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2594,7 +2594,7 @@ theorem S1_c29 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c30 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2610,7 +2610,7 @@ theorem S1_c30 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c31 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2626,7 +2626,7 @@ theorem S1_c31 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c32 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2642,7 +2642,7 @@ theorem S1_c32 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c33 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2658,7 +2658,7 @@ theorem S1_c33 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c34 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2674,7 +2674,7 @@ theorem S1_c34 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c35 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2690,7 +2690,7 @@ theorem S1_c35 :
       (⟨0, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c36 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2706,7 +2706,7 @@ theorem S1_c36 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c37 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2722,7 +2722,7 @@ theorem S1_c37 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c38 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2738,7 +2738,7 @@ theorem S1_c38 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c39 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2754,7 +2754,7 @@ theorem S1_c39 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c40 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2770,7 +2770,7 @@ theorem S1_c40 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c41 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2786,7 +2786,7 @@ theorem S1_c41 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c42 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2802,7 +2802,7 @@ theorem S1_c42 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c43 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2818,7 +2818,7 @@ theorem S1_c43 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c44 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2834,7 +2834,7 @@ theorem S1_c44 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c45 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2850,7 +2850,7 @@ theorem S1_c45 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c46 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2866,7 +2866,7 @@ theorem S1_c46 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c47 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2882,7 +2882,7 @@ theorem S1_c47 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨1, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c48 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2898,7 +2898,7 @@ theorem S1_c48 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c49 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2914,7 +2914,7 @@ theorem S1_c49 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c50 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2930,7 +2930,7 @@ theorem S1_c50 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c51 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2946,7 +2946,7 @@ theorem S1_c51 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c52 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2962,7 +2962,7 @@ theorem S1_c52 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c53 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2978,7 +2978,7 @@ theorem S1_c53 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨2, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c54 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2994,7 +2994,7 @@ theorem S1_c54 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c55 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3010,7 +3010,7 @@ theorem S1_c55 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c56 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3026,7 +3026,7 @@ theorem S1_c56 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c57 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3042,7 +3042,7 @@ theorem S1_c57 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c58 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3058,7 +3058,7 @@ theorem S1_c58 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c59 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3074,7 +3074,7 @@ theorem S1_c59 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨3, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c60 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3090,7 +3090,7 @@ theorem S1_c60 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c61 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3106,7 +3106,7 @@ theorem S1_c61 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c62 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3122,7 +3122,7 @@ theorem S1_c62 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c63 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3138,7 +3138,7 @@ theorem S1_c63 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c64 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3154,7 +3154,7 @@ theorem S1_c64 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c65 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3170,7 +3170,7 @@ theorem S1_c65 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨4, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c66 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3186,7 +3186,7 @@ theorem S1_c66 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) = t1V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c67 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3202,7 +3202,7 @@ theorem S1_c67 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨1, by norm_num⟩ : Fin (6)) = t1V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c68 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3218,7 +3218,7 @@ theorem S1_c68 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = t1V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c69 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3234,7 +3234,7 @@ theorem S1_c69 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨3, by norm_num⟩ : Fin (6)) = t1V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c70 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3250,7 +3250,7 @@ theorem S1_c70 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨4, by norm_num⟩ : Fin (6)) = t1V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 theorem S1_c71 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3266,7 +3266,7 @@ theorem S1_c71 :
       (⟨1, by norm_num⟩ : Fin (2)) (⟨5, by norm_num⟩ : Fin (6)) (⟨5, by norm_num⟩ : Fin (6)) = t1V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 
 theorem S1 : ∀ k : Fin (2 * (2*3) * (2*3)),
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) k ⟨7, by norm_num⟩ = t1V k := by
@@ -3612,7 +3612,7 @@ theorem pdiv_fwd_entry :
       (⟨0, by norm_num⟩ : Fin 1) (⟨0, by norm_num⟩ : Fin (6)) (⟨2, by norm_num⟩ : Fin (6)) = ((-326103939411 : ℝ)/34359738368)
   rw [show (Tensor3.unflatten m1V : Tensor3 2 6 6) = M1T from Tensor3.unflatten_flatten M1T]
   simp [conv2dInputGradFormula, W1, M1T, Fin.sum_univ_succ]
-  try norm_num
+  norm_num
 
 theorem pdiv_fwd_entry_ne :
     pdiv (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X

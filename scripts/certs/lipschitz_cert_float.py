@@ -117,12 +117,14 @@ def lit(fr):
     return f"(({fr.numerator} : ℝ)/{fr.denominator})"
 
 # ---------------------------------------------------------------- per-image blocks
+# `first | done | norm_num` in `img*_abs_le`: `simp` closes some pixels' branches alone and not
+# others (see lipschitz_cert_pair_sdp.py's `tP*_nonneg` for why not `try norm_num`).
 img_blocks = []
 for k in emitted:
     lab = labels[k]
     img_blocks.append(f"""theorem img{k}_abs_le : ∀ c : Fin 49, |img{k} c| ≤ 1 := by
   intro c
-  fin_cases c <;> (simp [img{k}]; try norm_num)
+  fin_cases c <;> (simp [img{k}]; first | done | norm_num)
 
 /-- **Float-certified at ε = 1/10** (image #{k}): every binary32-accuracy
     rounded forward of every quantized input within the L2 ball keeps class
